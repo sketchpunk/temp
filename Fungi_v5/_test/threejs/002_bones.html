@@ -1,0 +1,41 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} from "../../fungi.3js/App.js";
+
+//#####################################################
+App.builder()
+	.set_camera( 0, 20, 2.5, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let bones = new Array();
+
+	let b0 = new THREE.Bone();
+	let b1 = new THREE.Bone();
+	let b2 = new THREE.Bone();
+	let b3 = new THREE.Bone();
+
+	b1.position.set( 0.0, 0.5, 0 )
+	b2.position.set( 0.0, 0.5, 0 );
+	b3.position.set( 0.0, 0.5, 0 );
+
+	b0.add( b1 );
+	b1.add( b2 );
+	b2.add( b3 );
+
+	bones.push( b0, b1, b2, b3 );
+
+	let skel = new THREE.Skeleton( bones );
+	console.log( skel );
+	let skel_view = new THREE.SkeletonHelper( bones[0] );
+	skel_view.material.lineWidth = 5;
+
+	App.$( skel_view );
+	App.$( bones[ 0 ] );
+
+	return true;
+}
+</script><page-layout></page-layout>

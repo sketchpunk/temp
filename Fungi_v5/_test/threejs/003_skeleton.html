@@ -1,0 +1,41 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} 	from "../../fungi.3js/App.js";
+import GltfUtil, {Gltf} from "../../fungi.3js/lib/GltfUtil.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+
+//#####################################################
+App.builder()
+	.init_mod( "./com/Armature.js" )
+	.set_camera( 0, 20, 2.5, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../../files/models/vegeta.gltf", "json", 
+		"../../../files/models/vegeta.bin", "arraybuffer",
+	);
+	
+	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
+	//let e = GltfUtil.get_mesh( "Test", dl[0], dl[1], mat );
+	//let e = GltfUtil.get_bone_view( "Test", dl[0], dl[1] );
+	//let e = GltfUtil.get_skin_mesh( "Test", dl[0], dl[1], mat );
+	let e = GltfUtil.get_debug_view( "Test", dl[0], dl[1], mat );
+
+	/**/
+	let arm = e.Armature, tm = THREE.Math;
+	arm.get_bone( "LeftUpLeg" ).rotation.x	= tm.degToRad( -75 );
+	arm.get_bone( "LeftLeg" ).rotation.x	= tm.degToRad( -120 );
+	arm.get_bone( "Neck" ).rotation.x		= tm.degToRad( -30 );
+	arm.get_bone( "LeftArm" ).rotation.x	= tm.degToRad( -30 );
+	arm.get_bone( "RightArm" ).rotation.x	= tm.degToRad( -30 );
+	arm.get_bone( "LeftFoot" ).rotation.x	= tm.degToRad( 30 );
+
+	arm.get_bone( "LeftHand" ).scale.set( 1.8, 1.8, 1.8 );
+
+	return true;
+}
+</script><page-layout></page-layout>

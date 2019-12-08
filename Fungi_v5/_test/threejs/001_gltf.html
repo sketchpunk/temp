@@ -1,0 +1,48 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} from "../../fungi.3js/App.js";
+import Gltf 		from "../../fungi/lib/Gltf.js";
+import XhrPromise	from "../../fungi/lib/XhrPromise.js";
+
+// https://threejsfundamentals.org/threejs/lessons/threejs-materials.html
+
+//#####################################################
+App.builder()
+	.set_camera( 0, 20, 2.5, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+	load_geo( dl[0], dl[1] );
+	return true;
+}
+
+function load_geo( json, bin ){
+	let dat	= Gltf.get_mesh( "Vegeta", json, bin )[ 0 ],
+		geo	= new THREE.BufferGeometry(),
+		o;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	geo.setIndex( new THREE.BufferAttribute( dat.indices.data, 1 ) );
+
+	o = dat.vertices;
+	geo.addAttribute( "position", new THREE.BufferAttribute( o.data, o.comp_len ) );
+
+	o = dat.normal;
+	geo.addAttribute( "normal", new THREE.BufferAttribute( o.data, o.comp_len ) );
+
+	//o = dat.uv;
+	//geo.addAttribute( "uv", new THREE.BufferAttribute( o.data, o.comp_len ) );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mat		= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
+	let mesh	= new THREE.Mesh( geo, mat );
+	App.$( mesh );
+}
+</script><page-layout></page-layout>

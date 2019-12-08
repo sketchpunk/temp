@@ -1,0 +1,102 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder()
+	.load_shaders( "./shaders/LowPoly.js" )
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+
+	//load_build_ubo( dl[0], dl[1] );
+	//load_build_bin( dl[0], dl[1] );
+	//load_mesh( dl[0], dl[1] );
+	
+	/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+	let mat	= App.new_mat( "LowPoly" );
+	let e	= GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
+	console.log( e );
+
+	return true;
+}
+
+function load_build_ubo( json, bin ){
+	let geo = Gltf.get_mesh( "Vegeta", json, bin )[ 0 ];
+
+	let m	= new App.Mesh( "Vegeta" ),
+		vao	= new App.Vao().bind();
+
+	m.set( vao, geo.indices.data.length );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	m.buf.idx = App.Buf.new_element( geo.indices.data, true, false );
+	vao.add_indices( m.buf.idx );
+
+	m.buf.vert = App.Buf.new_array( geo.vertices.data, 3, true, false );
+	vao.add_buf( m.buf.vert, App.Shader.POS_LOC );
+
+	m.buf.norm = App.Buf.new_array( geo.normal.data, 3, true, false );
+	vao.add_buf( m.buf.norm, App.Shader.NORM_LOC );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.Vao.unbind();
+	App.Buf.unbind_array();
+	App.Buf.unbind_element();	
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mat = App.Cache.get_shader( "LowPoly" ).new_material();
+
+	App.$Draw( "VegetaE", m, mat, App.Mesh.TRI );
+}
+
+function load_build_bin( json, bin ){
+	let geo = Gltf.get_mesh( "Vegeta", json, bin, true )[ 0 ];
+
+	let m	= new App.Mesh( "Vegeta" ),
+		vao	= new App.Vao().bind(),
+		dv 	= ( bin instanceof ArrayBuffer )? new DataView( bin ) : bin;
+
+	m.set( vao, geo.indices.elm_cnt );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	m.buf.idx = App.Buf.new_element_bin( dv, geo.indices.byte_start, geo.indices.byte_cnt, true, false );
+	vao.add_indices( m.buf.idx );
+
+	m.buf.vert = App.Buf.new_array_bin( dv, geo.vertices.byte_start, geo.vertices.byte_cnt, geo.vertices.comp_len, true, false )
+	vao.add_buf( m.buf.vert, App.Shader.POS_LOC );
+
+	m.buf.norm = App.Buf.new_array_bin( dv, geo.normal.byte_start, geo.normal.byte_cnt, geo.normal.comp_len, true, false )
+	vao.add_buf( m.buf.norm, App.Shader.NORM_LOC );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.Vao.unbind();
+	App.Buf.unbind_array();
+	App.Buf.unbind_element();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mat = App.Cache.get_shader( "LowPoly" ).new_material();
+	App.$Draw( "VegetaE", m, mat, App.Mesh.TRI );
+}
+
+function load_mesh( json, bin ){
+	let geo 	= Gltf.get_mesh( "Vegeta", json, bin, true )[ 0 ];
+	let m 		= App.Mesh.from_bin( "vegeta", geo, bin );
+	let mat 	= App.Cache.get_shader( "LowPoly" ).new_material();
+	mat.set_uniform("color", "white");
+
+	App.$Draw( "VegetaE", m, mat, App.Mesh.TRI );
+}
+
+</script><page-layout></page-layout>

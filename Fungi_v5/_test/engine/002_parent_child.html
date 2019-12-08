@@ -1,0 +1,43 @@
+<!DOCTYPE html><script type="module">
+import App			from "../../fungi/App.js";
+import FacedCube	from "../../fungi/geo/FacedCube.js";
+
+//#####################################################
+App.builder()
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_loop( on_draw )
+	//.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+let gCubeA, gCubeB;
+function on_draw( dt, ss ){
+
+	gCubeA.Node.local.rot.rot_y( App.Maths.to_rad( 60 * dt ) );
+	gCubeA.Node.updated = true;
+
+	gCubeB.Node.local.rot.rot_y( App.Maths.to_rad( -70 * dt ) );
+	gCubeB.Node.updated = true;
+	
+	App.ecs.sys_run();
+}
+
+function init( x ){
+	
+	gCubeB = FacedCube( "CubeB" );
+	gCubeB.Node
+		.set_pos( 0, 1.0, 0 )
+		.set_scl( 0.6 );
+
+	gCubeA = FacedCube( "CubeA" );
+	gCubeA.Node
+		.set_pos( 0, 0.5, 0 )
+		.add_child( gCubeB );
+
+	//gCubeA.Node.rm_child( gCubeB );
+	//console.log( gCubeA.Node, gCubeB.Node );
+
+	return true;
+}
+</script><page-layout></page-layout>

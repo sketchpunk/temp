@@ -1,0 +1,85 @@
+<!DOCTYPE html><html><head><title></title><link href="./lib/Page.css" rel="stylesheet"/></head><body>
+<!---->
+<div class="PageLayout">
+	<nav id="PageNav">
+		<br><br><a href="javascript:void(0)" id="btn_start">START</a>
+	</nav>
+	<main>
+		<header id="PageHeader">
+			<a href="https://twitter.com/sketchpunklabs">Sketchpunk Labs</a>
+		</header>
+		<section id="PageContent"></section>
+	</main>
+</div>
+
+<script type="module">
+import App, { THREE }					from "./lib/App.js";
+import PointLines 						from "./lib/PointLines.js";
+import HermiteSpline, { CurveLenMap }	from "./lib/HermiteSpline.js";
+
+let Vec3 = THREE.Vector3;
+document.getElementById("btn_start").addEventListener( "click", function(){ gIsActive = !gIsActive; } );
+
+//##########################################################################
+let gApp, gDebug;
+let gPath, gIsActive = false;
+
+window.onload = function(){
+	gApp 	= new App( "PageContent" ).load_scene( 0, 9, 0 ).set_bg( 0x2B313D ).on( on_render );
+	gDebug	= new PointLines( 50 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//gDebug.point( 0,0,0, 40, 0xff0000 ).line( 0, 0, 0, 0, 2, 0, 0xff0000, 0x00ff00 );
+	
+	gPath = new HermiteSpline( true )
+		.add( [ 1.5, 0, 1.5 ] )
+		.add( [ -8, 3, 2 ] )
+		.add( [ -2, 2, -4 ] )
+		.add( [ 0, 5, 0 ] );
+
+	debug_path();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let geo 		= new THREE.BoxGeometry( 1, 1, 1 );
+	let mat_line 	= new THREE.LineBasicMaterial( { color: 0xffffff, transparent: true, opacity: 0.5 } );
+	let mat_mesh 	= new THREE.MeshPhongMaterial( { color: 0x156289, emissive: 0x072534, side: THREE.DoubleSide, flatShading: true } );
+	let grp 		= new THREE.Group();
+	grp.add( new THREE.Mesh( geo, mat_mesh )  );
+	grp.add( new THREE.LineSegments( geo, mat_line ) );
+	gApp.add( grp );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gApp.add( gDebug.obj3D );
+	gApp.render();
+}
+
+//##########################################################################
+function on_render( dt, et ){
+	if( !gIsActive ) return;
+
+	const TIME = 8;						// How Many Seconds to travel the whole spline
+	let t = (et % TIME) / TIME;			// Normalizing Time
+	let p = [0,0,0];
+
+	gPath.at( t, p );					// Get at specific T.
+	gApp.set_cam( p[0], p[1], p[2] );	// Update camera with new position.
+}
+
+//##########################################################################
+function debug_path(){
+	let i, v0 = new Vec3(), v1 = new Vec3();
+	for( i of gPath.points ){
+		v0.fromArray( i.pos );
+		gDebug.pointVec( v0, 5, 0x00ff00 );
+	}
+
+	let p = gPath.get_samples( 40 );
+	for( i=0; i < p.length-1; i++ ){
+		v0.fromArray( p[i] );
+		v1.fromArray( p[i+1] );
+		gDebug.lineVec( v0, v1, 0xff0000 );
+	}
+}
+
+</script></body></html>
+<!--<style>body, html, canvas{margin:0px; padding:0px; width:100%; height:100%; }</style>-->

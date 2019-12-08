@@ -1,0 +1,169 @@
+<!DOCTYPE html><script type="module">
+import App			from "../../fungi/App.js";
+//import Armature		from "../Armature.js";
+//import BoneView		from "../BoneView.js";
+import VecBuffer	from "../../fungi/data/VecBuffer.js";
+
+//#####################################################
+App.builder( true )
+	.init_mod( 
+		"../fungi.armature/Armature.js", 
+		"../fungi.armature/BoneView.js" )
+	.set_camera( 0, 20, 3, 0, 0.1, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+function init(){
+	//Armature.init();
+	//BoneView.init();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Build Skeleton
+	let e 	= App.$Draw( "Test" ),
+		arm	= e.add_com( "Armature" );
+	
+	let b0 = arm.add_bone( "b0", 0.4, null );
+	let b1 = arm.add_bone( "b1", 0.4, b0.Bone.index );
+	let b2 = arm.add_bone( "b2", 0.4, b1.Bone.index );
+	arm.finalize();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Add Bone Preview
+	e.add_com( "BoneView" ).init();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Move some Bones around
+	b0.Node.rot_by( -45, "z" );
+	b1.Node.rot_by( 45, "z" ).set_scl( 1 );
+	b2.Node.rot_by( 45, "z" ).set_scl( 1 );
+	e.Node.set_pos( 0, 0.1, 0.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Build Skinned Mesh
+	build_shape( e );
+	return true;
+}
+
+function build_shape( e ){
+	let lvl		= 6,
+		vert	= VecBuffer.mk( lvl*4, 3, true ),
+		b_wgt 	= VecBuffer.mk( lvl*4, 4, true ),
+		b_idx 	= VecBuffer.mk( lvl*4, 4, true ),
+		i, y, a;
+
+	for( i=0; i < lvl; i++ ){
+		y = 0.2 * i;
+
+		vert.set_raw( i*4, 
+			-0.2, y,  0.2,   0.2, y,  0.2,
+			 0.2, y, -0.2,   -0.2, y, -0.2,
+		);
+
+		if( i >=4 ){
+			b_wgt.set_raw( i*4, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0 );
+			b_idx.set_raw( i*4, 2,0,0,0, 2,0,0,0, 2,0,0,0, 2,0,0,0 );
+		}else if( (i & 1) == 0 ){
+			a = i / 2;
+			b_wgt.set_raw( i*4, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0 );
+			b_idx.set_raw( i*4, a,0,0,0, a,0,0,0, a,0,0,0, a,0,0,0 );
+			//console.log("WHOLE", a );
+		}else{
+			a = (i-1) / 2;
+			b_wgt.set_raw( i*4, 0.5,0.5,0,0, 0.5,0.5,0,0, 0.5,0.5,0,0, 0.5,0.5,0,0 );
+			b_idx.set_raw( i*4, a,a+1,0,0, a,a+1,0,0, a,a+1,0,0, a,a+1,0,0, );
+			//console.log("HALF", a, a+1 );
+		}
+
+		//console.log( i, i & 1 );
+	}
+		
+	let sh	= App.Shader.from_src( "skinning", v_src, f_src );
+	sh.add_uniform_blocks( ["Global","Model","Armature"] );
+	let mat	= sh.new_material("Skinning");
+	//let mat		= App.ShaderBuilder( { base_color:"#ff0000ff" } );
+
+	let mesh = App.Mesh.from_data( "TestShape", vert.buffer, null, null, null, b_idx.buffer, b_wgt.buffer, 4 );
+	e.Draw.add( mesh, mat, App.Mesh.LINE_STRIP );
+}
+
+
+const v_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=8) in vec4 a_bone_idx;
+	layout(location=9) in vec4 a_bone_wgt;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	uniform Armature{
+		mat2x4[90]	bones;
+		vec3[90]	scales;
+	} arm;
+
+	vec3 dq_mul_vec( mat2x4 dq, vec3 v ){
+		vec4 Qr 	= dq[0].xyzw; //real (rot)
+		vec4 Qd 	= dq[1].xyzw; //dual (trans)
+		vec3 pos	= v + cross(2.0 * Qr.xyz, cross(Qr.xyz, v) + Qr.w * v);	//Rotate Vector
+		vec3 tran	= 2.0 * (Qr.w * Qd.xyz - Qd.w * Qr.xyz + cross(Qr.xyz, Qd.xyz));	//Pull out Translation from DQ
+		return pos + tran;
+	}
+
+	vec3 dq_bone_transform( vec3 pos, mat2x4[90] b_dq, vec4 b_idx, vec4 b_wgt, vec3[90] b_scl ){
+		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		NORMALIZE BONE WEIGHT VECTOR */
+		int a = int( b_idx.x ),
+			b = int( b_idx.y ),
+			c = int( b_idx.z ),
+			d = int( b_idx.w );
+
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT DQ
+		mat2x4 wgt_dq	=	b_dq[ a ] * b_wgt.x +  
+							b_dq[ b ] * b_wgt.y +
+							b_dq[ c ] * b_wgt.z +
+							b_dq[ d ] * b_wgt.w;
+		wgt_dq *= 1.0 / length( wgt_dq[0] ); // Normalize DQ by the length of the Quaternion
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT SCALE
+		vec3 wgt_scl	=	b_scl[ a ]	* b_wgt.x +
+							b_scl[ b ]	* b_wgt.y +
+							b_scl[ c ]	* b_wgt.z +
+							b_scl[ d ]	* b_wgt.w;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SCALE, ROTATE - TRANSLATE
+		return dq_mul_vec( wgt_dq, pos * wgt_scl);
+	}
+
+	void main(void){
+		vec3 pos	= dq_bone_transform( a_pos, arm.bones, a_bone_idx, a_bone_wgt, arm.scales );
+		vec4 w_pos	= vec4( pos, 1.0 ); // model.view_matrix *
+
+		gl_Position = global.proj_view * w_pos;
+	}`;
+
+
+const f_src = `#version 300 es
+	precision mediump float;
+	out vec4 out_color;
+	void main(void){
+		out_color = vec4( 1.0, 0.0, 0.0, 1.0);
+	}`;
+</script><page-layout></page-layout>

@@ -1,0 +1,507 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+import DualQuat 		from "../../fungi/maths/DualQuat.js";
+
+
+/*
+- Transform rot is combined with Child * Parent, but in mines its Parent * Child
+- When getting ws, Cpp seems to go from leaf to root.
+- When computing WS, Scaling is already part of World Space Position, Does it make
+sense re-apply scale? Doesn't that double the scale.
+
+*/
+
+//#####################################################
+App.builder( true )
+	.load_shaders( "../fungi.armature/LowPolySkin.js" )
+	//.load_shaders( "./shaders/LowPoly.js" )
+	.init_mod( 
+		"../fungi.armature/Armature.js", 
+		"../fungi.armature/BoneView.js" )
+	.set_camera( 45, 20, 2, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+async function init(){
+	let json	= await XhrPromise.get( "../../_tmp/DualQuatSample.gltf", "json" );
+	let bin		= Gltf.parse_b64_buffer( json );
+
+	load_shader();						// INLINE SHADER - AT BOTTOM
+	//let m = GltfUtil.get_debug_view( "Cube", json, bin, App.new_mat( "LowPolySkin" ) );
+	let e = GltfUtil.get_debug_view( "Cube", json, bin, MATERIAL );
+
+	//console.log( e );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//load_shader();						// INLINE SHADER - AT BOTTOM
+
+	//let e = load_mesh( dl[0], dl[1] );	// Lood Model from Bin
+
+	//gen_bones( e, dl[0], dl[1] );		// Create Armature Com + Its bones
+
+	//e.add_com( "BoneView" ).init();		// Bone Preview Renderer
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Pose the Bones
+	/*
+	let arm = e.Armature;
+	arm.get_e( "LeftUpLeg" ).Node.rot_by( 75, "x" );
+	arm.get_e( "LeftLeg" ).Node.rot_by( -110, "x" );
+	arm.get_e( "Neck" ).Node.rot_by( -40, "x" );
+	arm.get_e( "LeftArm" ).Node.rot_by( 60, "x" );
+	arm.get_e( "RightArm" ).Node.rot_by( 60, "x" );
+	
+	arm.get_e( "Hips" ).Node.rot_by( 30, "x" );
+	arm.get_e( "Hips" ).Node.set_scl( 1.5 );
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	compute_worldspace( e );			// Computes World Space Transforms for all the Bones
+
+	fary_inverseBindPoseDq( e );		// Compute Data and sets Shader's Uniform
+	fary_jointWorldPoseDq( e );
+	fary_jointWorldPoseScale( e );
+	fary_inverseBindPoseScale( e );
+
+	//fary_offsetDq( e ); 				// Testing by doing the bind offset on the CPU.
+
+	return true;
+}
+
+///////////////////////////////////////////////////////////
+// 
+///////////////////////////////////////////////////////////
+function compute_worldspace( e ){
+	let bones	= e.Armature.bones,
+		len		= bones.length,
+		i, b, be, pe;
+
+	for( i=0; i < len; i++ ){
+		b	= bones[ i ];
+		be	= b.ref;
+
+		if( be.Node.parent ){
+			pe = be.Node.parent;
+			be.Node.world.from_add( pe.Node.world, be.Node.local );
+		}else{
+			be.Node.world.copy( be.Node.local );
+		}
+
+		App.Debug.pnt( be.Node.world.pos, "yellow", 0.03, 1 ); // See WS Position with Dots
+	}
+}
+
+function fary_inverseBindPoseDq( e ){
+	let bones = e.Armature.bones;
+	let ary = new Float32Array( bones.length * 8 );
+	let i, j, bp;
+	for( let b of bones ){
+		i	= b.idx * 8;
+		bp	= b.ref.Bone.bind_pose;
+
+		for( j=0; j < 8; j++ ) ary[ i+j ] = bp[ j ];
+	}
+
+	MATERIAL.set_uniform( "inverseBindPoseDq", ary );
+}
+
+function fary_jointWorldPoseDq( e ){
+	let bones 	= e.Armature.bones;
+	let ary 	= new Float32Array( bones.length * 8 );
+	let dq 		= new DualQuat();
+
+	let i, j, bn;
+	for( let b of bones ){
+		i	= b.idx * 8;
+		bn	= b.ref.Node;
+
+		dq.from_rotation_translation( bn.world.rot, bn.world.pos );
+
+		for( j=0; j < 8; j++ ) ary[ i+j ] = dq[ j ];
+	}
+	
+	MATERIAL.set_uniform( "jointWorldPoseDq", ary );
+}
+
+function fary_offsetDq( e ){
+	let bones 	= e.Armature.bones;
+	let ary 	= new Float32Array( bones.length * 8 );
+
+	let i, j, bn;
+	for( let b of bones ){
+		i	= b.idx * 8;
+		bn	= b.ref.Node;
+
+		b.ref.Bone.offset
+			.set( bn.world.rot, bn.world.pos )
+			.mul( b.ref.Bone.bind_pose );
+
+		for( j=0; j < 8; j++ ) ary[ i+j ] = b.ref.Bone.offset[ j ];
+	}
+
+	MATERIAL.set_uniform( "offsetDq", ary );
+}
+
+function fary_jointWorldPoseScale( e ){
+	let bones 	= e.Armature.bones;
+	let ary 	= new Float32Array( bones.length * 3 );
+
+	let i, j, bnw;
+	for( let b of bones ){
+		i	= b.idx * 3;
+		bnw	= b.ref.Node.world;
+
+		for( j=0; j < 3; j++ ) ary[ i+j ] = bnw.scl[ j ];
+	}
+	
+	//console.log( ary );
+	MATERIAL.set_uniform( "jointWorldPoseScale", ary );
+}
+
+function fary_inverseBindPoseScale( e ){
+	let bones 	= e.Armature.bones;
+	let ary 	= new Float32Array( bones.length * 3 );
+	let v 		= new App.Vec3(1,1,1).invert(); //The Bind Scale for all the bones are the same.
+
+	let i, j;
+	for( let b of bones ){
+		i	= b.idx * 3;
+		for( j=0; j < 3; j++ ) ary[ i+j ] = v[ j ];
+	}
+	//console.log( ary );
+	MATERIAL.set_uniform( "inverseBindPoseScale", ary );
+}
+
+
+///////////////////////////////////////////////////////////
+// MESH / SKELETON LOADING
+///////////////////////////////////////////////////////////
+
+function gen_bones( e, json, bin, def_len=0.1 ){
+	let n_info	= {}, // Node Info
+		arm 	= e.add_com( "Armature" ),
+		bones 	= Gltf.get_skin( json, bin, null, n_info );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Create Bones
+	let len	= bones.length,
+		map = {},			// Create a Map of the First Child of Every Parent
+		i, b, be;
+
+	for( i=0; i < len; i++ ){
+		b	= bones[ i ];
+		be	= arm.add_bone( b.name, 1, b.p_idx );
+
+		if( b.rot ) be.Node.set_rot( b.rot );
+		if( b.pos ) be.Node.set_pos( b.pos );
+		if( b.scl ) be.Node.set_scl( b.scl );
+
+		// Save First Child to Parent Mapping
+		if( b.p_idx != null && !map[ b.p_idx ] ) map[ b.p_idx ] = i;
+	}
+
+	arm.finalize();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Set the Entity Transfrom from Armature's Node Transform if available.
+	// Loading Meshes that where originally FBX need this to display correctly.
+	//console.log( n_info );
+	//if( n_info.scl ) e.Node.set_scl( n_info.scl );
+	//if( n_info.rot ) e.Node.set_rot( n_info.rot );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Calc the Length of Each Bone
+	let c;
+	for( i=0; i < len; i++ ){
+		b = arm.bones[ i ];
+
+		if( !map[ i ] ) b.len = def_len;
+		else{
+			c = arm.bones[ map[ i ] ]; // First Child's World Space Transform
+			b.len = App.Vec3.len( b.world.pos, c.world.pos ); // Distance from Parent to Child
+		}
+	}
+
+	return e;
+}
+
+function load_mesh( json, bin ){
+	let geo 	= Gltf.get_mesh( "Vegeta", json, bin, true )[ 0 ];
+	let m 		= App.Mesh.from_bin( "vegeta", geo, bin, true );
+
+	//console.log( m );
+	return App.$Draw( "VegetaE", m, MATERIAL, App.Mesh.TRI );
+}
+
+///////////////////////////////////////////////////////////
+// SHADER
+///////////////////////////////////////////////////////////
+
+	let SHADER, MATERIAL;
+	function load_shader(){
+		SHADER		= App.Shader.from_src( "dq_scl", vert_src, frag_src )
+			.add_uniform_blocks( ["Global", "Model", "Armature"] )
+			.add_uniform( "jointWorldPoseDq", "mat2x4" )
+			.add_uniform( "inverseBindPoseDq", "mat2x4" )
+			.add_uniform( "jointWorldPoseScale", "vec3" )
+			.add_uniform( "inverseBindPoseScale", "vec3" )
+			.add_uniform( "offsetDq", "mat2x4", null )
+		;
+
+		MATERIAL	= SHADER.new_material();
+
+		console.log("--- shader loaded");
+	}
+
+	const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=8) in vec4 a_bone_idx;
+	layout(location=9) in vec4 a_bone_wgt;
+
+	uniform mat2x4 offsetDq[90];
+
+	uniform mat2x4 jointWorldPoseDq[90];
+	uniform mat2x4 inverseBindPoseDq[90];
+	
+	uniform vec3 jointWorldPoseScale[90];
+	uniform vec3 inverseBindPoseScale[90];
+
+	//------------------------------------------
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	uniform Armature{
+		mat2x4[90]	bones;
+		vec3[90]	scales;
+	} arm;
+
+	//------------------------------------------
+
+	vec3 dq_mul_vec( mat2x4 dq, vec3 v ){
+		vec4 Qr 	= dq[0].xyzw; //real (rot)
+		vec4 Qd 	= dq[1].xyzw; //dual (trans)
+		
+		//vec3 pos = v + cross(2.0 * Qr.xyz, cross(Qr.xyz, v) + Qr.w * v );	//Rotate Vector
+		vec3 pos = v + 2.0 * cross( Qr.xyz, cross( Qr.xyz, v ) + Qr.w * v );
+		
+		//vec3 tran = 2.0 * ( Qr.w * Qd.xyz - Qd.w * Qr.xyz + cross( Qr.xyz, Qd.xyz ));	//Pull out Translation from DQ
+		vec3 tran = 2.0 * ( Qr.w * Qd.xyz - Qd.w * Qr.xyz + cross( Qr.xyz, Qd.xyz ));
+		return pos + tran;
+	}
+
+	vec3 dq_bone_transform( vec3 pos, mat2x4[90] b_dq, vec4 b_idx, vec4 b_wgt, vec3[90] b_scl ){
+		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		NORMALIZE BONE WEIGHT VECTOR */
+		int a = int( b_idx.x ),
+			b = int( b_idx.y ),
+			c = int( b_idx.z ),
+			d = int( b_idx.w );
+
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT DQ
+
+		// Antipodality correction.
+		//if (dot(dq0[0], dq1[0]) < 0.0) dq1 *= -1.0;
+		//if (dot(dq0[0], dq2[0]) < 0.0) dq2 *= -1.0;	
+		//if (dot(dq0[0], dq3[0]) < 0.0) dq3 *= -1.0;
+
+		// Neightborhood all of the weights correctly
+		if (dot(b_dq[ a ][0], b_dq[ b ][0]) < 0.0) b_wgt.y *= -1.0; 
+		if (dot(b_dq[ a ][0], b_dq[ c ][0]) < 0.0) b_wgt.z *= -1.0; 
+		if (dot(b_dq[ a ][0], b_dq[ d ][0]) < 0.0) b_wgt.w *= -1.0;
+
+
+		mat2x4 wgt_dq	=	b_dq[ a ] * b_wgt.x +  
+							b_dq[ b ] * b_wgt.y +
+							b_dq[ c ] * b_wgt.z +
+							b_dq[ d ] * b_wgt.w;
+
+		wgt_dq *= 1.0 / length( wgt_dq[0] ); // Normalize DQ by the length of the Quaternion
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT SCALE
+		vec3 wgt_scl	=	b_scl[ a ]	* b_wgt.x +
+							b_scl[ b ]	* b_wgt.y +
+							b_scl[ c ]	* b_wgt.z +
+							b_scl[ d ]	* b_wgt.w;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SCALE, ROTATE - TRANSLATE
+		//return dq_mul_vec( wgt_dq, pos * wgt_scl);
+		//return dq_mul_vec( wgt_dq, scl_bone( pos, b_scl, b_wgt, a, b, c, d ) );
+		return dq_mul_vec( wgt_dq, pos ) ;
+	}
+
+	//------------------------------------------
+
+	vec4 mulQ(vec4 Q1, vec4 Q2) {
+		return vec4(
+			 Q2.x * Q1.w + Q2.y * Q1.z - Q2.z * Q1.y + Q2.w * Q1.x,
+			-Q2.x * Q1.z + Q2.y * Q1.w + Q2.z * Q1.x + Q2.w * Q1.y,
+			 Q2.x * Q1.y - Q2.y * Q1.x + Q2.z * Q1.w + Q2.w * Q1.z,
+			-Q2.x * Q1.x - Q2.y * Q1.y - Q2.z * Q1.z + Q2.w * Q1.w
+		);
+	}
+
+	mat2x4 normalizeDq(mat2x4 dq) {
+		float invMag = 1.0 / length(dq[0]);
+		dq[0] *= invMag;
+		dq[1] *= invMag;
+		return dq;
+	}
+
+	mat2x4 combineDq(mat2x4 l, mat2x4 r) {
+		l = normalizeDq(l);
+		vec4 l_real = l[0];
+		vec4 l_dual = l[1];
+
+		r = normalizeDq(r);
+		vec4 r_real = r[0];
+		vec4 r_dual = r[1];
+
+		vec4 real = mulQ(l_real, r_real);
+		vec4 dual = mulQ(l_real, r_dual) + mulQ(l_dual, r_real);
+
+		return mat2x4(real, dual);
+	}
+
+	vec4 transformVector(mat2x4 dq, vec3 v) {
+		vec4 real = dq[0];
+		vec3 r_vector = real.xyz;
+		float r_scalar = real.w;
+		
+		vec3 rotated = r_vector * 2.0f * dot(r_vector, v) +
+				v * (r_scalar * r_scalar - dot(r_vector, r_vector)) +
+				cross(r_vector, v) * 2.0f * r_scalar;
+
+		return vec4(rotated, 0);
+	}
+
+	vec4 transformPoint(mat2x4 dq, vec3 v) {
+		vec4 real = dq[0];
+		vec4 dual = dq[1];
+
+		vec3 rotated = transformVector(dq, v).xyz;
+		vec4 conjugate = vec4(-real.xyz, real.w);
+		vec3 t = mulQ(conjugate, dual * 2.0).xyz;
+		
+		return vec4(rotated + t, 1);
+	}
+
+	vec3 dq_other( vec3 pos, vec4 skinJoints, vec4 skinWeights ){
+		ivec4 joint = ivec4( skinJoints );
+		vec4 weight = skinWeights;
+
+		// Weight isn't always normalized
+		//weight *= 1.0 / (weight.x + weight.y + weight.z + weight.w);
+		//weight = normalize( weight );
+
+		// Neightborhood all of the weights correctly
+		// NODE - this causes verts to break appart around the shoulders and the butt
+		// When adding scaling, it makes things much worse.
+		//if (dot(jointWorldPoseDq[joint.x][0], jointWorldPoseDq[joint.y][0]) < 0.0) { weight.y *= -1.0; }
+		//if (dot(jointWorldPoseDq[joint.x][0], jointWorldPoseDq[joint.z][0]) < 0.0) { weight.z *= -1.0; }
+		//if (dot(jointWorldPoseDq[joint.x][0], jointWorldPoseDq[joint.w][0]) < 0.0) { weight.w *= -1.0; }
+
+		// Fetch bones
+		mat2x4 dq0 = combineDq(inverseBindPoseDq[joint.x], jointWorldPoseDq[joint.x]);
+		mat2x4 dq1 = combineDq(inverseBindPoseDq[joint.y], jointWorldPoseDq[joint.y]);
+		mat2x4 dq2 = combineDq(inverseBindPoseDq[joint.z], jointWorldPoseDq[joint.z]);
+		mat2x4 dq3 = combineDq(inverseBindPoseDq[joint.w], jointWorldPoseDq[joint.w]);
+
+		// Blend
+		mat2x4 skinDq = weight.x * dq0 +
+						weight.y * dq1 +
+						weight.z * dq2 +
+						weight.w * dq3;
+		// Normalize
+		skinDq = normalizeDq(skinDq);
+
+		vec3 skinScale = 
+			jointWorldPoseScale[joint.x] * inverseBindPoseScale[joint.x] * skinWeights.x +
+			jointWorldPoseScale[joint.y] * inverseBindPoseScale[joint.y] * skinWeights.y +
+			jointWorldPoseScale[joint.z] * inverseBindPoseScale[joint.z] * skinWeights.z +
+			jointWorldPoseScale[joint.w] * inverseBindPoseScale[joint.w] * skinWeights.w;
+		
+		//return transformPoint( skinDq, pos ).xyz;
+
+		pos *= skinScale;
+		return transformPoint( skinDq, pos ).xyz;
+	}
+
+	//------------------------------------------
+
+	out vec3 w_pos;
+	flat out vec3 cam_pos;
+	out vec3 color;
+
+	void main(void){
+		vec3 pos;
+
+		//pos = dq_bone_transform( a_pos, arm.bones, a_bone_idx, a_bone_wgt, arm.scales ); //Use add_uniform_blocks
+		//pos = dq_bone_transform( a_pos, offsetDq, a_bone_idx, a_bone_wgt, arm.scales ); //
+		pos = dq_other( a_pos, a_bone_idx, a_bone_wgt );
+
+		w_pos		= pos;
+		cam_pos		= global.camera_pos;
+		gl_Position = global.proj_view * vec4( pos, 1.0 );
+
+		color = vec3( 1.0, 1.0, 1.0 );
+	}`;
+
+	const frag_src = `#version 300 es
+	precision mediump float;
+
+	in vec3 w_pos;
+	flat in vec3 cam_pos; 
+
+	in vec3 color; 
+	out vec4 out_color;
+
+	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
+	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
+	const float uAmbientStrength	= 0.5;
+	const float uDiffuseStrength	= 0.5;
+	const float uSpecularStrength	= 0.2f;	//0.15
+	const float uSpecularShininess	= 1.0f; //256.0
+
+	void main(void){ 
+		vec3 pixelNorm = normalize( cross( dFdx(w_pos), dFdy(w_pos) ) ); //Calc the Normal of the Rasterizing Pixel
+
+		// Ambient Lighting
+		vec3 cAmbient		= lightColor * uAmbientStrength;
+		
+		// Diffuse Lighting
+		vec3 lightVector	= normalize(lightPosition - w_pos);		//light direction based on pixel world position
+		float diffuseAngle	= max( dot(pixelNorm,lightVector) ,0.0);	//Angle between Light Direction and Pixel Direction (1==90d)
+		vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
+
+		// Specular Lighting
+		vec3 camVector		= normalize( cam_pos - w_pos );	//Camera Direction based on pixel world position
+		vec3 reflectVector	= reflect(-lightVector, pixelNorm);		//Reflective direction of line from pixel direction as pivot.
+		float specular		= pow( max( dot(reflectVector,camVector) ,0.0), uSpecularShininess ); //Angle of reflected light and camera eye
+		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
+
+		out_color = vec4( color * (cAmbient + cDiffuse + cSpecular), 1.0 );
+	}`;
+
+</script><page-layout></page-layout>

@@ -1,0 +1,58 @@
+<!DOCTYPE html><script type="module">
+import App		from "../../fungi/App.js";
+import Lines	from "../../fungi/geo/Lines.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Point2D	from "../../fungi/geo/Point2D.js";
+
+//import Debug 	from "../../fungi/engine/Debug.js";
+
+//#####################################################
+App.builder( true )
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+function init(){
+
+	/**/
+	App.Debug
+		.pnt_raw( -0.5,1,0, "red", 0.2, 0 )
+		.pnt_raw( 0,1,0, "red", 0.2, 1 )
+		.pnt_raw( 0.5,1,0, "red", 0.2, 2 )
+		.pnt_raw( 1.0,1,0, "red", 0.2, 3 )
+		.pnt_raw( 1.5,1,0, "red", 0.2, 4 )
+		.pnt_raw( 2.0,1,0, "red", 0.2, 5 )
+
+		.ln( [0,0,0], [0,1,0], "red" )
+		.box( [ -0.5, 0.2, -0.5 ], [ 0.5, 1.0, 0.5 ] );
+	
+
+	let e = Point2D.$( "pnt2d" );
+	e.Point2D.add( [20,20], "green", 15 );
+	e.Point2D.add( [ App.gl.width-20, 20 ], "red", 10 );
+	e.Point2D.add( [ App.gl.width-20, App.gl.height-20 ], "yellow", 10 );
+
+	//let e;
+	
+	//e = Lines.$( "ln" );
+	//e.Lines.add( [0,0,0], [0,1,0], "red", "green" );
+	//e.Lines.add( [0,1,0], [1,1,0], "green", "green", false );
+
+	//e = Points.$( "pnt" );
+	//e.Points.add( [0,0.5,0], "green" );
+	//e.Points.add( [1,0.5,0], "red" );
+
+
+	// todo, rename all matrices with something like
+	/*
+	global.proj_view_mtx
+	global.view_mtx
+	model.model_mtx
+	*/
+	return true;
+}
+</script><page-layout></page-layout>

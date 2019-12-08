@@ -1,0 +1,35 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} from "../../fungi.3js/App.js";
+
+//#####################################################
+App.builder()
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_loop() //.render_on_mouse()
+	.build();
+
+//#####################################################
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.ecs.sys_add( test, 500 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let geo 		= new THREE.BoxGeometry( 1, 1, 1 ),
+		mat_line 	= new THREE.LineBasicMaterial( { color: 0xffffff, transparent: true, opacity: 0.5 } ),
+		mat_mesh 	= new THREE.MeshPhongMaterial( { color: 0x156289, emissive: 0x072534, side: THREE.DoubleSide, flatShading: true } ),
+		grp 		= new THREE.Group();
+	
+	grp.add( new THREE.Mesh( geo, mat_mesh )  );
+	grp.add( new THREE.LineSegments( geo, mat_line ) );
+
+	App.$( grp ).Obj.set_pos( 0, 0.8, 0 ); // grp.position.set( 0, 0.8, 0 );
+
+	return true;
+}
+
+function test( ecs ){
+	let o, list = ecs.query_comp( "Obj" );
+	for( o of list ) o.ref.rotation.y += 0.5 * App.delta_time;
+}
+</script><page-layout></page-layout>

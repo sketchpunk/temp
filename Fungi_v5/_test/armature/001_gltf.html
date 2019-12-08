@@ -1,0 +1,102 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder()
+	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js", 
+	.init_mod( 
+		"../fungi.armature/Armature.js", 
+		"../fungi.armature/BoneView.js" )
+	.set_camera( 90, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+
+	let mat	= App.new_mat( "LowPolySkin", { color:"white" } );
+	//let e 	= GltfUtil.get_bone_view( "test", dl[0], dl[1] );
+	let e 	= GltfUtil.get_debug_view( "test", dl[0], dl[1], mat );
+	//let e 	= GltfUtil.get_skin_mesh( "test", dl[0], dl[1], mat );
+	
+
+	//e.Node.set_pos( 0.0, 0.0, -3.0 );
+	//e.Node.set_scl( 1.5 );
+	/*
+	let n_info = {};
+	let bones = Gltf.get_skin( dl[0], dl[1], "Armature", n_info );
+
+	console.log( bones );
+
+	let e = load_mesh( dl[0], dl[1] );
+	e.add_com( "Armature" );
+	gen_bones( e, bones, 0.1 );
+	e.add_com( "BoneView" ).init();
+	*/
+
+	/* */
+	let arm = e.Armature;
+	arm.get_e( "LeftUpLeg" ).Node.rot_by( 75, "x" );
+	arm.get_e( "LeftLeg" ).Node.rot_by( -110, "x" );
+	arm.get_e( "Neck" ).Node.rot_by( -40, "x" );
+
+	//arm.get_e( "Spine1" ).Node.set_scl( 1.0, 1.4, 1.0 );
+	//arm.get_e( "Spine2" ).Node.set_scl( 1.0, 0.71428571428571, 1.0 );
+	//arm.get_e( "LeftHand" ).Node.set_scl( 1.1 );
+
+	return true;
+}
+
+function gen_bones( e, bones, def_len=0.1 ){
+	let arm = e.Armature;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Create Bones
+	let i, b, ab, bLen = bones.length;
+	for( i=0; i < bLen; i++ ){
+		b	= bones[i];
+		ab	= arm.add_bone( b.name, 1, b.p_idx );
+		if( b.rot ) ab.Node.set_rot( b.rot );
+		if( b.pos ) ab.Node.set_pos( b.pos );
+		if( b.scl ) ab.Node.set_scl( b.scl );
+	}
+	arm.finalize();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Calc the Length of Each Bone
+
+	let map = {};	// Create a Map of the First Child of Every Parent
+	for( i=0; i < bLen; i++ ){
+		ab = arm.bones[ i ];
+		if( ab.p_idx != null && !map[ ab.p_idx ] ) map[ ab.p_idx ] = i;
+	}
+
+	for( i=0; i < bLen; i++ ){
+		ab = arm.bones[ i ];
+
+		if( !map[ i ] ) ab.len = def_len;
+		else{
+			b = arm.bones[ map[ i ] ]; // First Child's World Space Transform
+			ab.len = App.Vec3.len( b.world.pos, ab.world.pos ); // Distance from Parent to Child
+		}
+	}
+}
+
+function load_mesh( json, bin ){
+	let geo 	= Gltf.get_mesh( "Vegeta", json, bin, true )[ 0 ];
+	let m 		= App.Mesh.from_bin( "vegeta", geo, bin, true );
+	let mat 	= App.Cache.get_shader( "LowPolySkin" ).new_material();
+
+	return App.$Draw( "VegetaE", m, mat, App.Mesh.TRI );
+}
+
+</script><page-layout></page-layout>

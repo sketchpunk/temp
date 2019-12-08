@@ -1,0 +1,131 @@
+<!DOCTYPE html><script type="module">
+
+import Ecs, { Components, Tags } from "../../fungi/engine/Ecs.js";
+
+//////////////////////////////////////////////////////
+// Start
+//////////////////////////////////////////////////////
+window.onload = function(){
+	//test_components();
+	//test_entities();
+	//test_systems();
+	//test_query();
+	test_tags();
+}
+
+
+//////////////////////////////////////////////////////
+// Comp Systems
+//////////////////////////////////////////////////////
+	class Tester{ constructor(){ this.text = "woot"; } } Components.reg( Tester );
+
+	class Tester2{ constructor(){ this.text = "woot2"; } } Components.reg( Tester2 );
+
+	class System01{
+		constructor(){}
+		run( ecs ){ console.log( "Beep System01" ); }
+	}
+
+	function System02( ecs ){ console.log( "Beep System02" ); }
+
+	let System03 = (ecs)=>console.log("Beep System03");
+
+	function QuerySys( ecs ){
+		let list = ecs.query_entities( [ "Tester", "Tester2"] );
+		console.log( list );
+
+		let list2 = ecs.query_comp( "Tester" );
+		console.log( list2 );
+	}
+
+	function TagSys( ecs ){
+		let list = ecs.query_tags( [ "loot"] );
+		console.log( "loot", list );
+
+		list = ecs.query_tags( [ "coot" ] );
+		console.log( "coot", list );
+
+		list = ecs.query_tags( [ "woot", "loot" ] );
+		console.log( "woot loot", list );
+	}
+
+
+//////////////////////////////////////////////////////
+// Test Functions
+//////////////////////////////////////////////////////
+	function test_components(){
+		let c = Components.mk( "Tester2" );
+
+		console.log( Components.list );
+		console.log( c, c.component_type_id, c.component_id, c.entity_id, c.recycled );
+	}
+
+	function test_entities(){
+		let ecs = new Ecs();
+
+		let e0 = ecs.entity( "e0", ["Tester","Tester2"] );
+		let e1 = ecs.entity( "e1", ["Tester"] );
+
+		e0.rm_com("Tester");
+		ecs.rm_entity( e1 );
+		e0.add_com( "Tester" );
+		e0.rm_com( "Tester2" );
+		e0.add_com( "Tester2" );
+		e1.add_com("Tester");
+
+		//e1 = ecs.entity( "e1X", ["Tester"] );
+
+		console.log( e0 );
+		console.log( e1 );
+
+		console.log( ecs );
+		console.log( Components.list );
+	}
+
+	function test_systems(){
+		let ecs = new Ecs();
+
+		ecs.sys_add( new System01(), 5, true );
+		ecs.sys_add( System02, 3, true );
+		ecs.sys_add( System03, 2, true );
+
+		//ecs.sys_rm( "System02" );
+		//ecs.sys_active( "System03", false );
+
+		ecs.sys_run()
+
+		console.log( ecs );
+	}
+
+	function test_query(){
+		let ecs = new Ecs();
+
+		ecs.entity( "e0", ["Tester", "Tester2"] );
+		ecs.entity( "e1", ["Tester"] );
+		ecs.entity( "e2", ["Tester2"] );
+
+
+		ecs.sys_add( QuerySys );
+
+		ecs.sys_run()
+
+		console.log( ecs );
+	}
+
+	function test_tags(){
+		let ecs = new Ecs();
+		ecs.sys_add( TagSys );
+
+		Tags.reg( "woot", "loot", "coot" );
+
+		let e1 = ecs.entity( "e1" ).add_tag( "woot" ).add_tag( "coot" );
+		let e2 = ecs.entity( "e2" ).add_tag( "coot" );
+		let e3 = ecs.entity( "e3" ).add_tag( "woot" ).add_tag( "loot" );
+
+
+		console.log( Tags.list );
+		console.log( Tags.create_bit_mask( ["woot", "loot"] ) );
+
+		ecs.sys_run();
+	}
+</script>
