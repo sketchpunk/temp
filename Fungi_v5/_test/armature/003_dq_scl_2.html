@@ -11,6 +11,13 @@ import DualQuat 		from "../../fungi/maths/DualQuat.js";
 - When computing WS, Scaling is already part of World Space Position, Does it make
 sense re-apply scale? Doesn't that double the scale.
 
+Where Pose is generated.
+https://github.com/mrdoob/three.js/blob/master/src/objects/Skeleton.js#L76
+
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinbase_vertex.glsl.js
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinning_pars_vertex.glsl.js
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinning_vertex.glsl.js
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinnormal_vertex.glsl.js
 */
 
 //#####################################################
@@ -45,7 +52,8 @@ async function init(){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Pose the Bones
-	/*
+	/**/
+
 	let arm = e.Armature;
 	arm.get_e( "LeftUpLeg" ).Node.rot_by( 75, "x" );
 	arm.get_e( "LeftLeg" ).Node.rot_by( -110, "x" );
@@ -55,8 +63,7 @@ async function init(){
 	
 	arm.get_e( "Hips" ).Node.rot_by( 30, "x" );
 	arm.get_e( "Hips" ).Node.set_scl( 1.5 );
-	*/
-
+	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	compute_worldspace( e );			// Computes World Space Transforms for all the Bones
 
@@ -163,7 +170,7 @@ function fary_jointWorldPoseScale( e ){
 function fary_inverseBindPoseScale( e ){
 	let bones 	= e.Armature.bones;
 	let ary 	= new Float32Array( bones.length * 3 );
-	let v 		= new App.Vec3(1,1,1).invert(); //The Bind Scale for all the bones are the same.
+	let v 		= new App.Vec3( 1/1, 1/1, 1/1 ); //The Bind Scale for all the bones are the same.
 
 	let i, j;
 	for( let b of bones ){

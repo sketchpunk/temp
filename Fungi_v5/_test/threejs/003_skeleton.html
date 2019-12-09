@@ -25,6 +25,8 @@ async function init(){
 	//let e = GltfUtil.get_skin_mesh( "Test", dl[0], dl[1], mat );
 	let e = GltfUtil.get_debug_view( "Test", dl[0], dl[1], mat );
 
+	//e.Obj.ref.position.set( 0, 0.5, -2 );
+
 	/**/
 	let arm = e.Armature, tm = THREE.Math;
 	arm.get_bone( "LeftUpLeg" ).rotation.x	= tm.degToRad( -75 );
@@ -35,6 +37,14 @@ async function init(){
 	arm.get_bone( "LeftFoot" ).rotation.x	= tm.degToRad( 30 );
 
 	arm.get_bone( "LeftHand" ).scale.set( 1.8, 1.8, 1.8 );
+
+	e.Obj.ref.bindMatrixInverse[ 14 ] = 0;
+
+	//console.log( e.Obj.ref );
+	//console.log( e.Obj.ref.bindMatrix );
+	//console.log( e.Obj.ref.bindMatrixInverse );
+
+
 
 	return true;
 }
