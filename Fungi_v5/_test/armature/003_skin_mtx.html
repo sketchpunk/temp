@@ -1,0 +1,332 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+import Mat4 			from "../../fungi/maths/Mat4.js";
+
+//https://chrome.google.com/webstore/detail/web-server-for-chrome/ofhbbkphhbklhfoeikjpcbhemlocgigb?hl=en
+
+/*
+- Transform rot is combined with Child * Parent, but in mines its Parent * Child
+- When getting ws, Cpp seems to go from leaf to root.
+- When computing WS, Scaling is already part of World Space Position, Does it make
+sense re-apply scale? Doesn't that double the scale.
+
+Where Pose is generated.
+https://github.com/mrdoob/three.js/blob/master/src/objects/Skeleton.js#L76
+
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinbase_vertex.glsl.js
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinning_pars_vertex.glsl.js
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinning_vertex.glsl.js
+https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderChunk/skinnormal_vertex.glsl.js
+*/
+
+//#####################################################
+App.builder( true )
+	//.load_shaders( "../fungi.armature/LowPolySkin.js" )
+	//.load_shaders( "./shaders/LowPoly.js" )
+	.init_mod( 
+		"../fungi.armature/Armature.js", 
+		"../fungi.armature/BoneView.js" )
+	.set_camera( 45, 20, 2, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	load_shader();						// INLINE SHADER - AT BOTTOM
+
+	let e = load_mesh( dl[0], dl[1] );	// Lood Model from Bin
+
+	gen_bones( e, dl[0], dl[1] );		// Create Armature Com + Its bones
+
+	e.add_com( "BoneView" ).init();		// Bone Preview Renderer
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	compute_worldspace( e );			// Computes World Space Transforms for all the Bones
+
+	fary_bine_pose( e );
+
+	set_pose( e );
+
+	compute_worldspace( e );
+
+	fary_pose( e );
+
+	return true;
+}
+
+function set_pose( e ){
+	let arm = e.Armature;
+	arm.get_e( "LeftUpLeg" ).Node.rot_by( 75, "x" );
+	arm.get_e( "LeftLeg" ).Node.rot_by( -110, "x" );
+	arm.get_e( "Neck" ).Node.rot_by( -40, "x" );
+	arm.get_e( "LeftArm" ).Node.rot_by( 60, "x" );
+	arm.get_e( "RightArm" ).Node.rot_by( 60, "x" );
+
+	arm.get_e( "Hips" ).Node.rot_by( 30, "x" );
+	arm.get_e( "Neck" ).Node.set_scl( 2.0 );
+	arm.get_e( "LeftHand" ).Node.set_scl( 2.5 );
+	arm.get_e( "RightHand" ).Node.set_scl( 2.5 );
+
+	arm.get_e( "LeftUpLeg" ).Node.set_scl( 0.5 );
+	arm.get_e( "RightUpLeg" ).Node.set_scl( 0.5 );
+}
+
+///////////////////////////////////////////////////////////
+// 
+///////////////////////////////////////////////////////////
+
+// Update the Bone Node World Transform
+function compute_worldspace( e ){
+	let bones	= e.Armature.bones,
+		len		= bones.length,
+		i, b, bn, pn;
+
+	for( i=0; i < len; i++ ){
+		b	= bones[ i ];
+		bn	= b.ref.Node;
+
+		if( bn.parent ){
+			pn = bn.parent.Node;
+			bn.world.from_add( pn.world, bn.local );
+		}else{
+			bn.world.copy( bn.local );
+		}
+
+		App.Debug.pnt( bn.world.pos, "yellow", 0.03, 1 ); // See WS Position with Dots
+	}
+}
+
+// Use the Current Bone Node's World Transform to build the Bind Pose
+function fary_bine_pose( e ){
+	let bones	= e.Armature.bones;
+	let ary		= new Float32Array( bones.length * 16 );
+
+	let i, j, bn, mtx = new Mat4();
+	for( let b of bones ){
+		i 	= b.idx * 16;
+		bn 	= b.ref.Node;
+
+		mtx
+			.from_quat_tran_scale( bn.world.rot, bn.world.pos, bn.world.scl )
+			.invert();
+
+		for( j=0; j < 16; j++ ) ary[ i+j ] = mtx[ j ];
+	}
+
+	MATERIAL.set_uniform( "bind_pose", ary );
+}
+
+// Create the World Matrix from the Current World Transform
+function fary_pose( e ){
+	let bones	= e.Armature.bones;
+	let ary		= new Float32Array( bones.length * 16 );
+
+	let i, j, bn, mtx = new Mat4();
+	for( let b of bones ){
+		i	= b.idx * 16;
+		bn	= b.ref.Node;
+
+		mtx.from_quat_tran_scale( bn.world.rot, bn.world.pos, bn.world.scl );
+
+		for( j=0; j < 16; j++ ) ary[ i+j ] = mtx[ j ];
+	}
+
+	MATERIAL.set_uniform( "pose", ary );
+}
+
+
+///////////////////////////////////////////////////////////
+// MESH / SKELETON LOADING
+///////////////////////////////////////////////////////////
+
+function gen_bones( e, json, bin, def_len=0.1 ){
+	let n_info	= {}, // Node Info
+		arm 	= e.add_com( "Armature" ),
+		bones 	= Gltf.get_skin( json, bin, null, n_info );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Create Bones
+	let len	= bones.length,
+		map = {},			// Create a Map of the First Child of Every Parent
+		i, b, be;
+
+	for( i=0; i < len; i++ ){
+		b	= bones[ i ];
+		be	= arm.add_bone( b.name, 1, b.p_idx );
+
+		if( b.rot ) be.Node.set_rot( b.rot );
+		if( b.pos ) be.Node.set_pos( b.pos );
+		if( b.scl ) be.Node.set_scl( b.scl );
+
+		// Save First Child to Parent Mapping
+		if( b.p_idx != null && !map[ b.p_idx ] ) map[ b.p_idx ] = i;
+	}
+
+	arm.finalize();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Set the Entity Transfrom from Armature's Node Transform if available.
+	// Loading Meshes that where originally FBX need this to display correctly.
+	//console.log( n_info );
+	//if( n_info.scl ) e.Node.set_scl( n_info.scl );
+	//if( n_info.rot ) e.Node.set_rot( n_info.rot );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Calc the Length of Each Bone
+	let c;
+	for( i=0; i < len; i++ ){
+		b = arm.bones[ i ];
+
+		if( !map[ i ] ) b.len = def_len;
+		else{
+			c = arm.bones[ map[ i ] ]; // First Child's World Space Transform
+			b.len = App.Vec3.len( b.world.pos, c.world.pos ); // Distance from Parent to Child
+		}
+	}
+
+	return e;
+}
+
+function load_mesh( json, bin ){
+	let geo 	= Gltf.get_mesh( "Vegeta", json, bin, true )[ 0 ];
+	let m 		= App.Mesh.from_bin( "vegeta", geo, bin, true );
+
+	//console.log( m );
+	return App.$Draw( "VegetaE", m, MATERIAL, App.Mesh.TRI );
+}
+
+///////////////////////////////////////////////////////////
+// SHADER
+///////////////////////////////////////////////////////////
+
+	let SHADER, MATERIAL;
+	function load_shader(){
+		SHADER		= App.Shader.from_src( "skin_mtx", vert_src, frag_src )
+			.add_uniform_blocks( ["Global", "Model"] )
+			.add_uniform( "bind_pose", 	"mat4" )
+			.add_uniform( "pose", 		"mat4" )
+		;
+
+		MATERIAL	= SHADER.new_material();
+		console.log("--- shader loaded");
+	}
+
+	const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=8) in vec4 a_bone_idx;
+	layout(location=9) in vec4 a_bone_wgt;
+
+	uniform mat4x4 bind_pose[90];
+	uniform mat4x4 pose[90];
+
+	//------------------------------------------
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	//------------------------------------------
+
+	vec3 mtx_bone_transform( vec3 pos, mat4x4[90] bind_mtx, mat4x4[90] pose_mtx, vec4 b_idx, vec4 b_wgt ){
+		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		NORMALIZE BONE WEIGHT VECTOR */
+		int a = int( b_idx.x ),
+			b = int( b_idx.y ),
+			c = int( b_idx.z ),
+			d = int( b_idx.w );
+
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT
+		/*
+		mat4x4 wgt_mtx	=	bind_mtx[ a ] * pose_mtx[ a ] * b_wgt.x +  
+							bind_mtx[ b ] * pose_mtx[ b ] * b_wgt.y +
+							bind_mtx[ c ] * pose_mtx[ c ] * b_wgt.z +
+							bind_mtx[ d ] * pose_mtx[ d ] * b_wgt.w;
+		*/
+
+		mat4x4 wgt_mtx	=	pose_mtx[ a ] * bind_mtx[ a ] * b_wgt.x +  
+							pose_mtx[ b ] * bind_mtx[ b ] * b_wgt.y +
+							pose_mtx[ c ] * bind_mtx[ c ] * b_wgt.z +
+							pose_mtx[ d ] * bind_mtx[ d ] * b_wgt.w;
+
+		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
+	}
+
+	//------------------------------------------
+
+	out vec3 w_pos;
+	flat out vec3 cam_pos;
+	out vec3 color;
+
+	void main(void){
+		vec3 pos 	= a_pos;
+
+		pos 		= mtx_bone_transform( pos, bind_pose, pose, a_bone_idx, a_bone_wgt );
+
+		w_pos		= pos;
+		cam_pos		= global.camera_pos;
+		gl_Position = global.proj_view * vec4( pos, 1.0 );
+
+		color = vec3( 1.0, 1.0, 1.0 );
+	}`;
+
+	const frag_src = `#version 300 es
+	precision mediump float;
+
+	in vec3 w_pos;
+	flat in vec3 cam_pos; 
+
+	in vec3 color; 
+	out vec4 out_color;
+
+	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
+	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
+	const float uAmbientStrength	= 0.5;
+	const float uDiffuseStrength	= 0.5;
+	const float uSpecularStrength	= 0.2f;	//0.15
+	const float uSpecularShininess	= 1.0f; //256.0
+
+	void main(void){ 
+		vec3 pixelNorm = normalize( cross( dFdx(w_pos), dFdy(w_pos) ) ); //Calc the Normal of the Rasterizing Pixel
+
+		// Ambient Lighting
+		vec3 cAmbient		= lightColor * uAmbientStrength;
+		
+		// Diffuse Lighting
+		vec3 lightVector	= normalize(lightPosition - w_pos);		//light direction based on pixel world position
+		float diffuseAngle	= max( dot(pixelNorm,lightVector) ,0.0);	//Angle between Light Direction and Pixel Direction (1==90d)
+		vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
+
+		// Specular Lighting
+		vec3 camVector		= normalize( cam_pos - w_pos );	//Camera Direction based on pixel world position
+		vec3 reflectVector	= reflect(-lightVector, pixelNorm);		//Reflective direction of line from pixel direction as pivot.
+		float specular		= pow( max( dot(reflectVector,camVector) ,0.0), uSpecularShininess ); //Angle of reflected light and camera eye
+		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
+
+		out_color = vec4( color * (cAmbient + cDiffuse + cSpecular), 1.0 );
+	}`;
+
+</script><page-layout></page-layout>
