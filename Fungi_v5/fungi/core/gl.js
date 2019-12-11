@@ -11,6 +11,8 @@ class gl{
 				console.error("Canvas element not found.");
 				return false;
 			}
+
+			this.canvas = canvas;
 		}
 
 		this.ctx = canvas.getContext("webgl2");
@@ -277,6 +279,7 @@ class gl{
 
 //.........................
 gl.ctx		= null;
+gl.canvas	= null;
 gl.width	= 0;
 gl.height	= 0;
 

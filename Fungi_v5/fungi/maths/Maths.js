@@ -106,7 +106,7 @@ class Maths{
 		}
 
 		// X and Y axis need to be normalized vectors, 90 degrees of eachother.
-		static planeCircle(vecCenter, xAxis, yAxis, angle, radius, out){
+		static plane_circle(vecCenter, xAxis, yAxis, angle, radius, out){
 			let sin = Math.sin(angle),
 				cos = Math.cos(angle);
 			out[0] = vecCenter[0] + radius * cos * xAxis[0] + radius * sin * yAxis[0];
@@ -116,7 +116,7 @@ class Maths{
 		}
 
 		//X and Y axis need to be normalized vectors, 90 degrees of eachother.
-		static planeEllipse(vecCenter, xAxis, yAxis, angle, xRadius, yRadius, out){
+		static plane_ellipse(vecCenter, xAxis, yAxis, angle, xRadius, yRadius, out){
 			let sin = Math.sin(angle),
 				cos = Math.cos(angle);
 			out[0] = vecCenter[0] + xRadius * cos * xAxis[0] + yRadius * sin * yAxis[0];

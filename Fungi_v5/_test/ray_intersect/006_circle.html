@@ -1,0 +1,64 @@
+<!DOCTYPE html><script type="module">
+import App	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App.builder( true )
+	.load_shaders( "./shaders/BaseColor.js" )
+	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#############################################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+
+//#############################################################################
+let plane_pos		= new App.Vec3( 0, 1, -1 );
+let plane_norm		= new App.Vec3( 0, 0, 1 );
+let plane_radius 	= 0.5;
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	App.Debug
+		.pnt( plane_pos, "green", 0.1, 1 )
+		.ln( plane_pos, App.Vec3.add( plane_pos, App.Vec3.scale( plane_norm, 0.5 ) ), "green" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Draw Circle
+	let seg = 16,
+		v0 	= new App.Vec3(),
+		v1 	= new App.Vec3();
+
+	App.Maths.plane_circle( plane_pos, App.Vec3.LEFT, App.Vec3.UP, 0, plane_radius, v0 );
+
+	for( let i=1; i <= seg; i++ ){
+		App.Maths.plane_circle( plane_pos, App.Vec3.LEFT, App.Vec3.UP, App.Maths.PI_2 * i / seg, plane_radius, v1 );
+		
+		App.Debug.ln( v0, v1, "green" );
+		
+		v0.copy( v1 );
+	}
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1]  );
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let t = gRay.in_circle( plane_radius, plane_pos, plane_norm );
+	if( t != null ) App.Debug.pnt( gRay.get_pos( t ), "red", 0.1, 1 );
+}
+</script><page-layout></page-layout>

@@ -66,6 +66,14 @@ class Vec3 extends Float32Array{
 			return x*x + y*y + z*z;
 		}
 
+		rnd( x0=0, x1=1, y0=0, y1=1, z0=0, z1=1 ){
+			let t;
+			t = Math.random(); this[ 0 ] = x0 * (1-t) + x1 * t;
+			t = Math.random(); this[ 1 ] = y0 * (1-t) + y1 * t;
+			t = Math.random(); this[ 2 ] = z0 * (1-t) + z1 * t;
+			return this;
+		}
+
 
 	////////////////////////////////////////////////////////////////////
 	// FROM SETTERS
@@ -107,6 +115,18 @@ class Vec3 extends Float32Array{
 		}
 
 		//-------------------------------------------
+
+		from_norm( v ){
+			let mag = Math.sqrt( v[0]**2 + v[1]**2 + v[2]**2 );
+			if( mag == 0 ) return this;
+
+			mag = 1 / mag;
+			this[0] = v[0] * mag;
+			this[1] = v[1] * mag;
+			this[2] = v[2] * mag;
+			return this;
+		}
+
 		from_invert( a ){
 			this[0] = -a[0];
 			this[1] = -a[1];

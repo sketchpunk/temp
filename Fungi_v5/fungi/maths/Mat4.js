@@ -2,7 +2,7 @@ class Matrix4 extends Float32Array{
 	constructor(){ super(16); this[0] = this[5] = this[10] = this[15] = 1; }  //Setup Identity
 
 	////////////////////////////////////////////////////////////////////
-	// METHODS
+	// GETTERS / SETTERS
 	////////////////////////////////////////////////////////////////////
 		translate(ary){	Matrix4.translate(this,ary[0],ary[1],ary[2]); return this;}
 		reset_translation(){ this[12] = this[13] = this[14] = 0; this[15] = 1; return this; }
@@ -247,10 +247,26 @@ class Matrix4 extends Float32Array{
 			return out;
 		}
 
+	////////////////////////////////////////////////////////////////////
+	// TRANSFORMS
+	////////////////////////////////////////////////////////////////////
+
+		transform_vec4( v, out = null ){
+			let x = v[0], y = v[1], z = v[2], w = v[3];
+			out = out || v;
+
+			out[0] = this[0] * x + this[4] * y + this[8]	* z + this[12] * w;
+			out[1] = this[1] * x + this[5] * y + this[9]	* z + this[13] * w;
+			out[2] = this[2] * x + this[6] * y + this[10]	* z + this[14] * w;
+			out[3] = this[3] * x + this[7] * y + this[11]	* z + this[15] * w;
+			return out;
+		}
+		
 
 	////////////////////////////////////////////////////////////////////
 	// STATIC SETTERS
 	////////////////////////////////////////////////////////////////////
+		
 		static identity(out){
 			for(let i=0; i <= out.length; i++) out[i] = (i % 5 == 0)? 1 : 0; //only positions 0,5,10,15 need to be 1 else 0
 		}
