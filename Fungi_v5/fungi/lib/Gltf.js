@@ -159,15 +159,17 @@ class Gltf{
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Find Mesh to parse out.
 			let i, n = null, mesh_idx = null;
-			for( i of json.nodes ) if( i.name === name && i.mesh != undefined ){ n = i; mesh_idx = n.mesh; break; }
+			for( i of json.nodes ){
+				if( i.name === name && i.mesh != undefined ){ n = i; mesh_idx = n.mesh; break; }
+			}
 
 			//No node Found, Try looking in mesh array for the name.
 			if( !n ){
-				for(i=0; i < json.meshes.length; i++ ) if( json.meshes[i].name == name ){ mesh_idx = i; break; }
+				for( i=0; i < json.meshes.length; i++ ) if( json.meshes[i].name == name ){ mesh_idx = i; break; }
 			}
 
 			if( mesh_idx == null ){
-				console.error("Node or Mesh by the name", name, "not found in GLTF");
+				console.error( "Node or Mesh by the name", name, "not found in GLTF" );
 				return null;
 			}
 

@@ -115,6 +115,7 @@ class Node{
 	// WORLD SPACE
 	////////////////////////////////////////////////////////////////////
 		// Get direction of an Entity based on its World Rotation
+		/*
 		get_dir( e, dir=0, out=null ){
 			let q = this.get_world_rot( e );
 			out = out || new Vec3();
@@ -126,14 +127,15 @@ class Node{
 			}
 			return out;
 		}
+		*/
 
-		/*
+		
 		// Get direction based on the Node's World Model Matrix
-		static getMatrixDir( e, dir=0, out=null, scale=1 ){
+		get_matrix_dir( dir=0, out=null, scale=1 ){
 			out = out || new Vec3();
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			let i = 0, mx = e.Node.modelMatrix;
+			let i = 0, mx = this.model_matrix;
 			switch( dir ){
 				case 0: i = 8; break;	// Forward : 8, 9, 10
 				case 1: i = 0; break;	// Left : 0, 1, 2
@@ -149,10 +151,9 @@ class Node{
 			out[0] = x * len * scale;
 			out[1] = y * len * scale;
 			out[2] = z * len * scale;
-
 			return out;
 		}
-
+		/*
 
 		get_world_rot( out = null, incChild=true ){
 			out = out || new Quat();

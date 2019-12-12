@@ -50,7 +50,9 @@ class GltfUtil{
 			// Load all meshes in file
 			if( !mesh_names ){
 				mesh_names = new Array();
-				for( let i=0; i < json.meshes.length; i++ ) mesh_names.push( json.meshes[i].name );
+				for( let i=0; i < json.nodes.length; i++ ){
+					if( json.nodes[i].mesh != undefined ) mesh_names.push( json.nodes[i].name );
+				}
 			}
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -62,15 +64,11 @@ class GltfUtil{
 				for( g of geo_ary ){
 					m = App.Mesh.from_bin( n, g, bin, is_skinned );
 					e.Draw.add( m, mat, g.mode );
+
+					if( g.rotation )	e.Node.set_rot( g.rotation );
+					if( g.position )	e.Node.set_pos( g.position );
+					if( g.scale ) 		e.Node.set_scl( g.scale );
 				}
-
-				console.log( geo_ary );
-
-				// This only Works if each Primitive is its own Entity, but not for meshes broken out as pieces 
-				// and each piece shares the same main mesh local space
-				//if( g.rotation )	e.Node.setRot( g.rotation );
-				//if( g.position )	e.Node.setPos( g.position );
-				//if( g.scale ) 	e.Node.setScl( g.scale );
 			}
 		}
 

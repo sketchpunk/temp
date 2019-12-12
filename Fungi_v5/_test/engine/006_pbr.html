@@ -1,0 +1,51 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder()
+	.load_shaders( "./shaders/Texture.js" )
+	//.load_shaders( "./shaders/LowPoly.js" )
+	.set_camera( 50, 20, 4, 0, 0.6, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/pbr/DamagedHelmet.gltf", "json", 
+		"../../files/models/pbr/DamagedHelmet.bin", "arraybuffer",
+		"../../files/models/pbr/DamagedHelmet_albedo.jpg", "blob",
+	);
+
+	await dl[2].promise;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let tex = App.gl.load_texture( "tex", dl[2], false ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
+	let mat = App.new_mat( "Texture", { base_tex:tex } );
+
+	//let mat	= App.new_mat( "LowPoly" );
+	let e	= GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
+
+	return true;
+}
+
+
+function dl_wait( dl ){  }
+
+/*
+
+https://github.com/redcamel/RedGPU/tree/master/src/postEffect
+seems to only make a Frame Buffer with 2 Color, 1 Depth.
+
+
+https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/master/src
+
+http://bkcore.com/blog/3d/webgl-three-js-animated-selective-glow.html
+
+ */
+</script><page-layout></page-layout>

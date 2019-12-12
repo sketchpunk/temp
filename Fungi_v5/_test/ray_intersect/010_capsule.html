@@ -41,7 +41,7 @@ function onRightClick( e ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let pos = App.input.toCoord( e );
-	gRay.set_screen_mouse( pos[0], pos[1], true  ); // Prepare for AABB Optimization
+	gRay.set_screen_mouse( pos[0], pos[1]  );
 	App.Debug.ln( gRay.origin, gRay.end, "red" );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

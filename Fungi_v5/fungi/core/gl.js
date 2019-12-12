@@ -1,5 +1,6 @@
 
 import Colour 	from "./Colour.js";
+import Cache 	from "./Cache.js";
 
 class gl{
 	static init( canvas ){
@@ -178,15 +179,15 @@ class gl{
 	////////////////////////////////////////////////////////
 
 		// Creates a texture on the GPU. then calls another function to push the image the gpu
-		static load_texture( name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0){ 
-			var tex	= gl.ctx.createTexture();
-			Cache.textures.set(name, tex);
+		static load_texture( name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0 ){ 
+			let tex	= gl.ctx.createTexture();
+			Cache.set_tex( name, tex );
 
-			return gl.updateTexture( tex, img, doYFlip, useMips );
+			return gl.update_texture( tex, img, doYFlip, useMips );
 		}
 
 		// Updates the GPU with an image as a texture.
-		static update_texture( tex, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0){ //can be used to pass video frames to gpu texture.
+		static update_texture( tex, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0 ){ //can be used to pass video frames to gpu texture.
 			if(doYFlip) gl.ctx.pixelStorei(gl.ctx.UNPACK_FLIP_Y_WEBGL, true);	//Flip the texture by the Y Position, So 0,0 is bottom left corner.
 
 			gl.ctx.bindTexture(gl.ctx.TEXTURE_2D, tex); //bind texture so we can start configuring it.
@@ -197,7 +198,7 @@ class gl{
 				gl.ctx.texParameteri(gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.LINEAR_MIPMAP_NEAREST);	//Setup down scaling
 				gl.ctx.generateMipmap(gl.ctx.TEXTURE_2D);	//Precalc different sizes of texture for better quality rendering.
 			}else{
-				var filter	= (filterMode == 0)?	gl.ctx.LINEAR : gl.ctx.NEAREST,
+				let filter	= (filterMode == 0)?	gl.ctx.LINEAR : gl.ctx.NEAREST,
 					wrap	= (wrapMode == 0)?		gl.ctx.REPEAT : gl.ctx.CLAMP_TO_EDGE;
 
 				gl.ctx.texParameteri(gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MAG_FILTER,	filter);
@@ -212,8 +213,8 @@ class gl{
 			return tex;	
 		}
 
-		static load_texture_array( img, imgW, imgH, imgCnt, doYFlip=false, useMips=false, wrapMode=0, filterMode=0){
-			var tex = gl.ctx.createTexture();
+		static load_texture_array( img, imgW, imgH, imgCnt, doYFlip=false, useMips=false, wrapMode=0, filterMode=0 ){
+			let tex = gl.ctx.createTexture();
 
 			gl.ctx.bindTexture(gl.ctx.TEXTURE_2D_ARRAY, tex);
 

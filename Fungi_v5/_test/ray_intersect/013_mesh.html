@@ -1,0 +1,79 @@
+<!DOCTYPE html><script type="module">
+import App			from "../../fungi/App.js";
+import Ray			from "../../fungi.ray/Ray.js";
+import Maths, { Vec3 }		from "../../fungi/maths/Maths.js";
+import FacedCube 	from "../../fungi/geo/FacedCube.js";
+
+//#####################################################
+App.builder( true, false )
+	.set_camera( 0, 20, 5, 0, 0.5, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+
+//#############################################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+
+//#############################################################################
+let gShape, gGeo, gRayTri;
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	gGeo 		= FacedCube.geo( 1, 1, 1 );
+	gShape		= FacedCube( "Shape" );
+	gRayTri		= Ray.ray_tri_closure();
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	App.Debug.reset();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1], true  ); 	// Prepare for AABB Optimization
+	App.Debug.ln( gRay.origin, gRay.end, "black" );
+
+	in_mesh( gRay );
+}
+
+function in_mesh( ray ){
+	let v0 = new Vec3(),
+		v1 = new Vec3(),
+		v2 = new Vec3(),
+		p  = new Vec3(),
+		i, i0, i1, i2;
+
+	let idx		= gGeo.idx,
+		vert	= gGeo.vert;
+
+	for( i=0; i < idx.length; i+=3 ){
+		i0 = idx[ i+0 ] * 4; // 4 floats per vertex, forth one is used as color group.
+		i1 = idx[ i+1 ] * 4; 
+		i2 = idx[ i+2 ] * 4;
+
+		v0.set( vert[i0], vert[i0+1], vert[i0+2] );
+		v1.set( vert[i1], vert[i1+1], vert[i1+2] );
+		v2.set( vert[i2], vert[i2+1], vert[i2+2] );
+
+		if( gRayTri( gRay, v0, v1, v2, p ) ){
+			App.Debug
+				.pnt( p, "black", 0.08, 1 )
+				.ln( v0, v1, "black" )
+				.ln( v1, v2, "black" )
+				.ln( v2, v0, "black" );
+
+			break;
+		}
+	}
+}
+</script><page-layout></page-layout>

@@ -63,20 +63,12 @@ let App = {
 
 	new_mat : ( sh_name, u_struct=null )=>{ 
 		let sh = App.Cache.get_shader( sh_name );
-		if( !sh ) return null;
-
-		let mat = sh.new_material();
-
-		if( u_struct ){
-			let n;
-			for( n in u_struct ) mat.set_uniform( n, u_struct[ n ] );
-		}
-		return mat;
+		return ( sh )? sh.new_material( sh_name + "_mat", u_struct ) : null;
 	},
 
 	get_e : ( idx )=>{ return App.ecs.entities[ idx ]; },
 
-	builder	: function( use_debug=false ){ return new Builder( use_debug ); },
+	builder	: function( use_debug=false, use_scene=true ){ return new Builder( use_debug, use_scene ); },
 };
 
 
@@ -84,16 +76,16 @@ let App = {
 //
 //////////////////////////////////////////////////////////////////
 	class Builder{
-		constructor( use_debug=false ){
+		constructor( use_debug=false, use_scene=true ){
 			this.task_queue = new Array();
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			this
 				.add( new Promise( (r, e)=>window.addEventListener("load", _=>r(true)) ) )
 				.add( init_gl )
-				.add( init_ecs )
-				.add( init_scene );
+				.add( init_ecs );
 
+			if( use_scene ) this.add( init_scene );
 			if( use_debug ) this.add( init_debug );
 		}
 

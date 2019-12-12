@@ -15,7 +15,7 @@ class XhrPromise{
 		this.complete 	= null;
 
 		this.url 		= null;
-		this.resType 	= null;
+		this.res_type 	= null;
 
 		//Start request in promise and save Resolve/Reject reference to call later
 		//when the async xhr call is complete.
@@ -37,7 +37,7 @@ class XhrPromise{
 			}
 		}else{
 			this.url		= url;
-			this.resType	= type;
+			this.res_type	= type;
 		}
 
 		return new Promise( this._onPromise );
@@ -48,15 +48,15 @@ class XhrPromise{
 
 		let itm = this.queue.shift();
 		this.url 		= itm.url;
-		this.resType 	= itm.type;
+		this.res_type 	= itm.type;
 		this._get();
 		return true;
 	}
 
 	_get(){
-		//console.log("GET", this.url, this.resType );
+		//console.log("GET", this.url, this.res_type );
 		this.xhr.open( "GET", this.url, true );
-		this.xhr.responseType = this.resType || "text";
+		this.xhr.responseType = this.res_type || "text";
 
 		try{
 			this.xhr.send();
@@ -77,12 +77,12 @@ class XhrPromise{
 		}else{
 			// Handling a queue of items.
 			if( this.queue ){
-				this.complete.push( this.xhr.response );
+				this.complete.push( this._get_response() );
 				if( this._queueNext() ) return;
 
 				this.promiseResolve( this.complete );
 			}else{
-				this.promiseResolve( this.xhr.response );
+				this.promiseResolve( this._get_response() );
 			}
 		}
 
@@ -90,7 +90,23 @@ class XhrPromise{
 		this.queue		= null;
 		this.complete	= null;
 		this.url		= null;
-		this.resType	= null;
+		this.res_type	= null;
+	}
+
+	_get_response(){
+		if( this.xhr.response instanceof Blob && this.xhr.response.type.startsWith( "image/" ) ){
+			let img = new Image();
+
+			img.crossOrigin	= "anonymous";
+			img.src 		= window.URL.createObjectURL( this.xhr.response );
+			img.promise		= new Promise( (resolve, reject)=>{ 
+				img.onload	= resolve;
+				img.onerror = reject;
+			});
+
+			return img;
+		}
+		return this.xhr.response;
 	}
 
 	onXhrComplete( e ){	//console.log( e, e.currentTarget.response );

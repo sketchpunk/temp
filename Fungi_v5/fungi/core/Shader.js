@@ -152,7 +152,7 @@ class Shader{
 			return this;
 		}
 
-		new_material( name=null ){
+		new_material( name=null, u_struct=null ){
 			let k, v, mat = new Material( name, this );
 
 			// Copy Uniforms
@@ -160,6 +160,12 @@ class Shader{
 
 			// Copy Options
 			for( k in this.options ) mat.options[ k ] = this.options[ k ];
+
+			// Load in custom Uniform Data if exists
+			if( u_struct ){
+				let n;
+				for( n in u_struct ) mat.set_uniform( n, u_struct[ n ] );
+			}		
 
 			return mat;
 		}
@@ -251,7 +257,7 @@ class Shader{
 				case "sampler2D" : 
 					let tmp = ( value instanceof WebGLTexture )? value : Cache.get_tex( value ); 
 					if(tmp == null){
-						console.error("Material.checkData: Texture not found %s for material %s uniform %s",uValue, this.name, uName);
+						console.error("Shader.parse_data: Texture not found",value);
 						return this;
 					}else value = tmp;
 				break;

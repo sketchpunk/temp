@@ -6,7 +6,7 @@ export default {
 		material	: new Map(),
 		//vao			: new Map(),
 		ubo			: new Map(),
-		//texture		: new Map(),
+		texture		: new Map(),
 		//tempCache	: new Map(),
 
 	//////////////////////////////////////////////
@@ -35,6 +35,14 @@ export default {
 			return x;
 		},
 
+
+		set_tex	: function( k, v ){ this.texture.set( k, v ); return this; },
+		get_tex	: function( key ){
+			var m = this.textures.get( key );
+			if(!m){ console.log( "Texture Not Found %s", key ); return null; }
+			return m;
+		},
+
 		/*
 		has_vao		: function( key ){ return this.vaos.has( key ); },
 		get_vao		: function( key ){
@@ -43,11 +51,6 @@ export default {
 			return m;
 		},
 
-		get_tex	: function( key ){
-			var m = this.textures.get(key);
-			if(!m){ console.log( "Texture Not Found %s", key ); return null; }
-			return m;
-		},
 
 
 		popTempCache : function( key ){
