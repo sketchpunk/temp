@@ -1,0 +1,137 @@
+<!DOCTYPE html><script type="module">
+import App	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App.builder( true )
+	.load_shaders( "./shaders/BaseColor.js" )
+	.set_camera( 0, 20, 3, 0, 1.0, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+
+//#############################################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+
+//#############################################################################
+let gShape, gSpec;
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	let mat	= App.new_mat( "BaseColor", { color:"#909090" } );
+
+	gSpec	= new BoundingCapsule();
+	gShape	= BoundingCapsule.entity( "bShape", mat );
+	gShape.Node.set_pos( 1, 1, 0 );
+	gShape.Node.local.rot.rot_x( App.Maths.to_rad( -30 ) );
+	gShape.Node.local.rot.rot_z( App.Maths.to_rad( -50 ) );
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1], true  ); // Prepare for AABB Optimization
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let info = {};
+	if( gRay.in_capsule( gSpec, gShape.Node.local, info ) ){
+		//console.log( info );
+		App.Debug.pnt( info.pos, "green", 0.05, 1 );
+	}
+}
+
+
+class BoundingCapsule{
+	constructor(){
+		this.radius		= 0.5;
+		this.radiusSqr	= this.radius * this.radius;
+		this.vecStart	= new App.Vec3(0,0.5,0);
+		this.vecEnd		= new App.Vec3(0,-0.5,0);
+		//Precalc values for reuse
+		//	RadiusSqr = raduis * radius;
+		//	VecLen = vecEnd - vecStart;
+		//	vecNorm = Normalize(veclen);
+	}
+
+	static entity( name, mat, mode=App.Mesh.LINE_LOOP ){
+		let verts 	= this.verts();
+		let mesh	= App.Mesh.from_data( name, verts );
+
+		return App.$Draw( name, mesh, mat, mode );
+	}
+
+	static verts(){
+		let radius		= 0.5;
+		//let radiusSqr	= this.radius * this.radius;
+		let vecStart	= new App.Vec3(0,0.5,0);
+		//let vecEnd		= new Vec3(0,-0.5,0);
+
+		/*.......................................
+		Rotate By Y
+		ry = y;
+		rx = z*sin + x*cos;
+		rz = z*cos - x*sin; */
+		var vSize = 9,					//How many points from bottom to top.
+			hSize = 3,					//How many times to rotate the circle
+			vHalf = (vSize-1) * vecStart.y,	//Halfway point to extend the sphere to make a capsule
+			vInc = Math.PI / (vSize-1),	//Increment bottom to top
+			hInc = Math.PI / (hSize),	//Increment rotation for each circle created
+			half = Math.PI * 0.5,		//Half of PI, will be origin when creating the circle
+			x,
+			y,
+			r,		//rads for circle rotation
+			i,		//loop var for circle making
+			rad,	//rads for making the cicle
+			sin,	//sin of the angle to rotate circle
+			cos,	//cos of the angle to rotate circle
+			v = [];
+
+		//.......................................
+		//Draw half of a 2D capsule by creating half a circle that extends the center
+		for(i=0; i < vSize; i++){
+			rad = vInc * i - half;
+			x = radius * Math.cos(rad);
+			y = radius * Math.sin(rad);
+
+			if(i < vHalf)		y -= 0.5;
+			else if(i > vHalf)	y += 0.5;
+			else if(i == vHalf){ v.push(x,y-0.5,0,  x,y+0.5,0); continue; }
+
+			v.push(x,y,0); //Since Z is 0, exclude it from Y rotation equation.
+		}
+
+		//.......................................
+		//Repeat the capsule half in reverse to build one complete 2D capsule.
+		for( i=v.length-6; i > 0; i-=3 ) v.push(-v[i],v[i+1],v[i+2]);
+		
+		//.......................................
+		//Repeat the 2D Capsule a few times to make it 3D-ish
+		var vLen = v.length;
+		for(var j=1; j < hSize; j++){
+			rad = hInc * j;
+			cos = Math.cos(rad);
+			sin = Math.sin(rad);
+			for(i=0; i < vLen; i+=3) v.push( v[i]*cos, v[i+1], -v[i]*sin );
+		}
+
+		//.......................................
+		//Final Point to finish up capsule
+		v.push( v[0], v[1], v[2] );
+
+		return v;
+	}
+}
+
+</script><page-layout></page-layout>

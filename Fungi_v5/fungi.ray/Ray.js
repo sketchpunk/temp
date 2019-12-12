@@ -185,7 +185,6 @@ class Ray{
 			return [ u.scale( tU ).add( A0 ), v.scale( tV ).add( this.origin ) ];
 		}
 
-
 		//TODO : Need to handle precalc the 4 points of a quad AND handle scale, rotation and translation
 		in_quad( quad, qSize ){
 			let planePos	= quad.Node.local.pos.clone(),
@@ -230,7 +229,6 @@ class Ray{
 
 			return t;
 		}
-
 
 		in_circle( radius, plane_pos, plane_norm ){
 			let t = this.in_plane( plane_pos, plane_norm );
@@ -279,25 +277,24 @@ class Ray{
 		}
 		*/
 
-
-		static inAABB( ray, box, out ){
-			var tMin, tMax, min, max, minAxis = 0;//, maxAxis = 0;
+		in_aabb( box, out ){
+			let tMin, tMax, min, max, minAxis = 0;//, maxAxis = 0;
 
 			//X Axis ---------------------------
-			tMin = (box.worldBounds[	ray.aabb[0]].x - ray.origin.x) * ray.vec_len_inv.x;
-			tMax = (box.worldBounds[1 - ray.aabb[0]].x - ray.origin.x) * ray.vec_len_inv.x;
+			tMin = (box.worldBounds[	this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
+			tMax = (box.worldBounds[1 - this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
 
 			//Y Axis ---------------------------
-			min = (box.worldBounds[		ray.aabb[1]].y - ray.origin.y) * ray.vec_len_inv.y;
-			max = (box.worldBounds[1 - 	ray.aabb[1]].y - ray.origin.y) * ray.vec_len_inv.y;
+			min = (box.worldBounds[		this.aabb[1]].y - this.origin.y) * this.vec_len_inv.y;
+			max = (box.worldBounds[1 - 	this.aabb[1]].y - this.origin.y) * this.vec_len_inv.y;
 
 			if(max < tMin || min > tMax) return false;	// if it criss crosses, its a miss
 			if(min > tMin){ tMin = min; minAxis = 1; }	// Get the greatest min
 			if(max < tMax){ tMax = max; }				// Get the smallest max
 
 			//Z Axis ---------------------------
-			min = (box.worldBounds[		ray.aabb[2]].z - ray.origin.z) * ray.vec_len_inv.z;
-			max = (box.worldBounds[1 - 	ray.aabb[2]].z - ray.origin.z) * ray.vec_len_inv.z;
+			min = (box.worldBounds[		this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
+			max = (box.worldBounds[1 - 	this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
 
 			if(max < tMin || min > tMax) return false;	// if criss crosses, its a miss
 			if(min > tMin){ tMin = min; minAxis = 2; }	// Get the greatest min
@@ -309,51 +306,51 @@ class Ray{
 				out.min		= tMin;
 				out.max		= tMax;
 				out.nAxis	= minAxis; // 0 : X, 1 : Y, 2 : Z
-				out.nDir	= ( ray.aabb[ minAxis ] == 1 )? 1 : -1;
+				out.nDir	= ( this.aabb[ minAxis ] == 1 )? 1 : -1;
 			}
 			return true;
 		}
 
 
-		static inOBB( ray, box, tran, out ){
-			var bbRayDelta	= Vec3.sub( tran.pos, ray.origin ),	//Distance between Ray start and Box Position
-				//wMat		= box.target.worldMatrix,	//Alias to the world matrix object
-				axis 		= new Vec3(),				//Current Axis being tested.
+		in_obb( box, tran, out ){
+			let bbRayDelta	= Vec3.sub( tran.pos, this.origin ),	// Distance between Ray start and Box Position
+				//wMat		= box.target.worldMatrix,	// Alias to the world matrix object
+				axis 		= new Vec3(),				// Current Axis being tested.
 				tMin 		= 0,
 				tMax 		= 1000000,
-				minAxis		= 0,						//Which axis hit, X:0, Y:1, Z:2
-				p,nomLen,denomLen,tmp,min,max;
+				minAxis		= 0,						// Which axis hit, X:0, Y:1, Z:2
+				p, nomLen, denomLen, tmp, min, max;
 				
-			for(var i=0; i < 3; i++){
-				p = i*4;
+			for(let i=0; i < 3; i++){
+				p = i * 4;
 
-				//axis.set(wMat[p],wMat[p+1],wMat[p+2]); //Get Right(0,1,2), Up(4,5,6) and Forward(8,9,10) direction from Matrix
+				// axis.set(wMat[p],wMat[p+1],wMat[p+2]); //Get Right(0,1,2), Up(4,5,6) and Forward(8,9,10) direction from Matrix
 				switch( i ){
 					case 0: axis.from_quat( tran.rot, Vec3.LEFT ); break;
 					case 1: axis.from_quat( tran.rot, Vec3.UP );  break;
 					case 2: axis.from_quat( tran.rot, Vec3.FORWARD ); break;
 				}
 
-				nomLen		= Vec3.dot(axis, bbRayDelta); 	//Get the length of Axis and distance to ray position
-				denomLen	= Vec3.dot(ray.vec_len, axis);	//Get Length of ray and axis
+				nomLen		= Vec3.dot( axis, bbRayDelta ); 	// Get the length of Axis and distance to ray position
+				denomLen	= Vec3.dot( this.vec_len, axis );	// Get Length of ray and axis
 
-				if(Math.abs(denomLen) > 0.00001){	//Can't divide by Zero
-					min = (nomLen + box.worldBounds[0][i]) / denomLen;
-					max = (nomLen + box.worldBounds[1][i]) / denomLen;
+				if( Math.abs( denomLen ) > 0.00001 ){	// Can't divide by Zero
+					min = ( nomLen + box.worldBounds[0][i] ) / denomLen;
+					max = ( nomLen + box.worldBounds[1][i] ) / denomLen;
 
-					if(min > max){ tmp = min; min = max; max = tmp; }	//Swap
-					if(min > tMin){ tMin = min; minAxis = i; }			//Biggest Min
-					if(max < tMax) tMax = max;							//Smallest Max
+					if( min > max ){ tmp = min; min = max; max = tmp; }		// Swap
+					if( min > tMin ){ tMin = min; minAxis = i; }			// Biggest Min
+					if( max < tMax ) tMax = max;							// Smallest Max
 
 					if(tMax < tMin) return false;
-				}else if(-nomLen + box.worldBounds[0][i] > 0 || -nomLen + box.worldBounds[1][i] < 0) return false;  //are almost parallel check
+				}else if(-nomLen + box.worldBounds[0][i] > 0 || -nomLen + box.worldBounds[1][i] < 0) return false;  // Are almost parallel check
 			}
 
 			if(out !== undefined){
 				out.min		= tMin;
 				out.max		= tMax;
 				out.nAxis	= minAxis; // 0 : X, 1 : Y, 2 : Z
-				out.nDir	= (ray.aabb[minAxis] == 1)? 1 : -1;
+				out.nDir	= ( this.aabb[ minAxis ] == 1 )? 1 : -1;
 			}
 			return true;
 		}
@@ -363,33 +360,33 @@ class Ray{
 		//So the T value is creates is for the Ray.Dir instead of Ray.vec_len, using
 		//Ray.getPos() will not work with the T values created by this function. Need to calc
 		//ipos manually using the ray direction.
-		static rayInSphere(ray, pos, radius, out){
+		in_sphere( pos, radius, out ){
 			//...........................................
-			var radiusSqr	= radius * radius,
-				rayToCenter	= Vec3.sub(pos, ray.origin),		
-				tProj		= Vec3.dot(rayToCenter, ray.dir); //Project the length to the center onto the Ray
+			let radiusSqr	= radius * radius,
+				rayToCenter	= Vec3.sub( pos, this.origin ),		
+				tProj		= Vec3.dot( rayToCenter, this.dir ); //Project the length to the center onto the Ray
 
 			//...........................................
 			//Get length of projection point to center and check if its within the sphere
 			//Opposite^2 = hyptenuse^2 - adjacent^2
-			var oppLenSqr = rayToCenter.len_sqr() - (tProj*tProj);  //Vec3.dot(rayToCenter, rayToCenter) - (tProj*tProj); 
-			if(oppLenSqr > radiusSqr) return false;
-			if(oppLenSqr == radiusSqr){
-				if(out) out.min = out.max = tProj;
+			let oppLenSqr = rayToCenter.len_sqr() - ( tProj*tProj );  //Vec3.dot(rayToCenter, rayToCenter) - (tProj*tProj); 
+			if( oppLenSqr > radiusSqr ) return false;
+			if( oppLenSqr == radiusSqr ){
+				if( out ) out.min = out.max = tProj;
 				return true;
 			}
 
 			//...........................................
 			//Using the Proj Length, add/subtract to get the intersection points since tProj is inside the sphere.
-			if(out){
-				var oLen	= Math.sqrt(radiusSqr - oppLenSqr), //Opposite = sqrt(hyptenuse^2 - adjacent^2)
+			if( out ){
+				var oLen	= Math.sqrt(  radiusSqr - oppLenSqr), //Opposite = sqrt(hyptenuse^2 - adjacent^2)
 					t0		= tProj - oLen,
 					t1		= tProj + oLen;
 				if(t1 < t0){ var tmp = t0; t0 = t1; t1 = tmp; } //Swap
 
 				out.min = t0; //var ipos0 = Vec3.scale(ray.dir,t0).add(ray.origin);
 				out.max = t1; //var ipos1 = Vec3.scale(ray.dir,t1).add(ray.origin);
-				out.pos = Vec3.scale( ray.dir, t0 ).add( ray.origin );
+				out.pos = Vec3.scale( this.dir, t0 ).add( this.origin ); // When used in capsule, better to have pos.
 			}
 
 			return true;
@@ -429,25 +426,25 @@ class Ray{
 		}
 
 
-		static inCapsule(ray, cap, tran, out){
+		in_capsule( cap, tran, out){
 			//...........................................
 			//Get Capsule's line segment and move it to world splace
-			var A = cap.vecStart.clone(),	//Start of Capsule Line
+			let A = cap.vecStart.clone(),	//Start of Capsule Line
 				B = cap.vecEnd.clone();		//End of Capsule Line
 
 			//if doing Axis Aligned, no need to apply rotations
 			//TODO : Should also include scale.
 			//Quat.rotateVec3(cap._rotation,A).add(cap._position); //Apply Rotation first Then Translation
 			//Quat.rotateVec3(cap._rotation,B).add(cap._position); 
-			tran.transformVec( A );
-			tran.transformVec( B );
+			tran.transform_vec( A );
+			tran.transform_vec( B );
 
 			//...........................................
 			//Start calculating lengths and cross products
-			var AB		= Vec3.sub(B, A),			// Vector Length of Capsule Segment
-				AO		= Vec3.sub(ray.origin, A), 	// Vector length between start of ray and capsule line
+			let AB		= Vec3.sub(B, A),			// Vector Length of Capsule Segment
+				AO		= Vec3.sub(this.origin, A),	// Vector length between start of ray and capsule line
 				AOxAB	= Vec3.cross(AO, AB),		// Perpendicular Vector between Cap Line & delta of Ray Origin & Capsule Line Start
-				VxAB 	= Vec3.cross(ray.dir, AB),	// Perpendicular Vector between Ray Dir & caplsule line
+				VxAB 	= Vec3.cross(this.dir, AB),	// Perpendicular Vector between Ray Dir & caplsule line
 				ab2		= AB.len_sqr(), 			// Length Squared of Capsule Line
 				a		= VxAB.len_sqr(),			// Length Squared of Perp Vec Length of Perp Vec of Ray&Cap
 				b		= 2 * Vec3.dot(VxAB,AOxAB),
@@ -456,26 +453,26 @@ class Ray{
 
 			//...........................................
 			//Checking D seems to be related to distance from capsule. If not within radius, D will be under 0
-			if (d < 0) return null;
+			if( d < 0 ) return null;
 
 			//T is less then 0 then ray goes through both end caps cylinder cap.
-			var t = (-b - Math.sqrt(d)) / (2 * a);
-			if(t < 0){
-				var pos = (A.len_sqr(ray.origin) < B.len_sqr(ray.origin))? A : B;
-				return Ray.rayInSphere( ray, pos, cap.radius, out );
+			let t = ( -b - Math.sqrt(d) ) / (2 * a);
+			if( t < 0 ){
+				let pos = ( Vec3.len_sqr( A, this.origin ) < Vec3.len_sqr( B, this.origin ) )? A : B;
+				return this.in_sphere( pos, cap.radius, out );
 			}
 
 			//...........................................
-			//Limit intersection between the bounds of the cylinder's end caps.
-			var iPos	= Vec3.scale( ray.dir, t ).add(ray.origin),	//Intersection Point
-				iPosLen	= Vec3.sub(iPos, A),						//Vector Length Between Intersection and Cap line Start
-				tLimit	= Vec3.dot(iPosLen, AB) / ab2;				//Projection of iPos onto Cap Line
+			// Limit intersection between the bounds of the cylinder's end caps.
+			let iPos	= Vec3.scale( this.dir, t ).add( this.origin ),	// Intersection Point
+				iPosLen	= Vec3.sub( iPos, A ),							// Vector Length Between Intersection and Cap line Start
+				tLimit	= Vec3.dot( iPosLen, AB ) / ab2;				// Projection of iPos onto Cap Line
 
 			if(tLimit >= 0 && tLimit <= 1){
-				if(out){ out.pos = iPos; }
+				if( out ){ out.pos = iPos; }
 				return true;
-			}else if(tLimit < 0)	return Ray.rayInSphere( ray, A, cap.radius, out); 
-			else if(tLimit > 1)		return Ray.rayInSphere( ray, B, cap.radius, out); 
+			}else if(tLimit < 0)	return this.in_sphere( A, cap.radius, out ); 
+			else if(tLimit > 1)		return this.in_sphere( B, cap.radius, out ); 
 
 			return false;
 		}

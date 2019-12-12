@@ -1,0 +1,98 @@
+<!DOCTYPE html><script type="module">
+import App	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App.builder( true )
+	.load_shaders( "./shaders/BaseColor.js" )
+	.set_camera( 0, 20, 3, 0, 1.0, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+
+//#############################################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+
+//#############################################################################
+let gShape;
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	let mat = App.new_mat( "BaseColor", { color:"#909090" } );
+	gShape = BoundingSphere.entity( "bsphere", mat );
+	gShape.Node.set_pos( 0, 1, 0 );
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1]  );
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let info = {};
+
+	if( gRay.in_sphere( gShape.Node.local.pos, 0.5, info ) ){
+		//console.log( info );
+		App.Debug
+			.pnt( gRay.get_by_len( info.min ), "green", 0.05, 1 )
+			.pnt( gRay.get_by_len( info.max ), "red", 0.05, 1 );
+	}
+}
+
+
+class BoundingSphere{
+	static entity( name, mat, mode=App.Mesh.LINE_STRIP ){
+		let verts 	= this.verts();
+		let m 		= App.Mesh.from_data( "Sphere", verts );
+		return App.$Draw( name, m, mat, mode );
+	}
+
+	static verts(){
+		/*Rotate By Y
+		ry = y;
+		rx = z*sin + x*cos;
+		rz = z*cos - x*sin;
+		*/
+		let vSize		= 7,					// How many points from bottom to top.
+			hSize		= 3,					// How many times to rotate the circle
+			vInc		= Math.PI / (vSize-1),	// Increment bottom to top
+			hInc		= Math.PI / (hSize),	// Increment rotation for each circle created
+			vLoopLen	= vSize * 2 - 1,		// Loop size for creating a circle
+			half		= Math.PI * 0.5,		// Half of PI, will be origin when creating the circle
+			x,
+			y,
+			r,		// rads for circle rotation
+			i,		// loop var for circle making
+			rad,	// rads for making the cicle
+			sin,	// sin of the angle to rotate circle
+			cos;	// cos of the angle to rotate circle
+
+		let v = [];
+		for(var j=0; j < hSize; j++){
+			r	= hInc * j - half;
+			cos	= Math.cos(r);
+			sin	= Math.sin(r);
+
+			for(i=0; i < vLoopLen; i++){
+				rad	= vInc * i - half;
+				x 	= 0.5 * Math.cos(rad);
+				y 	= 0.5 * Math.sin(rad);
+				v.push( x*cos, y, x*sin ); //Since Z is 0, exclude it from Y rotation equation.
+			}
+		}
+		return v;
+	}
+}
+</script><page-layout></page-layout>
