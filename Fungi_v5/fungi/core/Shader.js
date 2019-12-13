@@ -54,6 +54,7 @@ class Shader{
 	///////////////////////////////////////////////////////
 	// 
 	///////////////////////////////////////////////////////
+		
 		bind(){ gl.ctx.useProgram( this.program ); return this; }
 		unbind(){ gl.ctx.useProgram( null ); return this; }
 
@@ -70,6 +71,7 @@ class Shader{
 	///////////////////////////////////////////////////////
 	// 
 	///////////////////////////////////////////////////////
+		
 		add_uniforms( ary ){
 			let i;
 			for( i of ary ) this.add_uniform( i.name, i.type, i.value );
@@ -130,21 +132,21 @@ class Shader{
 				case "mat4":	gl.ctx.uniformMatrix4fv(	itm.loc, false, u_value ); break;
 				case "mat3":	gl.ctx.uniformMatrix3fv(	itm.loc, false, u_value ); break;
 				case "mat2x4": 	gl.ctx.uniformMatrix2x4fv(	itm.loc, false, u_value ); break;
-
-				//void gl.uniformMatrix3x4fv(location, transpose, data, optional srcOffset, optional srcLength);
+				case "mat3x4": 	gl.ctx.uniformMatrix3x4fv(	itm.loc, false, u_value ); break;
 
 				case "sampler2D":
+					//console.log( this.tex_slot, u_value._name_ );
 					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
 					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D, u_value );
 					gl.ctx.uniform1i(		itm.loc, this.tex_slot );
-					this.texSlot++;
+					this.tex_slot++;
 					break;
 
 				case "sampler2DArray":
-					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.texSlot );
+					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
 					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D_ARRAY, u_value );
-					gl.ctx.uniform1i(		itm.loc, this.texSlot );
-					this.texSlot++;
+					gl.ctx.uniform1i(		itm.loc, this.tex_slot );
+					this.tex_slot++;
 					break;
 
 				default: console.error("unknown uniform type %s for %s in %s", itm.type, u_name, this.name ); break;
@@ -169,7 +171,6 @@ class Shader{
 
 			return mat;
 		}
-
 
 	///////////////////////////////////////////////////////
 	// STATIC BUILERS
@@ -241,7 +242,6 @@ class Shader{
 
 			return shader;
 		}
-
 
 	///////////////////////////////////////////////////////
 	// MISC STATIC METHODS

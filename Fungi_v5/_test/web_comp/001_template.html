@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html><head></head><body>
+
+<comp-template attrib_01="test" observe_attr="1234">
+	<sub-template attr="111">one</sub-template>
+	<sub-template attr="222">two</sub-template>
+	<span slot="slot_01">test</span>
+</comp-template>
+
+<script>
+
+class SubTemplate extends HTMLElement{
+	constructor(){ super(); 
+		this.is_loaded	= false;
+		this._content	= "";
+	}
+
+	/////////////////////////////////////////////////////////////
+	// 
+	/////////////////////////////////////////////////////////////
+		connectedCallback(){
+			if( this.is_loaded ) return;
+			this.is_loaded	= true;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			this._content 	= this.innerHTML;
+			this.innerHTML	= "";
+		}
+
+		get content(){ return this._content; }
+		get attr(){ return this.getAttribute( "attr" ); }
+
+} window.customElements.define( "sub-template", SubTemplate );
+
+
+class CompTemplate extends HTMLElement{
+	constructor(){ super(); this.is_loaded = false; }
+
+	/////////////////////////////////////////////////////////////
+	// COMPONENT HOOKS
+	/////////////////////////////////////////////////////////////
+
+		disconnnectedCallback(){ console.log( "comp-template disconnected"); }
+		connectedCallback(){
+			if( this.is_loaded ) return;
+			this.is_loaded = true;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// TEMPLATE & SLOT INSERT
+			
+			this.appendChild( document.importNode( CompTemplate.Template.content, true ) ); //this.appendChild( tmpl.cloneNode( true ) );
+			
+			let s, ss, slots = this.querySelectorAll("*[slot]");
+			for( s of slots ){
+				if( (ss = this.querySelector( "*[name="+s.slot+"]" )) ){
+					if( ss.tagName == "SLOT" )	ss.parentNode.replaceChild( s, ss );
+					else 						ss.appendChild( s );
+				}
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// ATTRIBUTES
+
+			if( this.hasAttribute( "attrib_01" ) )	console.log( "found attrib_01 : ", this.getAttribute( "attrib_01" ) );
+			else 									console.log( "missing attribute : attrib_01" );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// SUB COMPONENTS
+
+		    Promise.all( [ customElements.whenDefined("sub-template") ] ).then( _ => this.load_sub_component() );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// OBSERVED ATTRIBUTE TEST
+
+			setTimeout( _=>{ 
+				console.log("set observe_attr"); 
+				this.setAttribute( "observe_attr", "9876" ); 
+			}, 500 );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+			console.log( "component loaded" );
+		}
+
+		// Observed Attribute Example
+		static get observedAttributes(){ return ["observe_attr"]; }
+		attributeChangedCallback( name, old_value, new_value ){
+			if( !this.is_loaded ) return;
+			console.log( "attributeChangedCallback : name - %s : old value - %s : new value - %s", name, old_value, new_value );
+		}
+
+	/////////////////////////////////////////////////////////////
+	// CUSTOM FUNCTIONS
+	/////////////////////////////////////////////////////////////
+
+		load_sub_component(){
+			let c, c_ary = this.querySelectorAll("sub-template");
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+			for( let i=0; i < c_ary.length; i++ ){
+				c = c_ary[ i ];
+				console.log( "sub component idx: %d - content: %s - attr: %s", i, c.content, c.attr );
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			
+			console.log( "sub components loaded" );
+		}
+}
+
+CompTemplate.Template = document.createElement("template");
+CompTemplate.Template.innerHTML = `<div name="slot_01"></div>`;
+window.customElements.define( "comp-template", CompTemplate );
+
+</script>
+
+</body>
+</html>

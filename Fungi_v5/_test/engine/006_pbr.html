@@ -2,34 +2,57 @@
 import App				from "../../fungi/App.js";
 import XhrPromise		from "../../fungi/lib/XhrPromise.js";
 import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+import Motion			from "../../fungi.test/Motion.js";
 
 //#####################################################
 App.builder()
 	.set_camera( 50, 20, 4, 0, 0.8, 0 )
 	.add( init )
-	.render_on_mouse( on_draw )
+	.render_loop( on_draw )
+	//.render_on_mouse( on_draw )
 	.build();
 
 //#####################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
+function on_draw( dt, ss ){ 
+	if( gMotion ) gMotion( dt );
+	App.ecs.sys_run();
+}
+
+let gMotion = null;
 
 async function init(){
+	// console.log( App.gl.ctx.getSupportedExtensions() );
+
 	let dl = await XhrPromise.get( 
 		"../../files/models/pbr/DamagedHelmet.gltf", "json", 
 		"../../files/models/pbr/DamagedHelmet.bin", "arraybuffer",
 		"../../files/models/pbr/DamagedHelmet_albedo.jpg", "blob",
+		"../../files/models/pbr/DamagedHelmet_normal.jpg", "blob",
+		"../../files/models/pbr/DamagedHelmet_AO.jpg", "blob",
+		"../../files/models/pbr/DamagedHelmet_emissive.jpg", "blob",
 	);
 
-	await dl_wait( dl );
+	await dl_wait( dl );	// document.body.appendChild( dl[2] );
 	load_shader();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let tex = App.gl.load_texture( "tex", dl[2], false ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
-	let mat = SHADER.new_material( "Texture", { base_tex:tex } );
+	let albedo_tex	= App.gl.load_texture( "albedo_tex", dl[2], false ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
+	let normal_tex	= App.gl.load_texture( "normal_tex", dl[3], false );
+	let ao_tex		= App.gl.load_texture( "ao_tex", dl[4], false );
+	let emiss_tex	= App.gl.load_texture( "emiss_tex", dl[5], false );
+
+	let mat = SHADER.new_material( "Texture",{ 
+		base_tex		: albedo_tex, 
+		norm_tex		: normal_tex,
+		ao_tex			: ao_tex,
+		emissive_tex	: emiss_tex,
+	});
 
 	//let mat	= App.new_mat( "LowPoly" );
-	let e	= GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
+	let e = GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
 	e.Node.set_pos( 0, 1.0, 0 );
+
+	gMotion = Motion.rot_by( e, -20, "z" );
 
 	return true;
 }
@@ -48,6 +71,45 @@ https://github.com/redcamel/RedGPU/tree/master/src/postEffect
 seems to only make a Frame Buffer with 2 Color, 1 Depth.
 https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/master/src
 http://bkcore.com/blog/3d/webgl-three-js-animated-selective-glow.html
+
+https://github.com/Nadrin/PBR/tree/master/data/shaders/glsl
+
+https://github.com/TheCherno/Sparky/tree/master/Sparky-core/src/sp/graphics/shaders
+
+https://www.alanzucconi.com/2015/06/24/physically-based-rendering/
+
+LOADS OF LIGHTING GLSL SAMPLES
+https://gist.github.com/patriciogonzalezvivo/3a81453a24a542aabc63
+
+https://developer.download.nvidia.com/CgTutorial/cg_tutorial_chapter05.html lots of source
+
+https://gist.github.com/galek/53557375251e1a942dfa
+
+https://nccastaff.bournemouth.ac.uk/jmacey/OpenGL/shaders/PBR/pbr.html  // Live simple sample of PBR
+
+https://docs.unity3d.com/Manual/SL-VertexFragmentShaderExamples.html  // Lots of Samples
+
+
+http://antongerdelan.net/opengl/cubemaps.html  SkyMap and Enviroment Reflection
+
+https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
+
+//Suggested Shape for Some Lighting Testing
+https://threejs.org/docs/#api/en/geometries/TorusKnotGeometry
+https://github.com/mrdoob/three.js/blob/master/src/geometries/TorusKnotGeometry.js
+
+AWESOME FIREBALL , LAVA BALL EFFECT
+https://www.clicktorelease.com/blog/vertex-displacement-noise-3d-webgl-glsl-three-js/
+
+https://www.scratchapixel.com/lessons/3d-basic-rendering/phong-shader-BRDF
+https://www.scratchapixel.com/code.php?id=32&origin=/lessons/3d-basic-rendering/phong-shader-BRDF
+
+https://paroj.github.io/gltut/Illumination/Tutorial%2012.html
+
+https://help.sketchfab.com/hc/en-us/articles/115000728943-Post-Processing-Filters
+
+http://osgjs.org/#examples
+
 */
 
 //##############################################################
@@ -56,9 +118,11 @@ let SHADER = null;
 function load_shader(){
 	SHADER = App.Shader.from_src( "Texture", vert_src, frag_src )
 		.add_uniform_blocks( ["Global","Model"] )
-		.add_uniform( "base_tex", "sampler2D", null );
+		.add_uniform( "base_tex", "sampler2D", null )
+		.add_uniform( "norm_tex", "sampler2D", null )
+		.add_uniform( "ao_tex", "sampler2D", null )
+		.add_uniform( "emissive_tex", "sampler2D", null );
 }
-
 
 const vert_src = `#version 300 es
 	layout(location=0) in vec3 a_pos;
@@ -78,19 +142,19 @@ const vert_src = `#version 300 es
 		mat4 view_matrix;
 	} model;
 
-	out vec2 v_uv;
-	out vec3 v_norm;
-	out vec3 v_cam_pos;
-	out vec3 v_frag_pos;
+	out vec2 frag_uv;
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_pos;
 
 	void main(void){
 		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		v_uv		= a_uv;
-		v_frag_pos	= wpos.xyz;
-		v_cam_pos	= global.camera_pos;
-		v_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		frag_uv			= a_uv;
+		frag_pos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		gl_Position = global.proj_view * wpos;
@@ -105,12 +169,44 @@ const frag_src = `#version 300 es
 	//-------------------------
 	
 	uniform sampler2D base_tex;
+	uniform sampler2D norm_tex;
+	uniform sampler2D ao_tex;
+	uniform sampler2D emissive_tex;
 
-	in vec2 v_uv;
-	in vec3 v_norm;
-	in vec3 v_cam_pos;
-	in vec3 v_frag_pos;
+	in vec2 frag_uv;
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_pos;
 
+	//-------------------------
+
+	// Without Knowing or precomuting the Vertex Tangent, We can give up a lil
+	// bit of performance by computing a suitable TBN Matrix to use with Normal / Bump Maps.
+
+	vec3 perturb_normal( vec3 surf_norm, vec3 dir_eye_frag, vec2 uv, sampler2D tex ){
+		vec3 tx_norm = texture( tex, uv ).xyz * 255.0/127.0 - 128.0/127.0;
+
+		// https://www.geeks3d.com/20130122/normal-mapping-without-precomputed-tangent-space-vectors/
+		// http://www.thetenthplanet.de/archives/1180
+		// Get edge vectors of the pixel triangle
+		vec3	dp1		= dFdx( dir_eye_frag ),
+				dp2		= dFdy( dir_eye_frag );
+		vec2	duv1	= dFdx( uv ),
+				duv2	= dFdy( uv );
+
+		// Solve the linear system
+		vec3 	dp2perp	= cross( dp2, surf_norm ),
+				dp1perp	= cross( surf_norm, dp1 ),
+				T		= dp2perp * duv1.x + dp1perp * duv2.x,
+				B		= dp2perp * duv1.y + dp1perp * duv2.y;
+
+		// Construct a scale-invariant frame 
+		float invmax	= inversesqrt( max( dot(T,T), dot(B,B) ) );
+		mat3 tbn		= mat3( T * invmax, B * invmax, surf_norm );
+
+		return normalize( tbn * tx_norm );
+	}
+	
 	//-------------------------
 	
 	const vec3 light_pos 			= vec3( 3.0, 5.0, 0.0 );
@@ -124,31 +220,58 @@ const frag_src = `#version 300 es
 	//-------------------------
 
 	void main( void ){
-		vec4 base_clr = texture( base_tex, v_uv );
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BASE 
+
+		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_pos ); // Dir from Fragment to Camera (Need for NormTex & Specular)
+		
+		vec3 dir_light		= normalize( light_pos - frag_pos ); // Direction of light from fragment
+		//vec3 dir_light		= normalize( -light_dir ); // Directional Light Source, no need to compute light dir
+
+		//vec4 base_clr = vec4( 0.8, 0.8, 0.8, 1.0 );
+		vec4 base_clr = texture( base_tex, frag_uv );
+
+		vec3 norm = normalize( frag_norm );
+  		norm = perturb_normal( norm, -dir_frag_cam, frag_uv, norm_tex ); //
+
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// AMBIENT LIGHT
-		vec3 ambient = ambient_strength * light_color;
+		
+		//vec3 ambient = ambient_strength * light_color;
+
+		// Adding A bit a shadow from a texture, just scales the ambient light
+		float occlusion = texture( ao_tex, frag_uv ).r;
+    	vec3 ambient 	= light_color * ambient_strength * occlusion ; // Comment out if occlusion will scale all light
+    							// vec3( 0.3 * Diffuse * AmbientOcclusion );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// DIFFUSED LIGHT
-		vec3 norm 			= normalize( v_norm );
-		//vec3 light_dir		= normalize( light_pos - v_frag_pos ); // Direction of light from fragment
-		vec3 light_dir	= normalize( -light_dir ); // Directional Light Source, no need to compute light dir
-
-		float diff			= max( dot( norm, light_dir ), 0.0 );	//
+		
+		float diff			= max( dot( norm, dir_light ), 0.0 );	//
 		vec3 diffuse		= diff * light_color;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// SPECULAR LIGHT
-		vec3 frag2cam		= normalize( v_cam_pos - v_frag_pos );	// Dir from Fragment to Camera
-		vec3 reflect_dir	= reflect( -light_dir, norm );				// Reflection Dir of Fragment to Light
-		float spec 			= pow( max( dot( frag2cam, reflect_dir ), 0.0 ), shininess );
+		
+		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
+		float spec 			= pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
 		vec3 specular 		= specular_strength * spec * light_color;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// EMISSION LIGHT
+
+		vec3 emission = texture( emissive_tex, frag_uv ).rgb;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// out_color = base_clr;
-		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular ), 1.0 );
-	}`;
+		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular + emission ), 1.0 );
+
+		// Another Approach is to scale all light based on Occlusion, instead of it just effecting ambient light.
+		//out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular + emission ) * occlusion, 1.0 );
+		
+		// out_color = vec4( occlusion, occlusion, occlusion , 1.0 ); // See Ambient Occlusion
+	}
+`;
 
 </script><page-layout></page-layout>

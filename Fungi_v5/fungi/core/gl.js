@@ -182,7 +182,7 @@ class gl{
 		static load_texture( name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0 ){ 
 			let tex	= gl.ctx.createTexture();
 			Cache.set_tex( name, tex );
-
+			tex._name_ = name;	// Get Debug if name is known
 			return gl.update_texture( tex, img, doYFlip, useMips );
 		}
 
