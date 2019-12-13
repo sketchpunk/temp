@@ -5,9 +5,7 @@ import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 
 //#####################################################
 App.builder()
-	.load_shaders( "./shaders/Texture.js" )
-	//.load_shaders( "./shaders/LowPoly.js" )
-	.set_camera( 50, 20, 4, 0, 0.6, 0 )
+	.set_camera( 50, 20, 4, 0, 0.8, 0 )
 	.add( init )
 	.render_on_mouse( on_draw )
 	.build();
@@ -22,30 +20,135 @@ async function init(){
 		"../../files/models/pbr/DamagedHelmet_albedo.jpg", "blob",
 	);
 
-	await dl[2].promise;
+	await dl_wait( dl );
+	load_shader();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let tex = App.gl.load_texture( "tex", dl[2], false ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
-	let mat = App.new_mat( "Texture", { base_tex:tex } );
+	let mat = SHADER.new_material( "Texture", { base_tex:tex } );
 
 	//let mat	= App.new_mat( "LowPoly" );
 	let e	= GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
+	e.Node.set_pos( 0, 1.0, 0 );
 
 	return true;
 }
 
 
-function dl_wait( dl ){  }
+function dl_wait( dl ){
+	let ary = [];
+	for( let i=0; i < dl.length; i++ ){
+		if( dl[i].promise ) ary.push( dl[i].promise );
+	}
+	return Promise.all( ary );
+}
 
 /*
-
 https://github.com/redcamel/RedGPU/tree/master/src/postEffect
 seems to only make a Frame Buffer with 2 Color, 1 Depth.
-
-
 https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/master/src
-
 http://bkcore.com/blog/3d/webgl-three-js-animated-selective-glow.html
+*/
 
- */
+//##############################################################
+
+let SHADER = null;
+function load_shader(){
+	SHADER = App.Shader.from_src( "Texture", vert_src, frag_src )
+		.add_uniform_blocks( ["Global","Model"] )
+		.add_uniform( "base_tex", "sampler2D", null );
+}
+
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+	layout(location=2) in vec2 a_uv;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec2 v_uv;
+	out vec3 v_norm;
+	out vec3 v_cam_pos;
+	out vec3 v_frag_pos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		v_uv		= a_uv;
+		v_frag_pos	= wpos.xyz;
+		v_cam_pos	= global.camera_pos;
+		v_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform sampler2D base_tex;
+
+	in vec2 v_uv;
+	in vec3 v_norm;
+	in vec3 v_cam_pos;
+	in vec3 v_frag_pos;
+
+	//-------------------------
+	
+	const vec3 light_pos 			= vec3( 3.0, 5.0, 0.0 );
+	const vec3 light_dir 			= vec3( -0.5, -0.5, 0.0 ); // Keep it Normalized
+	const vec3 light_color			= vec3( 1.0 );
+
+	const float ambient_strength	= 0.4;
+	const float specular_strength	= 0.5;
+	const float shininess 			= 32.0;
+
+	//-------------------------
+
+	void main( void ){
+		vec4 base_clr = texture( base_tex, v_uv );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// AMBIENT LIGHT
+		vec3 ambient = ambient_strength * light_color;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// DIFFUSED LIGHT
+		vec3 norm 			= normalize( v_norm );
+		//vec3 light_dir		= normalize( light_pos - v_frag_pos ); // Direction of light from fragment
+		vec3 light_dir	= normalize( -light_dir ); // Directional Light Source, no need to compute light dir
+
+		float diff			= max( dot( norm, light_dir ), 0.0 );	//
+		vec3 diffuse		= diff * light_color;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPECULAR LIGHT
+		vec3 frag2cam		= normalize( v_cam_pos - v_frag_pos );	// Dir from Fragment to Camera
+		vec3 reflect_dir	= reflect( -light_dir, norm );				// Reflection Dir of Fragment to Light
+		float spec 			= pow( max( dot( frag2cam, reflect_dir ), 0.0 ), shininess );
+		vec3 specular 		= specular_strength * spec * light_color;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// out_color = base_clr;
+		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular ), 1.0 );
+	}`;
+
 </script><page-layout></page-layout>
