@@ -243,5 +243,24 @@ let f_src = `#version 300 es
 	}`;
 
 
+/*
+	How to scale at the same rate
+
+	camera_adjust( e ){
+		let vEye	= Vec3.sub( App.camera.Node.local.pos, e.Node.local.pos ),
+			eyeLen 	= vEye.len(),
+			scl 	= e.Node.local.scl;
+
+		vEye.norm();
+		scl.set( 1, 1, 1 ).scale( eyeLen / GizmoSystem.CameraScale );
+
+		if( Vec3.dot( vEye, Vec3.LEFT )		< GizmoSystem.MinAdjust )	scl.x *= -1;
+		if( Vec3.dot( vEye, Vec3.FORWARD )	< GizmoSystem.MinAdjust )	scl.z *= -1;
+		if( Vec3.dot( vEye, Vec3.UP )		< GizmoSystem.MinAdjust )	scl.y *= -1;
+		
+		e.Node.isModified = true;
+	}
+*/
+
 //###################################################################################
 export default Points;

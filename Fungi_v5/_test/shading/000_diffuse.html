@@ -1,0 +1,572 @@
+<!DOCTYPE html><script type="module">
+import App from "../../fungi/App.js";
+import Vec3Buffer from "../../fungi/maths/Vec3Buffer.js";
+import Util from "../../fungi/geo/Util.js";
+
+//#####################################################
+App.builder( true, false )
+	.load_shaders( "./shaders/LowPoly.js")
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse( on_draw )
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+function init( x ){
+
+	//test_torus_knot();
+	//test_torus_knot_3d();
+	//test_torus_knot_3d_less_turning();
+	//test_torus_knot();
+	torus_knot_3d();
+
+	return true;
+}
+
+function grid_indices( col_cnt, row_cnt, loop_col=true, loop_row=true ){
+	let out		= new Array(),
+		r_stop	= ( loop_row )? row_cnt : row_cnt - 1,
+		c_stop	= ( loop_col )? col_cnt : col_cnt - 1,
+		r, r0, r1, c0, c1,
+		a, b, c, d;
+
+	for( r=0; r < r_stop; r++ ){
+		r0 = col_cnt * r;
+		r1 = col_cnt * ( (r+1) % row_cnt );
+
+		for( c0=0; c0 < c_stop; c0++ ){
+			c1	= ( (c0+1) % col_cnt );
+			a 	= r0 + c0;					// Defined the Vertex Index of a Quad
+			b 	= r1 + c0;
+			c 	= r1 + c1;
+			d 	= r0 + c1;
+
+			// Save the Quad as Two Triangles
+			out.push( a, b, c, c, d, a ); // Counter-ClockWise
+			//out.push( a, d, c, c, b, a ); // ClockWise
+		}	
+	}
+
+	return out;
+}
+
+
+function torus_knot( out, t, p=2, q=5, radius=1 ){
+	// https://blackpawn.com/texts/pqtorus/
+	// https://en.wikipedia.org/wiki/Torus_knot
+	let x 		= t * p * Math.PI * 2,
+		qpx		= q / p * x,
+		rh		= radius * 0.5,
+		qpx_xy	= rh * (2 + Math.cos( qpx ));
+
+	out[0] = qpx_xy * Math.cos( x );
+	out[1] = qpx_xy * Math.sin( x );
+	out[2] = rh * Math.sin( qpx );
+	return out;
+}
+
+// first derivative - tangent of curve
+function torus_knot_dxdy( out, t, p=2, q=5, radius=1 ){
+	let x 		= t * p * Math.PI * 2,
+		rh 		= radius * 0.5,
+		pi 		= 1 / p,
+		qpx		= q * x * pi,
+		sin_x	= Math.sin( x ),
+		cos_x 	= Math.cos( x ),
+		sin_qpx	= Math.sin( qpx ),
+		cos_qpx	= Math.cos( qpx );
+
+	// https://www.symbolab.com/solver/derivative-calculator
+	// Original Torus Knot Equation
+	// x = r * ( 2 + cos( q/p * x ) ) * 0.5 * cos( x )
+	// y = r * ( 2 + cos( q/p * x ) ) * 0.5 * sin( x )
+	// z = r * sin( q/p * x ) * 0.5
+
+	out[0] = rh * ( -sin_x * ( 2 + cos_qpx ) - q*sin_qpx*cos_x*pi );
+	out[1] = rh * ( cos_x * ( 2 + cos_qpx ) - q*sin_qpx*sin_x*pi );
+	out[2] = rh * q * cos_qpx * pi ;
+	return out;
+}
+
+// second derivative - normal of curve
+function torus_knot_dxdy2( out, t, p=2, q=5, radius=1 ){
+	let x 		= t * p * Math.PI * 2,
+		rh 		= radius * 0.5,
+		pq2 	= 2 * p * q,
+		qxp		= q * x / p,
+		pp		= p*p,
+		ppi 	= 1 / pp,
+		qq		= q*q,
+		cos_x	= Math.cos( x ),
+		sin_x	= Math.sin( x ),
+		cos_qxp	= Math.cos( qxp ),
+		sin_qxp	= Math.sin( qxp ),
+		com 	= (pp + qq) * cos_qxp + 2 * pp,
+		n_rh_pp	= -rh * ppi;
+
+	// https://www.wolframalpha.com/
+	// First Derivative
+	// 0.5 * r * ( -sin( x ) * ( 2 + cos( q * x / p ) ) - ( q * sin( q * x / p ) * cos( x ) / p ) )
+	// 0.5 * r * ( cos( x ) * ( 2 + cos( q * x / p ) ) - ( q * sin( q * x / p ) * sin( x ) / p ) )
+	// r * 0.5 * q * cos( q * x / p ) / p
+
+	out[0] = n_rh_pp * ( cos_x * com - pq2 * sin_x * sin_qxp );
+	out[1] = n_rh_pp * ( sin_x * com + pq2 * cos_x * sin_qxp );
+	out[2] = -0.5 * qq * radius * sin_qxp * ppi;
+	return out;
+}
+
+function test_torus_knot_3d(){
+	let v = new App.Vec3(); //current pos
+	let p = new App.Vec3();	//prev
+	let len = 60;
+
+	let t = new App.Vec3();
+	let b = new App.Vec3();
+	let n = new App.Vec3();
+
+	torus_knot( p, 0, 2, 3, 1 ); // Get First Point
+	for( let i=1; i <= len; i++ ){
+		torus_knot( v, i / len,  2, 3, 1 );
+		torus_knot_dxdy( t, i / len, 2, 3, 1 );
+		torus_knot_dxdy2( n, i / len, 2, 3, 1 );
+		
+		t.norm();						// Tangent - Fwd
+		b.from_cross( n, t ).norm();	// BiNormal - Left
+		n.from_cross( t, b ).norm();	// Normal - Up (Orthoginal)
+
+		App.Debug
+			.ln( p, v, "red" )			// View Curve Line
+			.pnt( v, "red", 0.05, 1 )	// View Point on Curve
+			.ln( v, b.scale(0.2).add(v), "green" )	// Left
+			.ln( v, n.scale(0.2).add(v), "blue" )	// up
+			.ln( v, t.scale(0.2).add(v), "white" );	// fwd
+		p.copy( v ); // Save for next point
+	}
+}
+
+
+function test_torus_knot_3d_less_turning(){
+	let v = new App.Vec3(); // current pos
+	let p = new App.Vec3();	// prev
+	let len = 60;
+
+	let t = new App.Vec3();
+	let b = new App.Vec3();
+	let n = new App.Vec3();
+
+	torus_knot( p, 0, 2, 3, 1 ); // Inital Pos
+	for( let i=1; i <= len; i++ ){
+		torus_knot( v, i / len,  2, 3, 1 );
+		torus_knot_dxdy( t, i / len, 2, 3, 1 );
+		torus_knot_dxdy( n, (i + 0.00001) / len, 2, 3, 1 ); // Future Tangent
+		
+		t.norm();						// Tangent - Fwd
+		n.add( v );						// Temp Normal - Up (Adding to pos makes it curve around less somehow )
+		b.from_cross( n, t ).norm();	// BiNormal - Left
+		n.from_cross( t, b ).norm();	// Normal - Up
+
+		App.Debug
+			.ln( p, v, "red" )
+			.pnt( v, "red", 0.05, 1 )
+			.ln( v, App.Vec3.add( v, b.scale(0.2) ), "green" )	// Left
+			.ln( v, App.Vec3.add( v, n.scale(0.2) ), "blue" )	// Up
+			.ln( v, App.Vec3.add( v, t.scale(0.2) ), "white" )	// Fwd
+		;
+		p.copy( v );
+	}
+}
+
+
+function test_torus_knot(){
+	let v = new App.Vec3(); //current pos
+	let p = new App.Vec3();	//prev
+	let f = new App.Vec3();	//future step
+	let len = 60;
+
+	let t = new App.Vec3();
+	let b = new App.Vec3();
+	let n = new App.Vec3();
+
+	let dx = new App.Vec3();
+	let dx2 = new App.Vec3();
+
+	torus_knot( p, 0, 2, 3, 1 );
+
+	for( let i=1; i <= len; i++ ){
+		torus_knot( v, i / len,  2, 3, 1 );
+		//torus_knot( f, (i + 0.000001) / len, 2, 3, 1 ); // without derivative, do future step
+
+		torus_knot_dxdy( dx, i / len, 2, 3, 1 );
+		//torus_knot_dxdy2( dx2, i / len, 2, 3, 1 );
+		torus_knot_dxdy( dx2, (i + 0.000001) / len, 2, 3, 1 );
+		
+
+		//t.from_sub( f, v ).norm();		// Tangent - Fwd
+		t.copy( dx ).norm();		// Tangent - Fwd
+		//n.from_add( f, v );				// Temp Normal - Up
+		n.from_add( dx2, v );				// Temp Normal - Up
+		b.from_cross( t, n ).norm();	// BiNormal - Left
+		n.from_cross( b, t ).norm();	// Normal - Up
+
+		//App.Debug.pnt( v, "red", 0.05, 1 );
+		App.Debug
+			.ln( p, v, "red" )
+			.pnt( v, "red", 0.05, 1 )
+			.ln( v, App.Vec3.add( v, b.scale(0.2) ), "green" )
+			.ln( v, App.Vec3.add( v, n.scale(0.2) ), "blue" )
+			.ln( v, App.Vec3.add( v, t.scale(0.2) ), "white" )
+			//.ln( v, App.Vec3.add( v, dx.norm().scale(0.2) ), "black" )
+			//.ln( v, App.Vec3.add( v, dx2.norm().invert().scale(0.2) ), "orange" )
+		;
+		p.copy( v );
+	}
+}
+
+function torus_knot_3d(){
+	let c = 3;
+	let r = 10;
+
+	let shape = Util.circle_verts( c, 0.2 );
+	
+	let p = new App.Vec3();
+	let v = new App.Vec3();
+	let t = new App.Vec3();
+	let b = new App.Vec3();
+	let n = new App.Vec3();
+	let q = new App.Quat();
+	let norm = new App.Vec3();
+	let ct, j;
+
+	for( j=0; j < shape.len; j++ ) App.Debug.pnt( shape.copy_to(j,v), "green", 0.05, 1 );
+
+	let verts = new Vec3Buffer( c * r );
+
+	for( let i=0; i < r; i++ ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		ct = i / r;
+
+		torus_knot( p, ct, 2, 3, 1 );						// Pos On Curve
+		torus_knot_dxdy( t, ct, 2, 3, 1 );				// Fwd Dir of Point
+		torus_knot_dxdy( n, (i + 0.00001) / r, 2, 3, 1 ); // Near Future Fwd Dir
+		
+		t.norm();						// Tangent - Fwd
+		n.add( p );						// Temp Normal - Up (Adding to pos makes it curve around less somehow )
+		b.from_cross( n, t ).norm();	// BiNormal - Left
+		n.from_cross( t, b ).norm();	// Normal - Up
+
+		//t.set( 0.5, 0.0, 0.5 ).norm();
+		//n.set( 0.0, 1.0, 0.0 );
+		//b.from_cross( n, t ).norm();
+		//n.from_cross( t, b ).norm();
+
+		//q.from_mat3( [
+		//	b[0],b[1],b[2],
+		//	n[0],n[1],n[2],
+		//	t[0],t[1],t[2]
+		//]);
+	
+		q.from_axis( b, n, t );
+
+		//App.Debug.quat( q );
+		
+
+		//console.log( t, b, n );
+
+		//p.scale( 0.5 );
+		App.Debug
+			.pnt( p, "green", 0.05, 1 )
+			.ln( p, t.scale(0.1).add( p ), "green" )
+			.ln( p, n.scale(0.1).add( p ), "blue" )
+			.ln( p, b.scale(0.1).add( p ), "red" );
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( j=0; j < shape.len; j++ ){
+			shape.copy_to( j, v );	// Get Position out of buffer
+			v.transform_quat( q )	// Rotate the vector
+			norm.from_norm( v );	// Normalize a Copy
+			v.add( p );				// Move vert into position
+
+			verts.push( v );
+
+			App.Debug.pnt( v, "#a0a0a0", 0.05, 1 )
+				.ln( v, norm.scale(0.2).add( v ), "#808080" );
+		}
+
+
+		/*
+		t.from_quat( q, App.Vec3.FORWARD );
+		n.from_quat( q, App.Vec3.UP );
+		b.from_quat( q, App.Vec3.LEFT );
+		
+		App.Debug
+			.pnt( [0,0,0], "green", 0.05, 1 )
+			.ln( [0,0,0], t.scale(0.5), "green" )
+			.ln( [0,0,0], n.scale(0.5), "blue" )
+			.ln( [0,0,0], b.scale(0.5), "red" );
+		*/
+		//q.reset().rot_deg( 45, "x" );
+		//q.from_axis( App.Vec3.LEFT, App.Vec3.UP, App.Vec3.FORWARD );
+		//App.Debug.quat( q, null, 0.5 );
+
+		
+		//return;
+		//console.log( i, t );
+	}
+
+	//let mat		= App.ShaderBuilder( { base_color:"#00ff00ff" } );
+	//let mat 	= App.new_mat( "LowPoly" );
+	//let mesh	= App.Mesh.from_data( "mesh", circle.buffer );
+
+	//App.$Draw( "test", mesh, mat, App.Mesh.PNT );
+
+
+}
+
+
+function torus(){
+	let c = 6, r = 8;
+
+	let circle	= Util.circle_verts( c, 0.2 ).rng_add( 1, 0.5, 0 );
+	let verts 	= Util.lathe( circle, r, "y" );
+	let indices = new Uint16Array( grid_indices( c, r ) );
+	//Util.grid_indices( idx, 0, c, r, true );
+
+	//let mat		= App.ShaderBuilder( { base_color:"#00ff00ff" } );
+	let mat 	= App.new_mat( "LowPoly" );
+	let mesh	= App.Mesh.from_data( "mesh", verts.buffer, indices );
+
+	App.$Draw( "test", mesh, mat, App.Mesh.TRI );
+}
+
+	/*
+
+radius - Radius of the torus. Default is 1.
+tube — Radius of the tube. Default is 0.4.
+tubularSegments — Default is 64.
+radialSegments — Default is 8.
+p — This value determines, how many times the geometry winds around its axis of rotational symmetry. Default is 2.
+q — This value determines, how many times the geometry winds around a circle in the interior of the torus. Default is 3.
+
+	for ( i = 0; i <= tubularSegments; ++ i ) {
+
+		// the radian "u" is used to calculate the position on the torus curve of the current tubular segement
+
+		var u = i / tubularSegments * p * Math.PI * 2;
+
+		// now we calculate two points. P1 is our current position on the curve, P2 is a little farther ahead.
+		// these points are used to create a special "coordinate space", which is necessary to calculate the correct vertex positions
+
+		calculatePositionOnCurve( u, p, q, radius, P1 );
+		calculatePositionOnCurve( u + 0.01, p, q, radius, P2 );
+
+
+	function calculatePositionOnCurve( u, p, q, radius, position ) {
+
+		var cu = Math.cos( u );
+		var su = Math.sin( u );
+		var quOverP = q / p * u;
+		var cs = Math.cos( quOverP );
+
+		position.x = radius * ( 2 + cs ) * 0.5 * cu;
+		position.y = radius * ( 2 + cs ) * su * 0.5;
+		position.z = radius * Math.sin( quOverP ) * 0.5;
+
+	}
+	*/
+
+
+/*
+import { Geometry } from '../core/Geometry.js';
+import { BufferGeometry } from '../core/BufferGeometry.js';
+import { Float32BufferAttribute } from '../core/BufferAttribute.js';
+import { Vector3 } from '../math/Vector3.js';
+
+// TorusKnotGeometry
+
+function TorusKnotGeometry( radius, tube, tubularSegments, radialSegments, p, q, heightScale ) {
+
+	Geometry.call( this );
+
+	this.type = 'TorusKnotGeometry';
+
+	this.parameters = {
+		radius: radius,
+		tube: tube,
+		tubularSegments: tubularSegments,
+		radialSegments: radialSegments,
+		p: p,
+		q: q
+	};
+
+	if ( heightScale !== undefined ) console.warn( 'THREE.TorusKnotGeometry: heightScale has been deprecated. Use .scale( x, y, z ) instead.' );
+
+	this.fromBufferGeometry( new TorusKnotBufferGeometry( radius, tube, tubularSegments, radialSegments, p, q ) );
+	this.mergeVertices();
+
+}
+
+TorusKnotGeometry.prototype = Object.create( Geometry.prototype );
+TorusKnotGeometry.prototype.constructor = TorusKnotGeometry;
+
+// TorusKnotBufferGeometry
+
+function TorusKnotBufferGeometry( radius, tube, tubularSegments, radialSegments, p, q ) {
+
+	BufferGeometry.call( this );
+
+	this.type = 'TorusKnotBufferGeometry';
+
+	this.parameters = {
+		radius: radius,
+		tube: tube,
+		tubularSegments: tubularSegments,
+		radialSegments: radialSegments,
+		p: p,
+		q: q
+	};
+
+	radius = radius || 1;
+	tube = tube || 0.4;
+	tubularSegments = Math.floor( tubularSegments ) || 64;
+	radialSegments = Math.floor( radialSegments ) || 8;
+	p = p || 2;
+	q = q || 3;
+
+	// buffers
+
+	var indices = [];
+	var vertices = [];
+	var normals = [];
+	var uvs = [];
+
+	// helper variables
+
+	var i, j;
+
+	var vertex = new Vector3();
+	var normal = new Vector3();
+
+	var P1 = new Vector3();
+	var P2 = new Vector3();
+
+	var B = new Vector3();
+	var T = new Vector3();
+	var N = new Vector3();
+
+	// generate vertices, normals and uvs
+
+	for ( i = 0; i <= tubularSegments; ++ i ) {
+
+		// the radian "u" is used to calculate the position on the torus curve of the current tubular segement
+
+		var u = i / tubularSegments * p * Math.PI * 2;
+
+		// now we calculate two points. P1 is our current position on the curve, P2 is a little farther ahead.
+		// these points are used to create a special "coordinate space", which is necessary to calculate the correct vertex positions
+
+		calculatePositionOnCurve( u, p, q, radius, P1 );
+		calculatePositionOnCurve( u + 0.01, p, q, radius, P2 );
+
+		// calculate orthonormal basis
+
+		T.subVectors( P2, P1 );
+		N.addVectors( P2, P1 );
+		B.crossVectors( T, N );
+		N.crossVectors( B, T );
+
+		// normalize B, N. T can be ignored, we don't use it
+
+		B.normalize();
+		N.normalize();
+
+		for ( j = 0; j <= radialSegments; ++ j ) {
+
+			// now calculate the vertices. they are nothing more than an extrusion of the torus curve.
+			// because we extrude a shape in the xy-plane, there is no need to calculate a z-value.
+
+			var v = j / radialSegments * Math.PI * 2;
+			var cx = - tube * Math.cos( v );
+			var cy = tube * Math.sin( v );
+
+			// now calculate the final vertex position.
+			// first we orient the extrusion with our basis vectos, then we add it to the current position on the curve
+
+			vertex.x = P1.x + ( cx * N.x + cy * B.x );
+			vertex.y = P1.y + ( cx * N.y + cy * B.y );
+			vertex.z = P1.z + ( cx * N.z + cy * B.z );
+
+			vertices.push( vertex.x, vertex.y, vertex.z );
+
+			// normal (P1 is always the center/origin of the extrusion, thus we can use it to calculate the normal)
+
+			normal.subVectors( vertex, P1 ).normalize();
+
+			normals.push( normal.x, normal.y, normal.z );
+
+			// uv
+
+			uvs.push( i / tubularSegments );
+			uvs.push( j / radialSegments );
+
+		}
+
+	}
+
+	// generate indices
+
+	for ( j = 1; j <= tubularSegments; j ++ ) {
+
+		for ( i = 1; i <= radialSegments; i ++ ) {
+
+			// indices
+
+			var a = ( radialSegments + 1 ) * ( j - 1 ) + ( i - 1 );
+			var b = ( radialSegments + 1 ) * j + ( i - 1 );
+			var c = ( radialSegments + 1 ) * j + i;
+			var d = ( radialSegments + 1 ) * ( j - 1 ) + i;
+
+			// faces
+
+			indices.push( a, b, d );
+			indices.push( b, c, d );
+
+		}
+
+	}
+
+	// build geometry
+
+	this.setIndex( indices );
+	this.setAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+	this.setAttribute( 'normal', new Float32BufferAttribute( normals, 3 ) );
+	this.setAttribute( 'uv', new Float32BufferAttribute( uvs, 2 ) );
+
+	// this function calculates the current position on the torus curve
+
+	function calculatePositionOnCurve( u, p, q, radius, position ) {
+
+		var cu = Math.cos( u );
+		var su = Math.sin( u );
+		var quOverP = q / p * u;
+		var cs = Math.cos( quOverP );
+
+		position.x = radius * ( 2 + cs ) * 0.5 * cu;
+		position.y = radius * ( 2 + cs ) * su * 0.5;
+		position.z = radius * Math.sin( quOverP ) * 0.5;
+
+	}
+
+}
+
+TorusKnotBufferGeometry.prototype = Object.create( BufferGeometry.prototype );
+TorusKnotBufferGeometry.prototype.constructor = TorusKnotBufferGeometry;
+
+
+export { TorusKnotGeometry, TorusKnotBufferGeometry };
+*/
+
+
+</script><page-layout></page-layout>

@@ -88,10 +88,10 @@ class Vec3Buffer{
 			return this;
 		}
 
-
 	///////////////////////////////////////////////////////////////////
 	// Getters / Setters
 	///////////////////////////////////////////////////////////////////
+		
 		get byte_capacity(){ return this.buffer.byteLength; }	// Total Bytes Available
 		get byte_len(){ return this.len * B_LEN * 4; }			// Length of Bytes in Use
 		get buf_len(){ return this.len * B_LEN; }
@@ -147,15 +147,14 @@ class Vec3Buffer{
 			return this;
 		}
 
-
 	///////////////////////////////////////////////////////////////////
 	// Basic Math Operations
 	///////////////////////////////////////////////////////////////////			
 	
-
 	///////////////////////////////////////////////////////////////////
 	// Vector Math Operations
 	///////////////////////////////////////////////////////////////////	
+		
 		norm( i ){
 			i *= B_LEN;
 
@@ -170,6 +169,24 @@ class Vec3Buffer{
 			this.buffer[ i ]	= x * mag;
 			this.buffer[ i+1 ]	= y * mag;
 			this.buffer[ i+2 ]	= z * mag;
+
+			return this;
+		}
+
+	///////////////////////////////////////////////////////////////////
+	// RANGE OPERATIONS
+	///////////////////////////////////////////////////////////////////
+
+		rng_add( x, y, z, a=0, b=null ){
+			let i 	= a * B_LEN,
+				ii	= ( b != null )? b * B_LEN : this.len * B_LEN,
+				buf = this.buffer;
+
+			for( i; i < ii; i += B_LEN ){
+				buf[ i ]	+= x;
+				buf[ i+1 ]	+= y;
+				buf[ i+2 ]	+= z;
+			}
 
 			return this;
 		}

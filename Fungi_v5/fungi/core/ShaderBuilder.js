@@ -21,6 +21,7 @@ const vert_src = `#version 300 es
 	} model;
 
 	void main(void){
+		gl_PointSize 	= 10.0;
 		vec4 world_pos 	= model.view_matrix * vec4( a_pos, 1.0 );
 		gl_Position 	= global.proj_view * world_pos;
 	}`;

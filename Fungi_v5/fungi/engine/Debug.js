@@ -50,18 +50,21 @@ class Debug{
 	////////////////////////////////////////////////////////////////////
 	// MISC
 	////////////////////////////////////////////////////////////////////
-		/*
-		static quat( q, offset = null, scale = 1 ){
-			let v = new Vec3();
-			offset = offset || Vec3.ZERO;
-			Debug
-				.line( offset, Vec3.transform_quat( Vec3.scale( Vec3.FORWARD, scale, v) , q, v).add( offset ), 1 )
-				.line( offset, Vec3.transform_quat( Vec3.scale( Vec3.UP, scale, v), q, v).add( offset ), 2 )
-				.line( offset, Vec3.transform_quat( Vec3.scale( Vec3.LEFT, scale, v), q, v).add( offset ), 0 );
+		
+		static quat( q, offset = null, scl = 1 ){
+			let v = new App.Vec3();
+			offset = offset || App.Vec3.ZERO;
+			this
+				//.ln( offset, Vec3.transform_quat( Vec3.scale( Vec3.FORWARD, scale, v) , q, v).add( offset ), 1 )
+				//.ln( offset, Vec3.transform_quat( Vec3.scale( Vec3.UP, scale, v), q, v).add( offset ), 2 )
+				//.ln( offset, Vec3.transform_quat( Vec3.scale( Vec3.LEFT, scale, v), q, v).add( offset ), 0 );
+				.ln( offset, v.from_scale( App.Vec3.FORWARD, scl ).transform_quat( q ).add( offset ), "green" )
+				.ln( offset, v.from_scale( App.Vec3.UP, scl ).transform_quat( q ).add( offset ), "blue" )
+				.ln( offset, v.from_scale( App.Vec3.LEFT, scl ).transform_quat( q ).add( offset ), "red" );
 
-			return Debug;
+			return this;
 		}
-		*/
+		
 	
 		static reset( flag = 3 ){
 			if( (flag & 1) != 0 ) this.Pnt.reset();
