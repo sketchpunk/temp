@@ -19,12 +19,23 @@ function init( x ){
 	//test_torus_knot_3d();
 	//test_torus_knot_3d_less_turning();
 	//test_torus_knot();
-	torus_knot_3d();
+	
+	let verts 	= torus_knot_3d();
+	let indices = grid_indices( 10, 60, true, true, true );
+
+
+	//let mat		= App.ShaderBuilder( { base_color:"#00ff00ff" } );
+	let mat 	= App.new_mat( "LowPoly" );
+	let mesh	= App.Mesh.from_data( "mesh", verts.buffer, indices );
+
+	mat.options.cullFace = true;
+
+	App.$Draw( "test", mesh, mat, App.Mesh.TRI );
 
 	return true;
 }
 
-function grid_indices( col_cnt, row_cnt, loop_col=true, loop_row=true ){
+function grid_indices( col_cnt, row_cnt, loop_col=true, loop_row=true, quad_rev=false ){
 	let out		= new Array(),
 		r_stop	= ( loop_row )? row_cnt : row_cnt - 1,
 		c_stop	= ( loop_col )? col_cnt : col_cnt - 1,
@@ -43,8 +54,8 @@ function grid_indices( col_cnt, row_cnt, loop_col=true, loop_row=true ){
 			d 	= r0 + c1;
 
 			// Save the Quad as Two Triangles
-			out.push( a, b, c, c, d, a ); // Counter-ClockWise
-			//out.push( a, d, c, c, b, a ); // ClockWise
+			if( !quad_rev )	out.push( a, b, c, c, d, a ); // Counter-ClockWise
+			else			out.push( a, d, c, c, b, a ); // ClockWise
 		}	
 	}
 
@@ -225,8 +236,8 @@ function test_torus_knot(){
 }
 
 function torus_knot_3d(){
-	let c = 3;
-	let r = 10;
+	let c = 10;
+	let r = 60;
 
 	let shape = Util.circle_verts( c, 0.2 );
 	
@@ -239,7 +250,7 @@ function torus_knot_3d(){
 	let norm = new App.Vec3();
 	let ct, j;
 
-	for( j=0; j < shape.len; j++ ) App.Debug.pnt( shape.copy_to(j,v), "green", 0.05, 1 );
+	//for( j=0; j < shape.len; j++ ) App.Debug.pnt( shape.copy_to(j,v), "green", 0.05, 1 );
 
 	let verts = new Vec3Buffer( c * r );
 
@@ -275,11 +286,13 @@ function torus_knot_3d(){
 		//console.log( t, b, n );
 
 		//p.scale( 0.5 );
+		/*
 		App.Debug
 			.pnt( p, "green", 0.05, 1 )
 			.ln( p, t.scale(0.1).add( p ), "green" )
 			.ln( p, n.scale(0.1).add( p ), "blue" )
 			.ln( p, b.scale(0.1).add( p ), "red" );
+		*/
 
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -291,8 +304,8 @@ function torus_knot_3d(){
 
 			verts.push( v );
 
-			App.Debug.pnt( v, "#a0a0a0", 0.05, 1 )
-				.ln( v, norm.scale(0.2).add( v ), "#808080" );
+			//App.Debug.pnt( v, "#a0a0a0", 0.05, 1 )
+			//	.ln( v, norm.scale(0.2).add( v ), "#808080" );
 		}
 
 
@@ -322,7 +335,7 @@ function torus_knot_3d(){
 
 	//App.$Draw( "test", mesh, mat, App.Mesh.PNT );
 
-
+	return verts;
 }
 
 
