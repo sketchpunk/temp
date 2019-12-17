@@ -10,12 +10,11 @@ import Point2D	from "../../fungi/geo/Point2D.js";
 App.builder( true )
 	.set_camera( 0, 20, 4, 0, 0.75, 0 )
 	.add( init )
-	//.render_loop( on_draw )
-	.render_on_mouse( on_draw )
+	//.render_loop()
+	.render_on_mouse()
 	.build();
 
 //#####################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
 function init(){
 
 	/**/

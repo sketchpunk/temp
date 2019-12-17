@@ -13,14 +13,11 @@ App.builder()
 //#####################################################
 let gCubeA, gCubeB;
 function on_draw( dt, ss ){
-
 	gCubeA.Node.local.rot.rot_y( App.Maths.to_rad( 60 * dt ) );
 	gCubeA.Node.updated = true;
 
 	gCubeB.Node.local.rot.rot_y( App.Maths.to_rad( -70 * dt ) );
 	gCubeB.Node.updated = true;
-	
-	App.ecs.sys_run();
 }
 
 function init( x ){

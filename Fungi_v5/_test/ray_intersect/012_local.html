@@ -11,13 +11,8 @@ App.builder( true, false )
 	.load_shaders( "./shaders/BaseColor.js" )
 	.set_camera( 0, 20, 5, 0, 0.5, 0 )
 	.add( init )
-	.render_on_mouse( on_draw )
+	.render_on_mouse()
 	.build();
-
-
-//#############################################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
-
 
 //#############################################################################
 let gShape, gSpec;

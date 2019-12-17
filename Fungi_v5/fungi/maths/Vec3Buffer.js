@@ -16,6 +16,12 @@ class Vec3Buffer{
 	// Buffer Data Management
 	///////////////////////////////////////////////////////////////////
 
+		dissolve(){
+			let tmp = this.buffer;
+			this.buffer = null;
+			return tmp;
+		}
+
 		full_reset( x=0, y=0, z=0 ){
 			let i;
 			for( i=0; i < this.buffer.length; i += B_LEN ){

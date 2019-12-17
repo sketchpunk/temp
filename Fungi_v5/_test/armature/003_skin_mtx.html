@@ -30,12 +30,10 @@ App.builder( true )
 		"../fungi.armature/BoneView.js" )
 	.set_camera( 45, 20, 2, 0, 0.75, 0 )
 	.add( init )
-	.render_on_mouse( on_draw )
+	.render_on_mouse()
 	.build();
 
 //#####################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
-
 async function init(){
 	let dl = await XhrPromise.get( 
 		"../../files/models/vegeta.gltf", "json", 

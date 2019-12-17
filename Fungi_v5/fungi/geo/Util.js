@@ -59,6 +59,47 @@ class Util{
 			return ary;
 		}
 
+		static grid_indices( col_cnt, row_cnt, loop_col=true, loop_row=true, quad_rev=false ){
+			let idx_cnt = (( loop_row )? row_cnt : row_cnt-1) * (( loop_col )? col_cnt : col_cnt-1) * 6,
+				out		= new Uint16Array( idx_cnt ),
+				r_stop	= ( loop_row )? row_cnt : row_cnt - 1,
+				c_stop	= ( loop_col )? col_cnt : col_cnt - 1,
+				i 		= 0,
+				r, r0, r1, c0, c1,
+				a, b, c, d;
+
+			for( r=0; r < r_stop; r++ ){
+				r0 = col_cnt * r;
+				r1 = col_cnt * ( (r+1) % row_cnt );
+
+				for( c0=0; c0 < c_stop; c0++ ){
+					c1	= ( (c0+1) % col_cnt );
+					a 	= r0 + c0;					// Defined the Vertex Index of a Quad
+					b 	= r1 + c0;
+					c 	= r1 + c1;
+					d 	= r0 + c1;
+
+					if( !quad_rev ){	// Counter-ClockWise
+						out[ i++ ] = a;
+						out[ i++ ] = b;
+						out[ i++ ] = c;
+						out[ i++ ] = c;
+						out[ i++ ] = d;
+						out[ i++ ] = a;
+					}else{				// ClockWise
+						out[ i++ ] = a;
+						out[ i++ ] = d;
+						out[ i++ ] = c;
+						out[ i++ ] = c;
+						out[ i++ ] = b;
+						out[ i++ ] = a;
+					}
+				}	
+			}
+			return out;
+		}
+
+		/*
 		// Generate Triangle Indices for a Grid of Vertices : quad_cnt * 2_triangles * 3_pnts_per * rows
 		static grid_indices_cnt( row_len, row_cnt, do_loop=false ){ return ((do_loop)? row_len : row_len-1) * 6 * row_cnt; }
 		static grid_indices( out, idx, row_len, row_cnt, do_loop=false, start_vert_idx=0, rev_quad=false ){
@@ -141,7 +182,7 @@ class Util{
 
 			return idx;
 		}
-
+		*/
 
 	//////////////////////////////////////////////////
 	// 

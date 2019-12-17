@@ -11,7 +11,7 @@ class Motion{
 		}
 	}
 
-	static circle( e, speed, radius ){
+	static circle( e, speed, radius, y=0 ){
 		let t = 0;
 		return ( dt )=>{
 			t += speed * dt;
@@ -19,7 +19,7 @@ class Motion{
 			let c = Math.cos( t );
 			let s = Math.sin( t );
 
-			e.Node.set_pos( radius * c, 0, radius * s );
+			e.Node.set_pos( radius * c, y, radius * s );
 		}
 	}
 

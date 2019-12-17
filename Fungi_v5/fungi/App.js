@@ -44,9 +44,11 @@ let App = {
 	delta_time		: 0,		// Time between frames
 	since_start		: 1,		// Time since the render loop started.
 
+	on_render		: null,
+
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Core
-	gl, Shader, ShaderBuilder, Mesh, Cache, Vao, Buf, Colour,
+	gl, Shader, ShaderBuilder, Mesh, Cache, Vao, Buf, Colour, Ubo,
 	
 	// Ecs
 	Components,	
@@ -55,6 +57,9 @@ let App = {
 	Maths, Quat, Vec3, Transform,
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	builder	: function( use_debug=false, use_scene=true ){ return new Builder( use_debug, use_scene ); },
+	get_e	: ( idx )=>{ return App.ecs.entities[ idx ]; },
+	
 	$Draw	: ( name, mesh, mat, mode=Mesh.TRI )=>{
 		let e = App.ecs.entity( name, ["Node", "Draw"] );
 		if( mesh && mat ) e.Draw.add( mesh, mat, mode )
@@ -66,9 +71,10 @@ let App = {
 		return ( sh )? sh.new_material( sh_name + "_mat", u_struct ) : null;
 	},
 
-	get_e : ( idx )=>{ return App.ecs.entities[ idx ]; },
-
-	builder	: function( use_debug=false, use_scene=true ){ return new Builder( use_debug, use_scene ); },
+	render 	: ( dt, ss )=>{
+		if( App.on_render ) App.on_render( dt, ss );	// Run a hook into render pipeline
+		App.ecs.sys_run();								// Run Systems
+	},
 };
 
 
@@ -131,19 +137,21 @@ let App = {
 				return this;
 			}
 
-			render_loop( cb ){
+			render_loop( cb=null ){
+				App.on_render = cb;
 				this.add( async()=>{
-					await import( "./engine/RenderLoop.js").then( mod=>{ App.loop = new mod.default( cb, 0, App ) });
+					await import( "./engine/RenderLoop.js").then( mod=>{ App.loop = new mod.default( App.render, 0, App ) });
 					App.loop.start();
 					return true;
 				});
 				return this;
 			}
 
-			render_on_mouse( cb ){
+			render_on_mouse( cb=null ){
+				App.on_render = cb;
 				this.add(()=>{
-					App.input.on_input = ()=>{ window.requestAnimationFrame( cb ); }
-					cb();
+					App.input.on_input = ()=>{ window.requestAnimationFrame( App.render ); }
+					App.render();
 					return true;
 				});
 				return this;

@@ -11,12 +11,11 @@ App.builder( true )
 		"../fungi.armature/BoneView.js" )
 	.set_camera( 0, 20, 3, 0, 0.1, 0 )
 	.add( init )
-	//.render_loop( on_draw )
-	.render_on_mouse( on_draw )
+	//.render_loop()
+	.render_on_mouse()
 	.build();
 
 //#####################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
 function init(){
 	//Armature.init();
 	//BoneView.init();

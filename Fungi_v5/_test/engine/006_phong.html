@@ -15,7 +15,6 @@ App.builder()
 //#####################################################
 function on_draw( dt, ss ){ 
 	if( gMotion ) gMotion( dt );
-	App.ecs.sys_run();
 }
 
 let gMotion = null;

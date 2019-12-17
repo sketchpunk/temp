@@ -8,12 +8,10 @@ App.builder()
 	.load_shaders( "./shaders/Texture.js" )
 	.set_camera( 0, 20, 2, 0, 0.6, 0 )
 	.add( init )
-	.render_on_mouse( on_draw )
+	.render_on_mouse()
 	.build();
 
 //#####################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
-
 async function init(){
 	let dl = await XhrPromise.get( "../../files/images/UV_Grid_Sm.jpg", "blob" );
 	await dl.promise; // Need to make sure image is loaded, else creating textures will fail.

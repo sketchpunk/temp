@@ -5,16 +5,10 @@ import BoundingBox	from "../../fungi.ray/BoundingBox.js";
 
 //#####################################################
 App.builder( true )
-
 	.set_camera( 0, 20, 3, 0, 1.0, 0 )
 	.add( init )
-	.render_on_mouse( on_draw )
+	.render_on_mouse()
 	.build();
-
-
-//#############################################################################
-function on_draw( dt, ss ){ App.ecs.sys_run(); }
-
 
 //#############################################################################
 let aabb = new BoundingBox( [0,0,0], [1,1,1] );

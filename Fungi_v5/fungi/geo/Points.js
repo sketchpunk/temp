@@ -89,8 +89,6 @@ function init_shader(){
 	SHADER.options.blend	= true;
 	SHADER.options.sampleAlphaCoverage = true;
 
-	
-
 	MATERIAL = SHADER.new_material();
 }
 
