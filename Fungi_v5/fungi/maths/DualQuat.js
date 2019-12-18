@@ -12,9 +12,22 @@ class DualQuat extends Float32Array{
 	}
 
 	////////////////////////////////////////////////////////////////////
-	// SETTERS
+	// SETTERS / GETTERS
 	////////////////////////////////////////////////////////////////////
-		copy(a){
+		clone(){
+			let out = new DualQuat();
+			out[0] = this[0];
+			out[1] = this[1];
+			out[2] = this[2];
+			out[3] = this[3];
+			out[4] = this[4];
+			out[5] = this[5];
+			out[6] = this[6];
+			out[7] = this[7];
+			return out;
+		}
+
+		copy( a ){
 			this[0] = a[0];
 			this[1] = a[1];
 			this[2] = a[2];
@@ -62,6 +75,23 @@ class DualQuat extends Float32Array{
 			this[5] =  ay * bw + az * bx - ax * bz;
 			this[6] =  az * bw + ax * by - ay * bx;
 			this[7] = -ax * bx - ay * by - az * bz;
+			return this;
+		}
+
+		from_mul( a, b ){
+			let ax0 = a[0], ay0 = a[1], az0 = a[2], aw0 = a[3],
+				ax1 = a[4], ay1 = a[5], az1 = a[6], aw1 = a[7],
+				bx0 = b[0], by0 = b[1], bz0 = b[2], bw0 = b[3],
+				bx1 = b[4], by1 = b[5], bz1 = b[6], bw1 = b[7];
+
+			this[0] = ax0 * bw0 + aw0 * bx0 + ay0 * bz0 - az0 * by0;
+			this[1] = ay0 * bw0 + aw0 * by0 + az0 * bx0 - ax0 * bz0;
+			this[2] = az0 * bw0 + aw0 * bz0 + ax0 * by0 - ay0 * bx0;
+			this[3] = aw0 * bw0 - ax0 * bx0 - ay0 * by0 - az0 * bz0;
+			this[4] = ax0 * bw1 + aw0 * bx1 + ay0 * bz1 - az0 * by1 + ax1 * bw0 + aw1 * bx0 + ay1 * bz0 - az1 * by0;
+			this[5] = ay0 * bw1 + aw0 * by1 + az0 * bx1 - ax0 * bz1 + ay1 * bw0 + aw1 * by0 + az1 * bx0 - ax1 * bz0;
+			this[6] = az0 * bw1 + aw0 * bz1 + ax0 * by1 - ay0 * bx1 + az1 * bw0 + aw1 * bz0 + ax1 * by0 - ay1 * bx0;
+			this[7] = aw0 * bw1 - ax0 * bx1 - ay0 * by1 - az0 * bz1 + aw1 * bw0 - ax1 * bx0 - ay1 * by0 - az1 * bz0;
 			return this;
 		}
 

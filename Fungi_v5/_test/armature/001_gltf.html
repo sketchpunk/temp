@@ -9,7 +9,7 @@ App.builder()
 	.init_mod( 
 		"../fungi.armature/Armature.js", 
 		"../fungi.armature/BoneView.js" )
-	.set_camera( 90, 20, 4, 0, 0.75, 0 )
+	.set_camera( 40, 30, 2.5, 0, 0.75, 0 )
 	.add( init )
 	.render_on_mouse()
 	.build();
@@ -21,15 +21,19 @@ async function init(){
 		"../../files/models/vegeta.bin", "arraybuffer",
 	);
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Abstract Loading
 	let mat	= App.new_mat( "LowPolySkin", { color:"white" } );
 	//let e 	= GltfUtil.get_bone_view( "test", dl[0], dl[1] );
-	let e 	= GltfUtil.get_debug_view( "test", dl[0], dl[1], mat );
 	//let e 	= GltfUtil.get_skin_mesh( "test", dl[0], dl[1], mat );
-	
+	let e 	= GltfUtil.get_debug_view( "test", dl[0], dl[1], mat );
 
-	//e.Node.set_pos( 0.0, 0.0, -3.0 );
-	//e.Node.set_scl( 1.5 );
+	set_pose( e );
+
 	/*
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Manual Loading
+
 	let n_info = {};
 	let bones = Gltf.get_skin( dl[0], dl[1], "Armature", n_info );
 
@@ -41,18 +45,32 @@ async function init(){
 	e.add_com( "BoneView" ).init();
 	*/
 
-	/* */
+	return true;
+}
+
+
+function set_pose( e ){
 	let arm = e.Armature;
 	arm.get_e( "LeftUpLeg" ).Node.rot_by( 75, "x" );
 	arm.get_e( "LeftLeg" ).Node.rot_by( -110, "x" );
 	arm.get_e( "Neck" ).Node.rot_by( -40, "x" );
+	arm.get_e( "LeftArm" ).Node.rot_by( 60, "x" );
+	arm.get_e( "RightArm" ).Node.rot_by( 60, "x" );
 
-	//arm.get_e( "Spine1" ).Node.set_scl( 1.0, 1.4, 1.0 );
-	//arm.get_e( "Spine2" ).Node.set_scl( 1.0, 0.71428571428571, 1.0 );
-	//arm.get_e( "LeftHand" ).Node.set_scl( 1.1 );
+	/**/
+	arm.get_e( "Hips" ).Node.rot_by( 30, "x" );
+	arm.get_e( "Neck" ).Node.set_scl( 2.0 );
+	arm.get_e( "LeftHand" ).Node.set_scl( 2.5 );
+	arm.get_e( "RightHand" ).Node.set_scl( 2.5 );
 
-	return true;
+	arm.get_e( "LeftUpLeg" ).Node.set_scl( 0.5 );
+	arm.get_e( "RightUpLeg" ).Node.set_scl( 0.5 );
+	
 }
+
+
+// ####################################################################################
+// MANUALLY LOADING FUNCTIONS
 
 function gen_bones( e, bones, def_len=0.1 ){
 	let arm = e.Armature;

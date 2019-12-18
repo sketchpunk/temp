@@ -1,0 +1,396 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+import DualQuat 		from "../../fungi/maths/DualQuat.js";
+
+//#####################################################
+
+App.builder( true )
+	.init_mod( 
+		"../fungi.armature/Armature.js", 
+		"../fungi.armature/BoneView.js" )
+	.set_camera( 45, 20, 2, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	load_shader();
+	let e = GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], MATERIAL );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	compute_worldspace( e );	// Computes World Space Transforms for all the Bones
+	compute_bind_pose( e );		// Define the Bine Pose of the skeleton, based on starting pose
+
+	set_pose( e );				// Set a new Pose for testing
+	compute_worldspace( e );	// Recompute the world space transform of all the bones
+
+	compute_pose_dq( e );		// Compute WS Pose using Dual Quaternions
+	compute_offset_dq( e );		// Get the Offset = Pose * BinePose
+
+	return true;
+}
+
+///////////////////////////////////////////////////////////
+// 
+///////////////////////////////////////////////////////////
+
+let bind_pose	= new Array();
+let dq_pose		= new Array();
+
+function compute_worldspace( e ){
+	let bones	= e.Armature.bones,
+		len		= bones.length,
+		i, b, be, pe;
+
+	for( i=0; i < len; i++ ){
+		b	= bones[ i ];
+		be	= b.ref;
+
+		if( be.Node.parent ){
+			pe = be.Node.parent;
+			be.Node.world.from_add( pe.Node.world, be.Node.local );
+		}else{
+			be.Node.world.copy( be.Node.local );
+		}
+
+		App.Debug.pnt( be.Node.world.pos, "yellow", 0.03, 1 ); // See WS Position with Dots
+	}
+}
+
+function compute_bind_pose( e ){
+	let bones 	= e.Armature.bones,
+		dq 		= new DualQuat(),
+		ary 	= new Float32Array( bones.length * 8 ),
+		b, bn, i, j;
+
+	for( b of bones ){
+		bn = b.ref.Node;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Use the World Space Transform's Rotation and Position to create DQ
+		dq
+			.set( bn.world.rot, bn.world.pos )
+			.invert();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Save a copy later to compute pose offset.
+		bind_pose.push( dq.clone() );	
+
+		// Save to flat array for GPU Testing of creating offset.
+		i = b.idx * 8;
+		for( j=0; j < 8; j++ ) ary[ i+j ] = dq[ j ];
+	}
+
+	MATERIAL.set_uniform( "bind_pose_dq", ary );
+}
+
+function compute_pose_dq( e ){
+	let bones 	= e.Armature.bones,
+		dq 		= new DualQuat(),
+		ary 	= new Float32Array( bones.length * 8 ),
+		b, bn, i, j;
+
+	for( b of bones ){
+		bn = b.ref.Node;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Use the World Space Transform's Rotation and Position to create DQ
+		dq.set( bn.world.rot, bn.world.pos );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Save a copy later to compute pose offset.
+		dq_pose.push( dq.clone() );	
+
+		// Save to flat array for GPU Testing of creating offset.
+		i = b.idx * 8;
+		for( j=0; j < 8; j++ ) ary[ i+j ] = dq[ j ];
+	}
+
+	MATERIAL.set_uniform( "pose_dq", ary );
+}
+
+function compute_offset_dq( e ){
+	let b_len 	= e.Armature.bones.length,
+		dq 		= new DualQuat(),
+		ary 	= new Float32Array( b_len * 8 ),
+		b, i, j, k;
+
+	for( k=0; k < b_len; k++ ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get the Difference between Bind and Current Pose,  pose * bind_pose = offset
+		dq.from_mul( dq_pose[ k ], bind_pose[ k ] );
+
+		// Save to flat array for GPU Testing of creating offset.
+		i = k * 8;
+		for( j=0; j < 8; j++ ) ary[ i+j ] = dq[ j ];
+	}
+
+	MATERIAL.set_uniform( "offset_dq", ary );
+}
+
+function set_pose( e ){
+	let arm = e.Armature;
+	arm.get_e( "LeftUpLeg" ).Node.rot_by( 75, "x" );
+	arm.get_e( "LeftLeg" ).Node.rot_by( -110, "x" );
+	arm.get_e( "Neck" ).Node.rot_by( -40, "x" );
+	arm.get_e( "LeftArm" ).Node.rot_by( 60, "x" );
+	arm.get_e( "RightArm" ).Node.rot_by( 60, "x" );
+
+	/*
+	arm.get_e( "Hips" ).Node.rot_by( 30, "x" );
+	arm.get_e( "Hips" ).Node.set_scl( 1.5 );
+	*/
+}
+
+///////////////////////////////////////////////////////////
+// SHADER
+///////////////////////////////////////////////////////////
+
+let SHADER, MATERIAL;
+function load_shader(){
+	SHADER = App.Shader.from_src( "dq_scl", vert_src, frag_src )
+		.add_uniform_blocks( ["Global", "Model" ] )
+		.add_uniform( "pose_dq", "mat2x4", null )
+		.add_uniform( "bind_pose_dq", "mat2x4", null )
+		.add_uniform( "offset_dq", "mat2x4", null )
+	;
+
+	MATERIAL = SHADER.new_material();
+	console.log("--- shader loaded");
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=8) in vec4 a_bone_idx;
+	layout(location=9) in vec4 a_bone_wgt;
+
+	uniform mat2x4 offset_dq[90];			// Test 1
+
+	uniform mat2x4 pose_dq[90];				// Test 2
+	uniform mat2x4 bind_pose_dq[90];
+
+	//------------------------------------------
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	//------------------------------------------
+
+	vec3 dq_mul_vec( mat2x4 dq, vec3 v ){
+		vec4 Qr 	= dq[0].xyzw; // real (rot)
+		vec4 Qd 	= dq[1].xyzw; // dual (trans)
+		
+		//vec3 pos = v + cross(2.0 * Qr.xyz, cross(Qr.xyz, v) + Qr.w * v );	//Rotate Vector
+		  vec3 pos = v + 2.0 * cross( Qr.xyz, cross( Qr.xyz, v ) + Qr.w * v );
+		
+		//vec3 tran = 2.0 * ( Qr.w * Qd.xyz - Qd.w * Qr.xyz + cross( Qr.xyz, Qd.xyz ));	//Pull out Translation from DQ
+		  vec3 tran = 2.0 * ( Qr.w * Qd.xyz - Qd.w * Qr.xyz + cross( Qr.xyz, Qd.xyz ));
+		return pos + tran;
+	}
+
+	vec3 dq_bone_transform( vec3 pos, mat2x4[90] b_dq, vec4 b_idx, vec4 b_wgt ){
+		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		NORMALIZE BONE WEIGHT VECTOR */
+		int a = int( b_idx.x ),
+			b = int( b_idx.y ),
+			c = int( b_idx.z ),
+			d = int( b_idx.w );
+
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHTED DQ
+
+		/*
+		// Antipodality correction.
+		//if (dot(dq0[0], dq1[0]) < 0.0) dq1 *= -1.0;
+		//if (dot(dq0[0], dq2[0]) < 0.0) dq2 *= -1.0;	
+		//if (dot(dq0[0], dq3[0]) < 0.0) dq3 *= -1.0;
+
+		// Neightborhood all of the weights correctly
+		if (dot(b_dq[ a ][0], b_dq[ b ][0]) < 0.0) b_wgt.y *= -1.0; 
+		if (dot(b_dq[ a ][0], b_dq[ c ][0]) < 0.0) b_wgt.z *= -1.0; 
+		if (dot(b_dq[ a ][0], b_dq[ d ][0]) < 0.0) b_wgt.w *= -1.0;
+		*/
+
+		mat2x4 wgt_dq	=	b_dq[ a ] * b_wgt.x +  
+							b_dq[ b ] * b_wgt.y +
+							b_dq[ c ] * b_wgt.z +
+							b_dq[ d ] * b_wgt.w;
+
+		wgt_dq *= 1.0 / length( wgt_dq[0] ); // Normalize DQ by the length of the Quaternion
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ROTATE - TRANSLATE
+		return dq_mul_vec( wgt_dq, pos ) ;
+	}
+
+	//------------------------------------------
+	// EXAMPLE FROM - http://gabormakesgames.com/
+	vec4 q_mul(vec4 Q1, vec4 Q2) {
+		return vec4(
+			 Q2.x * Q1.w + Q2.y * Q1.z - Q2.z * Q1.y + Q2.w * Q1.x,
+			-Q2.x * Q1.z + Q2.y * Q1.w + Q2.z * Q1.x + Q2.w * Q1.y,
+			 Q2.x * Q1.y - Q2.y * Q1.x + Q2.z * Q1.w + Q2.w * Q1.z,
+			-Q2.x * Q1.x - Q2.y * Q1.y - Q2.z * Q1.z + Q2.w * Q1.w
+		);
+	}
+
+	mat2x4 dq_norm( mat2x4 dq ){ return dq * (1.0 / length( dq[ 0 ] )); }
+
+	mat2x4 dq_mul( mat2x4 l, mat2x4 r ){
+		l = dq_norm(l);
+		vec4 l_real = l[0];
+		vec4 l_dual = l[1];
+
+		r = dq_norm(r);
+		vec4 r_real = r[0];
+		vec4 r_dual = r[1];
+
+		vec4 real = q_mul(l_real, r_real);
+		vec4 dual = q_mul(l_real, r_dual) + q_mul(l_dual, r_real);
+
+		return mat2x4(real, dual);
+	}
+
+	vec4 dq_transform_vec( mat2x4 dq, vec3 v ){
+		vec3 vec	= dq[0].xyz;
+		float w		= dq[0].w;
+		vec3 rot 	= vec * 2.0f * dot( vec, v ) + v * ( w * w - dot( vec, vec ) ) + cross( vec, v ) * 2.0f * w;
+		return vec4( rot, 0 );
+	}
+
+	vec4 dq_transform_pnt( mat2x4 dq, vec3 v ) {
+		vec4 real		= dq[0];
+		vec4 dual		= dq[1];
+		vec3 rotated	= dq_transform_vec( dq, v ).xyz;
+		vec4 conjugate	= vec4( -real.xyz, real.w );
+		vec3 t			= q_mul( conjugate, dual * 2.0 ).xyz;
+		return vec4( rotated + t, 1.0 );
+	}
+
+	vec3 dq_offset_test( vec3 pos, vec4 skinJoints, vec4 skinWeights ){
+		ivec4	idx = ivec4( skinJoints );
+		vec4	wgt = skinWeights;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Neightborhood all of the weights correctly
+		// NODE - this causes verts to break appart around the shoulders and the butt
+		//if( dot( pose_dq[ idx.x ][0], pose_dq[ idx.y ][0]) < 0.0 ) weight.y *= -1.0;
+		//if( dot( pose_dq[ idx.x ][0], pose_dq[ idx.z ][0]) < 0.0 ) weight.z *= -1.0;
+		//if( dot( pose_dq[ idx.x ][0], pose_dq[ idx.w ][0]) < 0.0 ) weight.w *= -1.0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute Offset Pose
+		mat2x4 dq0 = dq_mul( bind_pose_dq[ idx.x ], pose_dq[ idx.x ] );
+		mat2x4 dq1 = dq_mul( bind_pose_dq[ idx.y ], pose_dq[ idx.y ] );
+		mat2x4 dq2 = dq_mul( bind_pose_dq[ idx.z ], pose_dq[ idx.z ] );
+		mat2x4 dq3 = dq_mul( bind_pose_dq[ idx.w ], pose_dq[ idx.w ] );
+
+		// Weight Blending
+		mat2x4 skin_dq =	wgt.x * dq0 +	
+							wgt.y * dq1 +
+							wgt.z * dq2 +
+							wgt.w * dq3;
+
+		// Normalize
+		skin_dq = dq_norm( skin_dq );			
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//vec3 skinScale = 
+		//	jointWorldPoseScale[joint.x] * inverseBindPoseScale[joint.x] * skinWeights.x +
+		//	jointWorldPoseScale[joint.y] * inverseBindPoseScale[joint.y] * skinWeights.y +
+		//	jointWorldPoseScale[joint.z] * inverseBindPoseScale[joint.z] * skinWeights.z +
+		//	jointWorldPoseScale[joint.w] * inverseBindPoseScale[joint.w] * skinWeights.w;
+		//pos *= skinScale;
+
+		return dq_transform_pnt( skin_dq, pos ).xyz;
+	}
+
+	//------------------------------------------
+
+	out vec3 w_pos;
+	flat out vec3 cam_pos;
+	out vec3 color;
+
+	void main(void){
+		vec3 pos;
+
+		/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		TEST : Offset Computed on CPU, Linear Blend only the Offset Values
+		pos = dq_bone_transform( a_pos, offset_dq, a_bone_idx, a_bone_wgt );
+		*/
+
+
+		/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		TEST : Bind Pose and Pose Computed on CPU, But Offset computed in GPU then Linear Blend the Results */
+		pos = dq_offset_test( a_pos, a_bone_idx, a_bone_wgt );
+
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		w_pos		= pos;
+		cam_pos		= global.camera_pos;
+		gl_Position = global.proj_view * vec4( pos, 1.0 );
+
+		color		= vec3( 1.0, 1.0, 1.0 );
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+
+	in vec3 w_pos;
+	flat in vec3 cam_pos; 
+
+	in vec3 color; 
+	out vec4 out_color;
+
+	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
+	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
+	const float uAmbientStrength	= 0.5;
+	const float uDiffuseStrength	= 0.5;
+	const float uSpecularStrength	= 0.2f;	//0.15
+	const float uSpecularShininess	= 1.0f; //256.0
+
+	void main(void){ 
+		vec3 pixelNorm = normalize( cross( dFdx(w_pos), dFdy(w_pos) ) ); //Calc the Normal of the Rasterizing Pixel
+
+		// Ambient Lighting
+		vec3 cAmbient		= lightColor * uAmbientStrength;
+		
+		// Diffuse Lighting
+		vec3 lightVector	= normalize(lightPosition - w_pos);		//light direction based on pixel world position
+		float diffuseAngle	= max( dot(pixelNorm,lightVector) ,0.0);	//Angle between Light Direction and Pixel Direction (1==90d)
+		vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
+
+		// Specular Lighting
+		vec3 camVector		= normalize( cam_pos - w_pos );	//Camera Direction based on pixel world position
+		vec3 reflectVector	= reflect(-lightVector, pixelNorm);		//Reflective direction of line from pixel direction as pivot.
+		float specular		= pow( max( dot(reflectVector,camVector) ,0.0), uSpecularShininess ); //Angle of reflected light and camera eye
+		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
+
+		out_color = vec4( color * (cAmbient + cDiffuse + cSpecular), 1.0 );
+	}`;
+
+</script><page-layout></page-layout>
