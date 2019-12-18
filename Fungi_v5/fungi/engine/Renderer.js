@@ -120,7 +120,7 @@ class Renderer{
 
 				this.ubo_armature
 					.set_var( "bones", e.Armature.fbuf_offset )
-					.set_var( "scales", e.Armature.fbuf_scale )
+					//.set_var( "scales", e.Armature.fbuf_scale )
 					.update();
 			}
 

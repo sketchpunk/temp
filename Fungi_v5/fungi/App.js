@@ -216,8 +216,8 @@ let App = {
 		]);
 
 		Ubo.build( "Armature", 2, [
-			{ name:"bones", type:"mat2x4", ary_len:90 },
-			{ name:"scales", type:"vec3", ary_len:90 },
+			{ name:"bones", type:"mat4", ary_len:90 },
+			//{ name:"scales", type:"vec3", ary_len:90 },
 		]);
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

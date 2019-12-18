@@ -1,26 +1,29 @@
 import App			from "../fungi/App.js";
 import Transform	from "../fungi/maths/Transform.js";
-import DualQuat		from "../fungi/maths/DualQuat.js";
+import Mat4			from "../fungi/maths/Mat4.js";
 import Pose			from "./Pose.js";
 
 //#################################################################
 class Bone{
 	constructor(){
-		this.index 		= 0; // Where in the array the bone is located.
+		this.index = 0; // Where in the array the bone is located.
 
 		//...................................
 		// Bind Pose is the inverted Hierachy World Space Transform of the bone. Its used to "subtract"
 		// an updated Transform to get the difference from the initial state. The Difference
 		// is the Offset. That is the actual amount of rotation / translation we need to do.
-		this.bind_pose	= new DualQuat();
-		this.offset		= new DualQuat();
+		this.bind_pose	= new Mat4();
+		this.offset		= new Mat4();
 	}
 
 	update(){
 		let n = App.get_e( this.entity_id ).Node;
-		this.offset
-			.set( n.world.rot, n.world.pos )	// Current World Space as a DQ
-			.mul( this.bind_pose );				// Subtract from Bind_pose
+
+		this.offset.from_mul( n.model_matrix, this.bind_pose );
+
+		//this.offset
+		//	.set( n.world.rot, n.world.pos )	// Current World Space as a DQ
+		//	.mul( this.bind_pose );				// Subtract from Bind_pose
 
 		//let dq = new DualQuat();
 		//dq.set( e.Node.world.rot, e.Node.world.pos );
@@ -106,7 +109,8 @@ class Armature{
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				// Create Bind Pose for the bone ( b.world.invert )
 				b.ref.Bone.bind_pose
-					.set( b.world.rot, b.world.pos )
+					//.set( b.world.rot, b.world.pos )
+					.from_quat_tran_scale( b.world.rot, b.world.pos, b.world.scl )
 					.invert();
 			}
 		}
@@ -117,11 +121,7 @@ class Armature{
 			this.compute_bind_pose();
 
 			// Create Flat Data array based on bone count.
-			// NOTE: flatScale must be 4, not 3, because UBO's require 16 byte blocks
-			// So a vec3 array has to be a vec4 array
-			this.fbuf_offset	= new Float32Array( this.bones.length * 8 );
-			this.fbuf_scale		= new Float32Array( this.bones.length * 4 );
-
+			this.fbuf_offset = new Float32Array( this.bones.length * 16 );
 			return this;
 		}
 
@@ -137,14 +137,16 @@ class Armature{
 		
 		update_buffer(){
 			// Save Data to fbufs
-			let i, ii, iii, b, data,
-				off = this.fbuf_offset,
-				sca = this.fbuf_scale;
+			let i, ii, 
+				//iii, 
+				b, data,
+				off = this.fbuf_offset;
+				//sca = this.fbuf_scale;
 
-			for(i=0; i < this.bones.length; i++){
+			for( i=0; i < this.bones.length; i++ ){
 				b	= this.bones[ i ].ref;
-				ii	= i * 8;
-				iii	= i * 4;
+				ii	= i * 16;
+				//iii	= i * 4;
 
 				data 		= b.Bone.offset;
 				off[ii+0]	= data[0];
@@ -155,12 +157,20 @@ class Armature{
 				off[ii+5]	= data[5];
 				off[ii+6]	= data[6];
 				off[ii+7]	= data[7];
+				off[ii+8]	= data[8];
+				off[ii+9]	= data[9];
+				off[ii+10]	= data[10];
+				off[ii+11]	= data[11];
+				off[ii+12]	= data[12];
+				off[ii+13]	= data[13];
+				off[ii+14]	= data[14];
+				off[ii+15]	= data[15];
 
-				data		= b.Node.world.scl;
-				sca[iii+0]	= data[0];
-				sca[iii+1]	= data[1];
-				sca[iii+2]	= data[2];
-				sca[iii+3]	= 0; // WARNING, This is because of UBO Array Requirements, Vec3 is treated as Vec4
+				//data		= b.Node.world.scl;
+				//sca[iii+0]	= data[0];
+				//sca[iii+1]	= data[1];
+				//sca[iii+2]	= data[2];
+				//sca[iii+3]	= 0; // WARNING, This is because of UBO Array Requirements, Vec3 is treated as Vec4
 			}
 			return this;
 		}
@@ -214,9 +224,11 @@ function BoneSys( ecs ){
 	for( b of ary ){
 		n = ecs.entities[ b.entity_id ].Node;
 		if( n.updated ){
-			b.offset
-				.set( n.world.rot, n.world.pos )	// Current World Space as a DQ
-				.mul( b.bind_pose );				// Subtract from Bind_pose	
+			b.offset.from_mul( n.model_matrix, b.bind_pose );
+
+			//b.offset
+			//	.set( n.world.rot, n.world.pos )	// Current World Space as a DQ
+			//	.mul( b.bind_pose );				// Subtract from Bind_pose	
 		}
 	}
 }
