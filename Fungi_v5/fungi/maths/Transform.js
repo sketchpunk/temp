@@ -9,8 +9,6 @@ class Transform{
 		this.pos	= new Vec3();
 		this.scl 	= new Vec3( 1, 1, 1 );
 
-		this.use_scl = true;
-
 		if( arguments.length == 1 ){
 			this.rot.copy( t.rot );
 			this.pos.copy( t.pos );
@@ -46,31 +44,28 @@ class Transform{
 	//////////////////////////////////////////////////////////////////////
 		from_add( tp, tc ){
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			//POSITION - parent.position + ( parent.rotation * ( parent.scale * child.position ) )
-			
-			let v = ( this.use_scl )?
-				new Vec3().from_mul( tp.scl, tc.pos ) : // parent.scale * child.position;
-				new Vec3( tc.pos );
-			
-			Vec3.transform_quat( v, tp.rot, v );
+			// POSITION - parent.position + ( parent.rotation * ( parent.scale * child.position ) )
+			let v = new Vec3().from_mul( tp.scl, tc.pos ); // parent.scale * child.position;
+			v.transform_quat( tp.rot ); //Vec3.transform_quat( v, tp.rot, v );
 			this.pos.from_add( tp.pos, v ); // Vec3.add( tp.pos, v, this.pos );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// SCALE - parent.scale * child.scale
-			this.scl.from_mul( tp.scl, tc.scl ); //Vec3.mul( tp.scl, tc.scl, this.scl );
+			this.scl.from_mul( tp.scl, tc.scl );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// ROTATION - parent.rotation * child.rotation
-			this.rot.from_mul( tp.rot, tc.rot ); //Quat.mul( tp.rot, tc.rot, this.rot );
+			this.rot.from_mul( tp.rot, tc.rot );
 			//this.rot.from_mul( tc.rot, tp.rot );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			return this;
 		}
 
+		// Computing Transforms, Parent -> Child
 		add( cr, cp, cs = null ){
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			//If just passing in Tranform Object
+			// If just passing in Tranform Object
 			if(arguments.length == 1){
 				cr = arguments[0].rot;
 				cp = arguments[0].pos;
@@ -78,22 +73,45 @@ class Transform{
 			}
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			//POSITION - parent.position + ( parent.rotation * ( parent.scale * child.position ) )
-			if( this.use_scl ) 
-				this.pos.add( Vec3.mul( this.scl, cp ).transform_quat( this.rot ) );
-			else
-				this.pos.add( Vec3.transform_quat( cp, this.rot ) );
-
+			// POSITION - parent.position + ( parent.rotation * ( parent.scale * child.position ) )
+			this.pos.add( Vec3.mul( this.scl, cp ).transform_quat( this.rot ) );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// SCALE - parent.scale * child.scale
-			if(cs) this.scl.mul( cs );
+			if( cs ) this.scl.mul( cs );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// ROTATION - parent.rotation * child.rotation
 			this.rot.mul( cr );
 
 			return this;
+		}
+
+		// Computing Transforms in reverse, Child - > Parent
+		add_rev( pr, pp, ps = null ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// If just passing in Tranform Object
+			if(arguments.length == 1){
+				pr = arguments[0].rot;
+				pp = arguments[0].pos;
+				ps = arguments[0].scl;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// POSITION - parent.position + ( parent.rotation * ( parent.scale * child.position ) )
+			// The only difference for this func, We use the IN.scl & IN.rot instead of THIS.scl * THIS.rot
+			// Consider that this Object is the child and the input is the Parent.
+			this.pos.mul( ps ).transform_quat( pr ).add( pp );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// SCALE - parent.scale * child.scale
+			if( ps ) this.scl.mul( ps );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// ROTATION - parent.rotation * child.rotation
+			this.rot.pmul( pr ); // Must Rotate from Parent->Child, no PMUL needs to be used.
+
+			return this
 		}
 
 		add_pos( cp, ignore_scl = false ){

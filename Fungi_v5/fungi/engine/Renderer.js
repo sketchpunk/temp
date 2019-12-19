@@ -12,7 +12,7 @@ class Renderer{
 		//UBOs for Updating
 		this.ubo_model			= App.Cache.get_ubo("Model");
 		this.ubo_global			= App.Cache.get_ubo("Global");
-		this.ubo_armature 		= App.Cache.get_ubo("Armature");
+		this.ubo_armature 		= ( App.Cache.has_ubo("Armature") )? App.Cache.get_ubo("Armature") : null;
 
 		//GL Option states
 		this.options	= {
@@ -114,13 +114,9 @@ class Renderer{
 				.update();
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			if( e.Armature ){
-				//console.log( e.Armature.fbuf_offset );
-				//console.log( e.Armature.fbuf_scale );
-
+			if( e.Armature && this.ubo_armature ){
 				this.ubo_armature
 					.set_var( "bones", e.Armature.fbuf_offset )
-					//.set_var( "scales", e.Armature.fbuf_scale )
 					.update();
 			}
 

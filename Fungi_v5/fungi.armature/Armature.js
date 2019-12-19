@@ -109,7 +109,6 @@ class Armature{
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				// Create Bind Pose for the bone ( b.world.invert )
 				b.ref.Bone.bind_pose
-					//.set( b.world.rot, b.world.pos )
 					.from_quat_tran_scale( b.world.rot, b.world.pos, b.world.scl )
 					.invert();
 			}
@@ -137,18 +136,14 @@ class Armature{
 		
 		update_buffer(){
 			// Save Data to fbufs
-			let i, ii, 
-				//iii, 
-				b, data,
-				off = this.fbuf_offset;
-				//sca = this.fbuf_scale;
+			let off = this.fbuf_offset,
+				i, ii, b, data;
 
 			for( i=0; i < this.bones.length; i++ ){
-				b	= this.bones[ i ].ref;
-				ii	= i * 16;
-				//iii	= i * 4;
+				ii		= i * 16;
+				b		= this.bones[ i ].ref;
+				data 	= b.Bone.offset;
 
-				data 		= b.Bone.offset;
 				off[ii+0]	= data[0];
 				off[ii+1]	= data[1];
 				off[ii+2]	= data[2];
@@ -165,12 +160,6 @@ class Armature{
 				off[ii+13]	= data[13];
 				off[ii+14]	= data[14];
 				off[ii+15]	= data[15];
-
-				//data		= b.Node.world.scl;
-				//sca[iii+0]	= data[0];
-				//sca[iii+1]	= data[1];
-				//sca[iii+2]	= data[2];
-				//sca[iii+3]	= 0; // WARNING, This is because of UBO Array Requirements, Vec3 is treated as Vec4
 			}
 			return this;
 		}

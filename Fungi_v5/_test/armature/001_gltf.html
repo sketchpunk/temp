@@ -6,9 +6,7 @@ import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 //#####################################################
 App.builder()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js", 
-	.init_mod( 
-		"../fungi.armature/Armature.js", 
-		"../fungi.armature/BoneView.js" )
+	.use_armature()
 	.set_camera( 40, 30, 2.5, 0, 0.75, 0 )
 	.add( init )
 	.render_on_mouse()

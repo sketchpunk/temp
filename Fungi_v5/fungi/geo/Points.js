@@ -30,6 +30,7 @@ class Points{
 	constructor(){
 		this.mesh 		= null;
 		this.use_size 	= 0.1;
+		this.use_shape 	= 0;
 		this.updated	= true;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -49,8 +50,9 @@ class Points{
 			.set_interleaved( i_info );
 	}
 
-	add( a, col="red", size=null, shape=0 ){
+	add( a, col="red", size=null, shape=null ){
 		this.updated = true;
+		if( shape == null ) shape = this.use_shape;
 		return this.byte_buf.push( a, Colour( col ), size || this.use_size, shape );
 	}
 

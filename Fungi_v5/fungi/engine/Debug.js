@@ -12,6 +12,9 @@ class Debug{
 
 		this.Pnt 	= this.ePnt.Points;
 		this.Ln 	= this.eLn.Lines;
+
+		this.Pnt.use_size	= 0.03;
+		this.Pnt.use_shape	= 1;
 	}
 
 		static set_pnt_size( s ){ this.Pnt.use_size = s; return this; }
@@ -19,8 +22,8 @@ class Debug{
 	////////////////////////////////////////////////////////////////////
 	// POINTS
 	////////////////////////////////////////////////////////////////////
-		static pnt( pos, col="red", size=null, shape=0 ){ this.Pnt.add( pos, col, size, shape ); return this; }
-		static pnt_raw( x, y, z, col="red", size=null, shape=0 ){ this.Pnt.add( [x,y,z], col, size, shape ); return this; }
+		static pnt( pos, col="red", size=null, shape=null ){ this.Pnt.add( pos, col, size, shape ); return this; }
+		static pnt_raw( x, y, z, col="red", size=null, shape=null ){ this.Pnt.add( [x,y,z], col, size, shape ); return this; }
 
 	////////////////////////////////////////////////////////////////////
 	// LINES

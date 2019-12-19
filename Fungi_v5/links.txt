@@ -1,0 +1,11 @@
+
+https://www.e2gamedev.com/skybox Procedural SkyBox
+https://github.com/keijiro/UnitySkyboxShaders
+https://medium.com/@cyrilltoboe/simplest-gradient-skybox-with-moon-8581610c86c0
+
+https://80.lv/articles/easysky-breakdown-of-a-procedural-skybox-for-ue4/
+https://github.com/jforjustin/ProcSky
+
+https://ebruneton.github.io/precomputed_atmospheric_scattering/ WebGL example
+
+https://github.com/spacejack/terra grass terrain + skydome, VERY VERY COOL

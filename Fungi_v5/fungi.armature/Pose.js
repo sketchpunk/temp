@@ -2,6 +2,7 @@ import { Quat, Vec3 }	from "../fungi/maths/Maths.js";
 import Transform		from "../fungi/maths/Transform.js";
 
 //##################################################################################
+
 class Pose{
 	constructor( arm ){
 		this.arm			= arm;								// Reference Back to Armature, Make Apply work Easily
@@ -40,7 +41,6 @@ class Pose{
 			if( rot ) b.chg_state |= Pose.ROT;
 			if( pos ) b.chg_state |= Pose.POS;
 			if( scl ) b.chg_state |= Pose.SCL;
-
 			return this;
 		}
 
@@ -52,10 +52,11 @@ class Pose{
 			return this;
 		}
 
-		//get_index( bname ){ return this.arm.names[ bname ]; }
-		//get_bone( bname ){ return this.bones[ this.arm.names[ bname ] ]; }
-		//get_local_rot( idx ){ return this.bones[ idx ].local.rot; }
+		get_bone( bname ){ return this.bones[ this.arm.name_map[ bname ] ]; }
 
+		//get_index( bname ){ return this.arm.names[ bname ]; }
+		//get_bone( bname ){ return this.bones[ this.arm.name_map[ bname ] ]; }
+		//get_local_rot( idx ){ return this.bones[ idx ].local.rot; }
 
 	/////////////////////////////////////////////////////////////////
 	// Methods
@@ -70,130 +71,86 @@ class Pose{
 			}
 			return this;
 		}
-		
-		
 
-		/*
-		apply(){
-			let i, 
-				pb, // Pose Bone
-				ab;	// Armature Bone
+		get_parent_world( b_idx, pt, ct=null, t_offset=null ){
+			let cbone = this.bones[ b_idx ];
 
-			for( i=0; i < this.bones.length; i++ ){
-				pb = this.bones[ i ];
-				
-				if( pb.chg_state == 0 ) continue;
-				ab = this.arm.bones[ i ];
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-				if( pb.chg_state & Pose.ROT ) ab.Node.local.rot.copy( pb.local.rot );
-				if( pb.chg_state & Pose.POS ) ab.Node.local.pos.copy( pb.local.pos );
-				if( pb.chg_state & Pose.SCL ) ab.Node.local.scl.copy( pb.local.scl );
-				
-				ab.Node.isModified	= true;
-				pb.changeState		= 0;
-			}
+			// Child is a Root Bone, just reset since there is no parent.
+			if( cbone.p_idx == null ){ 
+				pt.clear();
+			}else{
+				// Parents Exist, loop till reaching the root
+				let b = this.bones[ cbone.p_idx ];
+				pt.copy( b.local );
 
-			this.arm.isModified = true;
-			return this;
-		}
-		*/
-
-
-		/*
-	/////////////////////////////////////////////////////////////////
-	// T Pose Helpers
-	/////////////////////////////////////////////////////////////////
-		static align_chain( pose, dir, ary ){
-			let pt		= new Transform(),			// Parent Transform ( Current Bone's Parent );
-				ct		= new Transform(),			// Child Transform ( Current Bone )
-				aEnd	= ary.length - 1,			// End Index
-				f		= new Vec3(),				// Forward
-				u		= new Vec3( dir ),			// Up
-				l		= new Vec3(),				// Left
-				r		= new Quat(),				// Final Rotation
-				q		= new Quat(),				// Temp Rotation
-				b_idx 	= pose.get_index( ary[0] ),
-				b 		= pose.bones[ b_idx ];		// Bone Entity Reference
-			
-			// Parent Bone's Transform
-			Pose.parent_world( pose, b_idx, pt );
-
-			for( let i=0; i <= aEnd; i++ ){
-				ct.from_add( pt, b.local );			// Calc current bones world transform
-				//App.debug
-				//	.point( ct.pos, 2 )
-				//	.line( ct.pos, Vec3.add( ct.pos, dir), 0 );
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// Up direction is where we need the bone to point to.
-				// We then get the bone's current forward direction, use it
-				// to get its left, then finish it off by recalculating
-				// fwd to make it orthogonal. Want to try to keep the orientation
-				// while ( fwd, lft ) realigning the up direction.
-				f.from_quat( ct.rot, Vec3.FORWARD ); 		// Find Bone's Forward World Direction
-				l.from_cross( u, f ).norm();				// Get World Left
-				f.from_cross( l, u ).norm();				// Realign Forward
-				r.from_axis( l, u, f );						// Create Rotation from 3x3 rot Matrix
-				
-				if( Quat.dot( r, ct.rot ) < 0 ) r.negate();	// Do a Inverted rotation check, negate it if under zero.
-				
-				r.pmul( q.from_invert( pt.rot ) );			// Move rotation to local space
-				pose.set_bone( b.idx, r );		// Update Pose with new ls rotation
-				
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// If not the last bone, take then the new rotation to calc the next parents
-				// world space transform for the next bone on the list.
-				if( i != aEnd){
-					pt.add( r, b.local.pos, b.local.scl );
-					b = pose.get_bone( ary[i+1] );
+				while( b.p_idx != null ){
+					b = this.bones[ b.p_idx ];
+					pt.add_rev( b.local );
 				}
 			}
-		}
 
-		static align_foot_forward( pose, foot ){
-			let pt	= new Transform(),
-				ct	= new Transform(),
-				v	= new Vec3(),
-				q	= new Quat(),
-				b	= pose.get_bone( foot );
-
-			this.parent_world( pose, b.idx, pt, ct );	// Get the Parent and Child Transforms. e.Armature,
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			
-			ct.transform_vec( [0,b.len,0], v );			// Get the Tails of the Bone
-			v.sub( ct.pos );							// Get The direction to the tail
-			v[1] = 0;									// Flatten vector to 2D by removing Y Position
-			v.norm();									// Make it a unit vector
-			q	.from_unit_vecs( v, Vec3.FORWARD )		// Rotation needed to point the foot forward.
-				.mul( ct.rot )							// Move WS Foot to point forward
-				.pmul( pt.rot.invert() );				// To Local Space
-			pose.set_bone( b.idx, q );		// Save to Pose
+			pt.add_rev( this.root_offset );				// Add Starting Offset
+			if( t_offset ) pt.add_rev( t_offset );		// Add Additional Starting Offset
+
+			if( ct ) ct.from_add( pt, cbone.local );	// Requesting Child WS Info Too
+
+			return pt;
 		}
 
-		static parent_world( pose, b_idx, pt, ct=null, t_offset=null ){
-			let b	= pose.bones[ b_idx ],
+		/*
+		get_parent_world_OLD( b_idx, pt, ct=null, t_offset=null ){
+			let b	= this.bones[ b_idx ],
 				ary	= [];
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Move up the Bone Tree
 			while( b.p_idx != null ){
 				ary.push( b.p_idx );
-				b = pose.bones[ b.p_idx ];
+				b = this.bones[ b.p_idx ];
 			}
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			let i 	= ary.length - 1,
-				pb	= pose.bones;
+				pb	= this.bones;
 
 			// Figure out what the starting transform.
-			if( !t_offset ) pt.copy( pose.root_offset );
-			else			pt.copy( t_offset ).add( pose.root_offset );
+			if( !t_offset ) pt.copy( this.root_offset );
+			else			pt.copy( t_offset ).add( this.root_offset );
 			
 			// Then add all the children bones
-			for( i; i > -1; i-- ) pt.add( pose.bones[ ary[i] ].local );	
+			for( i; i > -1; i-- ) pt.add( this.bones[ ary[i] ].local );	
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			if( ct ) ct.from_add( pt, pose.bones[ b_idx ].local );		// Then add child current local transform to the parent's
+			if( ct ) ct.from_add( pt, this.bones[ b_idx ].local );	// Then add child current local transform to the parent's
 		}
 		*/
+
+	/////////////////////////////////////////////////////////////////
+	// Serialization
+	/////////////////////////////////////////////////////////////////
+	
+		bare_serialize( inc_scl = false ){
+			let b_len 	= this.bones.length,
+				out		= new Array( b_len ),
+				i, b, o;
+
+			for( i=0; i < b_len; i++ ){
+				b	= this.bones[ i ];
+				o	= {
+					rot : Array.from( b.local.rot ),	// Can not use TypeArrays with JSON.stringify
+					pos : Array.from( b.local.pos )
+				};
+
+				if( inc_scl ) o.scl = Array.from( b.local.scl );
+				out[ i ] = o;
+			}
+			return out;
+		}
+
 }
 
 

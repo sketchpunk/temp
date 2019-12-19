@@ -28,10 +28,11 @@ export default {
 		},
 		
 
+		has_ubo	: function( name ){ return this.ubo.has( name ); },
 		set_ubo	: function( v ){ this.ubo.set( v.name, v ); return this; },
 		get_ubo	: function( key ){
 			var x = this.ubo.get( key );
-			if(!x){ console.log( "UBO Not Found %s", key ); return null; }
+			if(!x){ console.warn( "UBO Not Found %s", key ); return null; }
 			return x;
 		},
 

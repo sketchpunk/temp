@@ -83,7 +83,8 @@ let App = {
 //////////////////////////////////////////////////////////////////
 	class Builder{
 		constructor( use_debug=false, use_scene=true ){
-			this.task_queue = new Array();
+			this.task_queue 	= new Array();
+			this.using_armature	= false;
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			this
@@ -129,8 +130,8 @@ let App = {
 					//App.camera.Node.set_pos( ox, oy, od );
 
 					App.cam_ctrl
-						.set_orbit( ox, oy, od )
-						.set_target( tx, ty, tz );
+						.set_target( tx, ty, tz )
+						.set_orbit( ox, oy, od );
 
 					return true;
 				});
@@ -182,6 +183,17 @@ let App = {
 				})
 				return this;
 			}
+
+		///////////////////////////////////////////////////////
+		//
+		///////////////////////////////////////////////////////
+			
+			use_armature(){
+				this.using_armature = true;
+				this.init_mod( "../fungi.armature/Armature.js", "../fungi.armature/BoneView.js" );
+				return this;
+			}
+
 	}
 
 	function run_module_init( mod ){ if( mod.default.init ) mod.default.init(); }
@@ -191,7 +203,7 @@ let App = {
 //////////////////////////////////////////////////////////////////
 //
 //////////////////////////////////////////////////////////////////
-	function init_gl(){
+	function init_gl( bld ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		if( !gl.init("pg_canvas") ) return false;
 
@@ -215,10 +227,9 @@ let App = {
 			{ name:"view_matrix", type:"mat4" },
 		]);
 
-		Ubo.build( "Armature", 2, [
-			{ name:"bones", type:"mat4", ary_len:90 },
-			//{ name:"scales", type:"vec3", ary_len:90 },
-		]);
+		if( bld.using_armature ){
+			Ubo.build( "Armature", 2, [ { name:"bones", type:"mat4", ary_len:90 } ]);
+		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		App.input = new InputTracker( gl.ctx.canvas );
