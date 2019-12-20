@@ -29,18 +29,18 @@ async function init(){
 		"../../_tmp/walking.bin", "arraybuffer",
 	);
 
-	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
-	let e 		= GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], mat );
-	//let e 		= GltfUtil.get_bone_view( "Test", dl[0], dl[1] );
+	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } );
+	let e 	= GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], mat );
+	//let e = GltfUtil.get_bone_view( "Test", dl[0], dl[1] );
 
 	gAnim 		= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
 	gPose 		= e.Armature.new_pose();
 	gAnimator	= new PoseAnimator();
 
+	/*
 	gAnimator.tick( 0.01).update( gAnim, gPose );
 	gPose.apply();
-
-	/*
+	
 	let arm = e.Armature, tm = THREE.Math;
 	arm.get_bone( "LeftUpLeg" ).rotation.x	= tm.degToRad( 75 );
 	arm.get_bone( "LeftLeg" ).rotation.x	= tm.degToRad( 120 );

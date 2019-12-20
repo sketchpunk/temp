@@ -107,8 +107,8 @@ let App = {
 			set_camera( ox=-15, oy=15, od=2.5, tx=0, ty=0.75, tz=0 ){
 				this.add( ()=>{
 					App.cam_ctrl
-						.set_orbit( ox, oy, od )
-						.set_target( tx, ty, tz );
+						.set_target( tx, ty, tz )
+						.set_orbit( ox, oy, od );
 
 					return true;
 				});
@@ -204,6 +204,11 @@ let App = {
 		App.scene.add( new THREE.GridHelper( 20, 20, 0x0c610c, 0x444444 ) );
 		return true;
 	}
+
+
+//##################################################################################
+
+window.App = App; // Make App Globally Scoped
 
 export default App;
 export { THREE, Components };

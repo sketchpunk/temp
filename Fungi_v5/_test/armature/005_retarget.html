@@ -3,268 +3,90 @@ import App				from "../../fungi/App.js";
 import XhrPromise		from "../../fungi/lib/XhrPromise.js";
 import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 import Animation		from "../../fungi/lib/Animation.js";
-import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
+
+import PoseAnimator			from "../../fungi.armature/PoseAnimator.js";
+import RetargetAnimation	from "../../fungi.armature/RetargetAnimation.js";
+import IKRig 				from "../../fungi.armature/IKRig.js";
+
 
 //#####################################################
 App.builder()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
 	.use_armature()
-	.set_camera( 0, 0, 2.3, 0, 0.7, 0 )
+	.set_camera( 0, 0, 2.5, 0, 0.8, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse( on_draw )
 	.build();
 
-let gAnimator, gAnim, gPose;
+let gSession, gPlay = null;
 
 //#####################################################
 
-function on_draw( dt, ss ){
-	//gAnimator.tick( dt ).update( gAnim, gPose );
-	//gPose.apply();
-}
+function on_draw( dt, ss ){ if( gPlay ) gPlay( dt ); }
 
 async function init(){
 	let dl = await XhrPromise.get( 
-		//"../../_tmp/walking.gltf", "json", 
-		//"../../_tmp/walking.bin", "arraybuffer",
+		"../../_tmp/walking.gltf", "json", 
+		"../../_tmp/walking.bin", "arraybuffer",
 		"../../files/models/vegeta.gltf", "json", 
 		"../../files/models/vegeta.bin", "arraybuffer",
 	);
 
-	let mat	= App.new_mat( "LowPolySkin" );
-	let e 	= GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], mat );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Data
+	let src 	= init_source( dl[0], dl[1] )
+	let tgt 	= init_target( dl[2], dl[3] );
+	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
 
-	let tgt_tpose = GltfUtil.get_pose( e, dl[0], "tpose", true );
-	tgt_tpose.apply();
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup Retargeting and Run
+	gSession = new RetargetAnimation()
+		.set_rigs( src, tgt, true )
+		.set_animation( anim );
 
+	gPlay = ( dt )=>gSession.play_realtime( dt );	// Realtime Retargeting
+	//gPlay = test_build_animation( tgt.IKRig );	// Build New Animation, Play Only that.
 
-	/*
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-	//let mat	= App.new_mat( "LowPoly", { color:"white" } );
-	let mat	= App.new_mat( "LowPolySkin" );
-	let e 	= GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], mat );
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-	gAnim 		= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
-	gPose 		= e.Armature.new_pose();
-	gAnimator	= new PoseAnimator();
-	
-	*/
-
-	/*
-	gAnimator.tick( 0.01).update( gAnim, gPose );
-	gPose.apply();
-	*/
 	return true;
 }
 
+//#########################################################
 
-//TODO GOTTA FIX POSE ANIMATOR TO HANDLE STEP
-class RetargetAnimation{
+function init_source( json, bin ){
+	let mat		= App.new_mat( "LowPolySkin" ),
+		e		= GltfUtil.get_debug_view( "src_entity", json, bin, mat ),
+		rig 	= e.add_com( "IKRig" ).init( null, true ); // Need Offsets Applied
 
-	constructor(){
-		this.src_pose	= null; 
-		this.tgt_pose	= null;
-
-		this.src_tpose	= null;
-		this.tgt_tpose	= null;
-
-		this.src_anim	= null;
-		this.animator	= null;
-		this.bone_map	= null;
-	}
-
-	/////////////////////////////////////////////////////////
-	// setters / getters
-	/////////////////////////////////////////////////////////
-	
-		set_armatures( src, tgt, same_bones=false ){
-			this.src_pose = src.Armature.new_pose();
-			this.tgt_pose = tgt.Aramture.new_pose();
-
-			if( same_bones ) this._auto_bone_map();
-			return this;
-		}
-
-		set_animation( anim ){
-			this.src_anim = null;
-			return this;
-		}
-
-	/////////////////////////////////////////////////////////
-	// Realtime Retargeting for Testing
-	/////////////////////////////////////////////////////////
-
-
-	/////////////////////////////////////////////////////////
-	// Single Time Retargeting into new Animation Object
-	/////////////////////////////////////////////////////////
-	
-		build(){
-
-		}
-
-		_shallow_clone_animation(){
-			let anim		= new Animation()
-				src_tracks	= this.src_anim.tracks,
-				ary;
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Set Time Arrays - TODO, make sure slice is creating its own array_buffer
-			for( ary of this.anim_src.times ) anim.add_time_array( ary.slice( 0 ) );
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Recreate Tracks with Empty Sized Arrays
-			let track, src_bone, b_map;
-			for( track of src_tracks ){
-				//src_bone	= src_bind.bones[ st.joint_idx ];
-				//b_map		= this._find_bone_map( src_bone.idx );
-
-				//console.log( st.type, st.time_idx, st.joint_idx, src_bone.idx, src_bone.name, b_map, st );
-
-				anim.add_joint_track(
-					track.type, 
-					track.time_idx, 
-					b_map.tgt_idx, 
-					track.interp, 
-					new Float32Array( track.data.length )
-				);
-			}
-
-			return anim;
-		}
-
-	/////////////////////////////////////////////////////////
-	// 
-	/////////////////////////////////////////////////////////
-	
-		// Simple auto mapping, just matches mixamo bone names
-		_auto_bone_map(){
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Get a list of Bones from the Source Animation Rig
-			let b, m, map = {};
-			for( b of this.src_pose.bones ){
-				map[ b.name ] = {
-					src_idx		: b.idx,
-					src_name	: b.name,
-					tgt_idx		: -1,
-					tgt_name	: "",
-				};
-			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Loop through Target Rig and find common name with the src rig
-			for( b of this.tgt_pose.bones ){
-				m = map[ b.name ];
-
-				if( !m ){ console.log("Target bone has no source equivalent : ", b.name ); continue; }
-				if( m.tgt_idx != -1 ){ console.log("Target bone name is duplicated : ", b.name ); continue; }
-				
-				m.tgt_idx	= b.idx;
-				m.tgt_name	= b.name;
-			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Only save map data that has a successful link between
-			// the two animation rigs
-
-			this.bone_map.length = 0;
-			for( b in map ){
-				if( map[b].tgt_idx == -1 ){ 
-					console.log("Source Bone has no target equivalent : ", b);
-					continue;
-				}
-
-				this.bone_map.push( map[b] ) ;
-				delete map[b];
-			}
-		}
-
-		// Find Bone Map by using the Bone Index of the Source Armature
-		_find_bone_map( src_idx ){
-			let b;
-			for( b of this.bone_map ){
-				if( b.src_idx == src_idx ) return b;
-			}
-			return null;
-		}
-
-		_retarget_bone( from_name, to_name, inc_pos=false, y_only=true ){
-			// Pseudo code to retarget Rotations
-			//   shift = from_t.bone.ws.rot.invert * to_t.bone.ws.rot
-			//   dif   = from_t.parent_bone.ws.rot * src_pose.bone.ls.rot
-			//   dif   *= dot( dif, from_t.bone.ws.rot  ) >= 0 ? shift : -shift;
-			//   final_pose.bone.ls.rot = to_t.parent_bone.ws.rot.invert * Dif
-
-			// Pseudo code to retarget ip position
-			//   scale 	 = to_t.ws.pos / from_t.ws.pos;
-			//   pos_dif = ( src.ws.pos - from_t.ws.pos ) * scale;
-			//   final 	 = to_t.ls.pos + pos_dif;
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Get the Main Bones Needed.
-			let a_rig_bind = this.rig_src.bind_pose,
-				b_rig_bind = this.rig_tar.bind_pose,
-				a_rig_pose = this.rig_src.pose_a,
-				b_rig_pose = this.rig_tar.pose_a,
-
-				a_bind = a_rig_bind.get_bone( from_name ),
-				a_pose = a_rig_pose.get_bone( from_name ),
-				b_bind = b_rig_bind.get_bone( to_name ),
-				b_pose = b_rig_pose.get_bone( to_name ),
-
-				ap_bind_rot = ( a_bind.p_idx != null )?
-					a_rig_bind.bones[ a_bind.p_idx ].world.rot :
-					a_rig_bind.root_offset.rot,
-
-				bp_bind_rot = ( b_bind.p_idx != null )?
-					b_rig_bind.bones[ b_bind.p_idx ].world.rot :
-					b_rig_bind.root_offset.rot;
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Create Bind Rotation Difference from FROM -> TO
-			this.convert
-				.from_invert( a_bind.world.rot )
-				.mul( b_bind.world.rot );
-
-			// Isolate bone by using parent's world bind rotation + animated local space rot
-			this.rot.from_mul( ap_bind_rot, a_pose.local.rot );
-
-			// Do Check of the Bone's SRC WS rotation based on Src WS Bind Rotation.
-			if( Quat.dot( this.rot, a_bind.world.rot ) < 0 ) this.convert.negate();
-
-			this.rot
-				.mul( this.convert )			// Move rotation to target bones world space
-				.pmul_invert( bp_bind_rot );	// Convert down to local space
-
-			b_rig_pose.set_bone( b_pose.idx, this.rot );
-
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			if( inc_pos ){
-				// Get Scale   s = to / from
-				this.a.copy( a_bind.world.pos ).near_zero();
-				this.b.copy( b_bind.world.pos ).near_zero();
-				this.scale.from_div( this.b, this.a );
-
-				this.pos
-					.from_sub( a_pose.world.pos, a_bind.world.pos )	// Get the Animation Difference from Bind Pose
-					.mul( this.scale )								// Scale it to fit in TO
-					.add( b_bind.world.pos );						// Add Scaled Difference to TO's Bind Position
-
-				if( y_only ){
-					this.pos[ 0 ] = b_bind.world.pos[ 0 ];
-					this.pos[ 2 ] = b_bind.world.pos[ 2 ]; 
-				}
-
-				b_rig_pose.set_bone( b_pose.idx, null, this.pos );
-			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			return this;
-		}
+	e.Node.set_pos( -0.5, 0, 0 );
+	return e;
 }
+
+function init_target( json, bin ){
+	let mat		= App.new_mat( "LowPolySkin" ),
+		e		= GltfUtil.get_debug_view( "tgt_entity", json, bin, mat ),
+		tpose	= GltfUtil.get_pose( e, json, "tpose", true ),
+		rig 	= e.add_com( "IKRig" ).init( tpose, false );
+	tpose.apply();
+	e.Node.set_pos( 0.5, 0, 0 );
+	return e;
+}
+
+function test_build_animation( rig ){
+	let anim		= gSession.build(),		// Retarget animation and save to new object
+		animator	= new PoseAnimator(),
+		f 			= 0;
+
+	return ( dt )=>{
+		animator.tick( dt ).update( anim, rig.pose );	// Run Animation
+
+		//f += dt;
+		//animator.key_frame( Math.round( f ), anim, rig.pose ); // Test Frames Only
+
+		rig.apply_pose();
+	}
+}
+
+//#########################################################
+
 </script><page-layout></page-layout>

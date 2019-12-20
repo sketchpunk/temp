@@ -51,20 +51,24 @@ class PoseAnimator{
 				track, ft;
 
 			for( track of anim.tracks ){
-				if( track.interp == "STEP" ) continue; //TODO, add support for this
-
 				ft = f_times[ track.time_idx ];
 
-				//console.log( pose.bones[ track.joint_idx].name );
-				//console.log( ft );
-
 				switch( track.type ){
+					// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 					case "rot":
-						AnimUtil.quat_buf_blend( track.data, ft.a_idx*4, ft.b_idx*4, ft.time, q );
+						switch( track.interp ){
+							case "STEP"	: AnimUtil.quat_buf_copy( track.data, q, ft.a_idx*4 ); break;
+							default		: AnimUtil.quat_buf_blend( track.data, ft.a_idx*4, ft.b_idx*4, ft.time, q ); break;
+						}
 						pose.set_bone( track.joint_idx, q ); 
 						break;
+
+					// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 					case "pos":
-						AnimUtil.vec3_buf_lerp( track.data, ft.a_idx*3, ft.b_idx*3, ft.time, v );
+						switch( track.interp ){
+							case "STEP"	: AnimUtil.vec3_buf_copy( track.data, v, ft.a_idx*3 ); break;
+							default		: AnimUtil.vec3_buf_lerp( track.data, ft.a_idx*3, ft.b_idx*3, ft.time, v ); break;
+						}
 						pose.set_bone( track.joint_idx, null, v );
 						break;
 				}
@@ -100,7 +104,10 @@ class PoseAnimator{
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				// Normalize Time Between Frames
 				fb = fa + 1;
-				ft = ( clock - time[ fa ] ) / ( time[ fb ] - time[ fa ] );
+				
+				if( fb < time.length )	ft = ( clock - time[ fa ] ) / ( time[ fb ] - time[ fa ] );
+				else{ 					ft = 0; fb = null; }
+
 				rtn[ j ] = { a_idx:fa, b_idx:fb, time:ft };
 			}
 			return rtn;

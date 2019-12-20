@@ -200,6 +200,41 @@ class GltfUtil{
 				c.bindMode = "detached";	// Not sure if it does anything but just incase.
 			}
 		}
+
+	//////////////////////////////////////////////////////////////
+	// POSES
+	//////////////////////////////////////////////////////////////
+
+		static get_pose( e, json, pose_name=null, do_world_calc=false ){
+			if( !json.poses || json.poses.length == 0 ){ console.error("No Poses in file"); return null; }
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Find Which Pose To Use.
+			let p_idx = 0;
+			if( pose_name ){
+				let i;
+				for( i=0; i < json.poses.length; i++ ){
+					if( json.poses[ i ].name == pose_name ){ p_idx = i; break; }
+				}
+				if( i != p_idx ){ console.log("Can not find pose by the name: ", pose_name ); return null; }
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Save pose local space transform
+			let bones	= json.poses[ p_idx ].joints,
+				pose	= e.Armature.new_pose(),
+				i, b;
+
+			for( i=0; i < bones.length; i++ ){
+				b = bones[ i ];
+				pose.set_bone( i, b.rot, b.pos, b.scl );
+			}
+
+			if( do_world_calc ) pose.update_world();
+
+			return pose;
+		}
+
 }
 
 export default GltfUtil;

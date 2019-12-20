@@ -20,6 +20,7 @@ let gAnimator, gAnim, gPose;
 //#####################################################
 
 function on_draw( dt, ss ){
+	/* */
 	gAnimator.tick( dt ).update( gAnim, gPose );
 	gPose.apply();
 }
@@ -42,7 +43,7 @@ async function init(){
 	gPose 		= e.Armature.new_pose();
 	gAnimator	= new PoseAnimator();
 	/*
-	gAnimator.tick( 0.01).update( gAnim, gPose );
+	gAnimator.tick( 0.01 ).update( gAnim, gPose );
 	gPose.apply();
 	*/
 	return true;
