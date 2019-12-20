@@ -9,7 +9,7 @@ import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
 App.builder()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
 	.use_armature()
-	.set_camera( 0, 20, 5, 0, 0.75, 0 )
+	.set_camera( 0, 0, 2.3, 0, 0.7, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse( on_draw )
@@ -20,16 +20,26 @@ let gAnimator, gAnim, gPose;
 //#####################################################
 
 function on_draw( dt, ss ){
-	gAnimator.tick( dt ).update( gAnim, gPose );
-	gPose.apply();
+	//gAnimator.tick( dt ).update( gAnim, gPose );
+	//gPose.apply();
 }
 
 async function init(){
 	let dl = await XhrPromise.get( 
-		"../../_tmp/walking.gltf", "json", 
-		"../../_tmp/walking.bin", "arraybuffer",
+		//"../../_tmp/walking.gltf", "json", 
+		//"../../_tmp/walking.bin", "arraybuffer",
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
 	);
 
+	let mat	= App.new_mat( "LowPolySkin" );
+	let e 	= GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], mat );
+
+	let tgt_tpose = GltfUtil.get_pose( e, dl[0], "tpose", true );
+	tgt_tpose.apply();
+
+
+	/*
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	//let mat	= App.new_mat( "LowPoly", { color:"white" } );
@@ -41,6 +51,9 @@ async function init(){
 	gAnim 		= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
 	gPose 		= e.Armature.new_pose();
 	gAnimator	= new PoseAnimator();
+	
+	*/
+
 	/*
 	gAnimator.tick( 0.01).update( gAnim, gPose );
 	gPose.apply();
@@ -128,8 +141,55 @@ class RetargetAnimation{
 	// 
 	/////////////////////////////////////////////////////////
 	
+		// Simple auto mapping, just matches mixamo bone names
 		_auto_bone_map(){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Get a list of Bones from the Source Animation Rig
+			let b, m, map = {};
+			for( b of this.src_pose.bones ){
+				map[ b.name ] = {
+					src_idx		: b.idx,
+					src_name	: b.name,
+					tgt_idx		: -1,
+					tgt_name	: "",
+				};
+			}
 
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Loop through Target Rig and find common name with the src rig
+			for( b of this.tgt_pose.bones ){
+				m = map[ b.name ];
+
+				if( !m ){ console.log("Target bone has no source equivalent : ", b.name ); continue; }
+				if( m.tgt_idx != -1 ){ console.log("Target bone name is duplicated : ", b.name ); continue; }
+				
+				m.tgt_idx	= b.idx;
+				m.tgt_name	= b.name;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Only save map data that has a successful link between
+			// the two animation rigs
+
+			this.bone_map.length = 0;
+			for( b in map ){
+				if( map[b].tgt_idx == -1 ){ 
+					console.log("Source Bone has no target equivalent : ", b);
+					continue;
+				}
+
+				this.bone_map.push( map[b] ) ;
+				delete map[b];
+			}
+		}
+
+		// Find Bone Map by using the Bone Index of the Source Armature
+		_find_bone_map( src_idx ){
+			let b;
+			for( b of this.bone_map ){
+				if( b.src_idx == src_idx ) return b;
+			}
+			return null;
 		}
 
 		_retarget_bone( from_name, to_name, inc_pos=false, y_only=true ){

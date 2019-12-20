@@ -1,25 +1,17 @@
 <!DOCTYPE html><script type="module">
 import App			from "../../fungi/App.js";
-//import Armature		from "../Armature.js";
-//import BoneView		from "../BoneView.js";
 import VecBuffer	from "../../fungi/data/VecBuffer.js";
 
 //#####################################################
 App.builder( true )
-	.init_mod( 
-		"../fungi.armature/Armature.js", 
-		"../fungi.armature/BoneView.js" )
+	.use_armature()
 	.set_camera( 0, 20, 3, 0, 0.1, 0 )
 	.add( init )
-	//.render_loop()
 	.render_on_mouse()
 	.build();
 
 //#####################################################
 function init(){
-	//Armature.init();
-	//BoneView.init();
-
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Build Skeleton
 	let e 	= App.$Draw( "Test" ),
@@ -36,9 +28,9 @@ function init(){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Move some Bones around
-	b0.Node.rot_by( -45, "z" );
+	b0.Node.rot_by( -45, "z" ).set_scl( 1.0 );
 	b1.Node.rot_by( 45, "z" ).set_scl( 1 );
-	b2.Node.rot_by( 45, "z" ).set_scl( 1 );
+	b2.Node.rot_by( 45, "z" ).set_scl( 1.5 );
 	e.Node.set_pos( 0, 0.1, 0.0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -95,6 +87,8 @@ const v_src = `#version 300 es
 	layout(location=8) in vec4 a_bone_idx;
 	layout(location=9) in vec4 a_bone_wgt;
 
+	//------------------------------------------
+
 	uniform Global{ 
 		mat4 proj_view; 
 		mat4 camera_matrix;
@@ -109,21 +103,15 @@ const v_src = `#version 300 es
 	} model;
 
 	uniform Armature{
-		mat2x4[90]	bones;
-		vec3[90]	scales;
+		mat4[90]	bones;
 	} arm;
 
-	vec3 dq_mul_vec( mat2x4 dq, vec3 v ){
-		vec4 Qr 	= dq[0].xyzw; //real (rot)
-		vec4 Qd 	= dq[1].xyzw; //dual (trans)
-		vec3 pos	= v + cross(2.0 * Qr.xyz, cross(Qr.xyz, v) + Qr.w * v);	//Rotate Vector
-		vec3 tran	= 2.0 * (Qr.w * Qd.xyz - Qd.w * Qr.xyz + cross(Qr.xyz, Qd.xyz));	//Pull out Translation from DQ
-		return pos + tran;
-	}
+	//------------------------------------------
 
-	vec3 dq_bone_transform( vec3 pos, mat2x4[90] b_dq, vec4 b_idx, vec4 b_wgt, vec3[90] b_scl ){
-		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		NORMALIZE BONE WEIGHT VECTOR */
+	vec3 mtx_bone_transform( vec3 pos, mat4x4[90] pose_mtx, vec4 b_idx, vec4 b_wgt ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// NORMALIZE BONE WEIGHT VECTOR 
+		
 		int a = int( b_idx.x ),
 			b = int( b_idx.y ),
 			c = int( b_idx.z ),
@@ -132,27 +120,20 @@ const v_src = `#version 300 es
 		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// WEIGHT DQ
-		mat2x4 wgt_dq	=	b_dq[ a ] * b_wgt.x +  
-							b_dq[ b ] * b_wgt.y +
-							b_dq[ c ] * b_wgt.z +
-							b_dq[ d ] * b_wgt.w;
-		wgt_dq *= 1.0 / length( wgt_dq[0] ); // Normalize DQ by the length of the Quaternion
+		// WEIGHT
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// WEIGHT SCALE
-		vec3 wgt_scl	=	b_scl[ a ]	* b_wgt.x +
-							b_scl[ b ]	* b_wgt.y +
-							b_scl[ c ]	* b_wgt.z +
-							b_scl[ d ]	* b_wgt.w;
+		mat4x4 wgt_mtx	=	pose_mtx[ a ] * b_wgt.x +  
+							pose_mtx[ b ] * b_wgt.y +
+							pose_mtx[ c ] * b_wgt.z +
+							pose_mtx[ d ] * b_wgt.w;
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// SCALE, ROTATE - TRANSLATE
-		return dq_mul_vec( wgt_dq, pos * wgt_scl);
+		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
 	}
 
+	//------------------------------------------
+
 	void main(void){
-		vec3 pos	= dq_bone_transform( a_pos, arm.bones, a_bone_idx, a_bone_wgt, arm.scales );
+		vec3 pos	= mtx_bone_transform( a_pos, arm.bones, a_bone_idx, a_bone_wgt );
 		vec4 w_pos	= vec4( pos, 1.0 ); // model.view_matrix *
 
 		gl_Position = global.proj_view * w_pos;
