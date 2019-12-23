@@ -1,0 +1,96 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} 	from "../../fungi.3js/App.js";
+import GltfUtil, {Gltf} from "../../fungi.3js/lib/GltfUtil.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import Animation		from "../../fungi/lib/Animation.js";
+
+import PoseAnimator			from "../../fungi.armature/PoseAnimator.js";
+import RetargetAnimation	from "../../fungi.armature/RetargetAnimation.js";
+import IKRig 				from "../../fungi.armature/IKRig.js";
+
+// https://medium.com/@pailhead011/extending-three-js-materials-with-glsl-78ea7bbb9270
+// https://github.com/mrdoob/three.js/blob/dev/examples/webgl_buffergeometry_instancing_lambert.html  COPY existing Shader
+// 
+// https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_vert.glsl.js
+// https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_frag.glsl.js
+
+//#####################################################
+App.builder()
+	.init_mod( "./com/Armature.js" )
+	.set_camera( 0, 0, 2.5, 0.5, 0.85, 0 )
+	.add( init )
+	.render_loop( on_draw )
+	//.render_on_mouse( on_draw )
+	.build();
+
+let gSession, gPlay = null;
+
+//#####################################################
+
+function on_draw( dt, ss ){
+	if( gPlay ) gPlay( dt );
+}
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../_tmp/walking.gltf", "json", 
+		"../../_tmp/walking.bin", "arraybuffer",
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Data
+	let src 	= init_source( dl[0], dl[1] )
+	let tgt 	= init_target( dl[2], dl[3] );
+	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup Retargeting and Run
+	gSession = new RetargetAnimation()
+		.set_rigs( src, tgt, true )
+		.set_animation( anim );
+
+	gPlay = ( dt )=>gSession.play_realtime( dt );	// Realtime Retargeting
+	//gPlay = test_build_animation( tgt.IKRig );	// Build New Animation, Play Only that.
+
+
+	return true;
+}
+
+//#########################################################
+
+function init_source( json, bin ){
+	let mat		= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } ),
+		e		= GltfUtil.get_debug_view( "src_entity", json, bin, mat ),
+		rig 	= e.add_com( "IKRig" ).init( null, true ); // Need Offsets Applied
+	//e.Obj.set_pos( -0.5, 0, 0 );
+	return e;
+}
+
+function init_target( json, bin ){
+	let mat		= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } ),
+		e		= GltfUtil.get_debug_view( "tgt_entity", json, bin, mat ),
+		tpose	= GltfUtil.get_pose( e, json, "tpose", true ),
+		rig 	= e.add_com( "IKRig" ).init( tpose, false );
+	tpose.apply();
+	e.Obj.set_pos( 1.0, 0, 0 );
+	return e;
+}
+
+function test_build_animation( rig ){
+	let anim		= gSession.build(),		// Retarget animation and save to new object
+		animator	= new PoseAnimator(),
+		f 			= 0;
+
+	return ( dt )=>{
+		animator.tick( dt ).update( anim, rig.pose );	// Run Animation
+
+		//f += dt;
+		//animator.key_frame( Math.round( f ), anim, rig.pose ); // Test Frames Only
+
+		rig.apply_pose();
+	}
+}
+
+</script><page-layout></page-layout>

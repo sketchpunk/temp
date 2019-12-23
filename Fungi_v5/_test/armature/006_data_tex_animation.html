@@ -5,24 +5,22 @@ import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 import Animation		from "../../fungi/lib/Animation.js";
 import Mat4 			from "../../fungi/maths/Mat4.js";
 
-import PoseAnimator			from "../../fungi.armature/PoseAnimator.js";
+import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
 
+// https://webgl2fundamentals.org/webgl/lessons/webgl-skinning.html
 
 //#####################################################
 App.builder()
-	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
+	//.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
 	.use_armature()
 	.set_camera( 0, 0, 3, 0, 0.8, 0 )
 	.add( init )
-	//.render_loop( on_draw )
-	.render_on_mouse( on_draw )
+	.render_loop()
+	//.render_on_mouse()
 	.build();
 
-let gSession, gPlay = null;
 
 //#####################################################
-
-function on_draw( dt, ss ){ if( gPlay ) gPlay( dt ); }
 
 async function init(){
 	let dl = await XhrPromise.get( 
@@ -31,189 +29,226 @@ async function init(){
 	);
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load Data
-	let src 	= init_source( dl[0], dl[1] )
-	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
+	load_shader();																// Load Custom Shader
+	let mat 	= SHADER.new_material( "skin_tex" );							// Create a Material from it
+	let e 		= GltfUtil.get_skin_mesh( "char", dl[0], dl[1], mat );			// Load Mesh + Armature from File
 
-	animation_to_texture( src, anim );
+	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );	// Load Animation From File.
+
+	let info 	= animation_to_texture( e, anim );								// Convert Animation to a Data Texture
+	let tex 	= new_data_texture( info.w, info.h, info.data );				// Pass Data to GPU
+
+	mat.set_uniform( "skin_tex", tex );											// Set Texture to Material
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Setup Retargeting and Run
-	//gSession = new RetargetAnimation()
-	//	.set_rigs( src, tgt, true )
-	//	.set_animation( anim );
-
-	//gPlay = ( dt )=>gSession.play_realtime( dt );	// Realtime Retargeting
-	//gPlay = test_build_animation( tgt.IKRig );	// Build New Animation, Play Only that.
-
 	return true;
 }
 
 //#########################################################
+// CONVERT ANIMATION TO A DATA TEXTURE
+	function new_data_texture( w, h, data ){
+		let gl = App.gl;
+		let tex = gl.ctx.createTexture();
+		
+		gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, tex );
+		gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.NEAREST ); // Turn off Filtering for exact pixel selection
+		gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MAG_FILTER, gl.ctx.NEAREST );
+		gl.ctx.texImage2D(
+		    gl.ctx.TEXTURE_2D,
+		    0,          	// level
+		    gl.ctx.RGBA32F, 
+		    w,          	// 
+		    h,   			// 
+		    0,          	// border
+		    gl.ctx.RGBA,    // format
+		    gl.ctx.FLOAT,   // type
+		    data
+		);
 
-function init_source( json, bin ){
-	let mat		= App.new_mat( "LowPolySkin" ),
-		e		= GltfUtil.get_debug_view( "src_entity", json, bin, mat );
-		//rig 	= e.add_com( "IKRig" ).init( null, true ); // Need Offsets Applied
-
-//e.Node.set_pos( 0, 0, 0 );
-	return e;
-}
-
-function test_build_animation( rig ){
-	let anim		= gSession.build(),		// Retarget animation and save to new object
-		animator	= new PoseAnimator(),
-		f 			= 0;
-
-	return ( dt )=>{
-		animator.tick( dt ).update( anim, rig.pose );	// Run Animation
-
-		//f += dt;
-		//animator.key_frame( Math.round( f ), anim, rig.pose ); // Test Frames Only
-
-		rig.apply_pose();
+		gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, null );
+		return tex;
 	}
-}
+
+	function animation_to_texture( e, anim ){
+		let frame_cnt	= anim.frame_cnt,
+			bone_cnt	= e.Armature.bones.length,
+			pixel_w 	= frame_cnt * 4,		// 4 Floats Per Pixel(RGBA), Need 16 floats for Mat4x4, so 4 pixels worth.
+			pixel_h		= bone_cnt,
+			pixel_cnt 	= pixel_w * pixel_h,
+			float_cnt	= pixel_cnt * 4,
+			row_cnt 	= frame_cnt * 4 * 4, 	// how many floats makes one pixel row
+			i, j;
+
+		let animator	= new PoseAnimator();
+		let pose		= e.Armature.new_pose();
+		let mat 		= new Mat4();
+		let data 		= new Float32Array( float_cnt );
+
+		for( i=0; i < frame_cnt; i++ ){
+			animator.key_frame( i, anim, pose );	// Generate Pose
+			pose.update_world();					// Update World Space
+
+			let ii = i * 16;		// what column to start saving the bone matrix
+
+			for( j=0; j < bone_cnt; j++ ){
+				let b = e.Armature.bones[ j ].ref.Bone;
+				let p = pose.bones[ j ];
+				let jj = ii + j * row_cnt;
+
+				// Convert to Matrix, Get Offset from Bind Pose
+				mat	.from_quat_tran_scale( p.world.rot, p.world.pos, p.world.scl )
+					.mul( b.bind_pose );
+
+				// Save Matrix to Texture Buffer
+				data[ jj+0 ]	= mat[ 0 ];
+				data[ jj+1 ]	= mat[ 1 ];
+				data[ jj+2 ]	= mat[ 2 ];
+				data[ jj+3 ]	= mat[ 3 ];
+				data[ jj+4 ]	= mat[ 4 ];
+				data[ jj+5 ]	= mat[ 5 ];
+				data[ jj+6 ]	= mat[ 6 ];
+				data[ jj+7 ]	= mat[ 7 ];
+				data[ jj+8 ]	= mat[ 8 ];
+				data[ jj+9 ]	= mat[ 9 ];
+				data[ jj+10 ]	= mat[ 10 ];
+				data[ jj+11 ]	= mat[ 11 ];
+				data[ jj+12 ]	= mat[ 12 ];
+				data[ jj+13 ]	= mat[ 13 ];
+				data[ jj+14 ]	= mat[ 14 ];
+				data[ jj+15 ]	= mat[ 15 ];
+			}
+		}
+
+		return { w: pixel_w, h: pixel_h, data };
+	}
 
 //#########################################################
-
-function new_data_texture( w, h, data ){
-	let tex = gl.ctx.createTexture();
-	
-	gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, tex );
-	gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.NEAREST ); // Turn off Filtering for exact pixel selection
-	gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MAG_FILTER, gl.ctx.NEAREST );
-	gl.ctx.texImage2D(
-	    gl.ctx.TEXTURE_2D,
-	    0,          	// level
-	    gl.ctx.RGBA32F, 
-	    w,          	// 
-	    h,   			// 
-	    0,          	// border
-	    gl.ctx.RGBA,    // format
-	    gl.ctx.FLOAT,   // type
-	    data
-	);
-
-	gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, null );
-	return tex;
-}
-
-function animation_to_texture( e, anim ){
-	//gAnim 		= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
-	//gPose 		= e.Armature.new_pose();
-	//gAnimator	= new PoseAnimator();
-
-	let frame_cnt	= anim.frame_cnt,
-		bone_cnt	= e.Armature.bones.length,
-		pixel_w 	= frame_cnt * 4,		// 4 Floats Per Pixel(RGBA), Need 16 floats for Mat4x4, so 4 pixels worth.
-		pixel_h		= bone_cnt,
-		pixel_cnt 	= pixel_w * pixel_h,
-		float_cnt	= pixel_cnt * 4,
-		row_cnt 	= frame_cnt * 4 * 4, 	// how many floats makes one pixel row
-		i, j;
-
-	let animator	= new PoseAnimator();
-	let pose		= e.Armature.new_pose();
-	let mat = new Mat4();
-	let data = new Float32Array( float_cnt );
-	console.log( frame_cnt, bone_cnt );
-	// How Many Frames?
-	// How Many Bones.
-
-	for( i=0; i < frame_cnt; i++ ){
-		animator.key_frame( i, anim, pose );	// Generate Pose
-		pose.update_world();					// Update World Space
-
-		let ii = i * 16;		// what column to start saving the bone matrix
-
-		for( j=0; j < bone_cnt; j++ ){
-			let b = e.Armature.bones[ j ].ref.Bone;
-			let p = pose.bones[ j ];
-			let jj = ii + j * row_cnt;
-
-			// Convert to Matrix, Get Offset from Bind Pose
-			mat	.from_quat_tran_scale( p.world.rot, p.world.pos, p.world.scl )
-				.mul( b.bind_pose );
-
-			//
-			data[ jj+0 ]	= mat[ 0 ];
-			data[ jj+1 ]	= mat[ 1 ];
-			data[ jj+2 ]	= mat[ 2 ];
-			data[ jj+3 ]	= mat[ 3 ];
-			data[ jj+4 ]	= mat[ 4 ];
-			data[ jj+5 ]	= mat[ 5 ];
-			data[ jj+6 ]	= mat[ 6 ];
-			data[ jj+7 ]	= mat[ 7 ];
-			data[ jj+8 ]	= mat[ 8 ];
-			data[ jj+9 ]	= mat[ 9 ];
-			data[ jj+10 ]	= mat[ 10 ];
-			data[ jj+11 ]	= mat[ 11 ];
-			data[ jj+12 ]	= mat[ 12 ];
-			data[ jj+13 ]	= mat[ 13 ];
-			data[ jj+14 ]	= mat[ 14 ];
-			data[ jj+15 ]	= mat[ 15 ];
-		}
-		//break;
+// CUSTOM SHADER
+	let SHADER;
+	function load_shader(){
+		SHADER = App.Shader.from_src( "skin_tex", vert_src, frag_src )
+			.add_uniform_blocks( ["Global", "Model"] )
+			.add_uniform( "skin_tex", "sampler2D", null )
+			.add_uniform( "color", "rgb", "#ff7f7f" );
+		;
 	}
 
-	pose.apply();
-}
+	const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=8) in vec4 a_bone_idx;
+	layout(location=9) in vec4 a_bone_wgt;
 
-/*
-build(){
-	let arm 		= this.entity.Armature,
-		bones 		= arm.bones,
-		frame_cnt	= this.animation.frame_cnt,
-		bone_cnt	= arm.bones.length,
-		pixel_w 	= frame_cnt * 2,		// Store Bone's Dual Quat for each frame
-		pixel_h 	= bone_cnt,				// How Many rows of frames will we need
-		pixel_cnt	= pixel_w * pixel_h, 	// Every bone Dual Quat will need 2 pixels, times total frames
-		float_cnt 	= pixel_cnt * 4,
-		row_cnt 	= frame_cnt * 2 * 4,
-		dq 			= new DualQuat(),
-		b, i, ii, j, jj, p;
+	uniform sampler2D skin_tex;
 
-	let data = new Float32Array( float_cnt );
-	console.log( "FrameCount", frame_cnt, "Bone Count", bone_cnt, "pixel", pixel_cnt, "float", float_cnt );
+	//------------------------------------------
 
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
 
-	for( i=0; i < frame_cnt; i++ ){
-		this.animator.key_frame( i, this.animation, this.pose ); // Generate Pose
-		this.pose.update_world();	// Update World Space 
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
 
-		ii = i * 8;
+	//------------------------------------------
 
-		for( j=0; j < bone_cnt; j++ ){
-			b = bones[ j ].Bone;
-			p = this.pose.bones[ j ];
-			jj = ii + j * row_cnt;
-
-			dq
-				.set( p.world.rot, p.world.pos )
-				.mul( b.dqBindPose );
-
-			data[ jj+0 ] = dq[ 0 ];
-			data[ jj+1 ] = dq[ 1 ];
-			data[ jj+2 ] = dq[ 2 ];
-			data[ jj+3 ] = dq[ 3 ];
-			data[ jj+4 ] = dq[ 4 ];
-			data[ jj+5 ] = dq[ 5 ];
-			data[ jj+6 ] = dq[ 6 ];
-			data[ jj+7 ] = dq[ 7 ];
-
-			//DualQuat.mul( dq, e.Bone.dqBindPose, e.Bone.dqOffset );
-			//console.log( dq, b, p );
-		}
-
-		//console.log( this.pose );
-		//break;
+	mat4x4 get_m4_tex( sampler2D tex, int x, int y ){
+		return mat4x4( 
+			texelFetch( tex, ivec2( x, y ), 0 ), 
+			texelFetch( tex, ivec2( x+1, y ), 0 ),
+			texelFetch( tex, ivec2( x+2, y ), 0 ),
+			texelFetch( tex, ivec2( x+3, y ), 0 )
+		);
 	}
 
-	//console.log( data );
+	vec3 mtx_bone_transform( vec3 pos, vec4 b_idx, vec4 b_wgt, int x ){
+		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		NORMALIZE BONE WEIGHT VECTOR */
+		int a = int( b_idx.x ),
+			b = int( b_idx.y ),
+			c = int( b_idx.z ),
+			d = int( b_idx.w );
 
-	return [ pixel_w, pixel_h, data ];
-}
-*/
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
 
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT
+		mat4x4 wgt_mtx = 
+			get_m4_tex( skin_tex, x, a ) * b_wgt.x +
+			get_m4_tex( skin_tex, x, b ) * b_wgt.y +
+			get_m4_tex( skin_tex, x, c ) * b_wgt.z +
+			get_m4_tex( skin_tex, x, d ) * b_wgt.w;
+
+		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
+	}
+
+	//------------------------------------------
+
+	out vec3 w_pos;
+	flat out vec3 cam_pos;
+
+	//------------------------------------------
+
+	const float frame_cnt = 32.0;
+	const float anim_time = 1.0333333015441895;
+
+	void main(void){
+		vec3 pos 	= a_pos;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		float time	= mod( global.clock, anim_time );
+		float ntime	= time / anim_time;
+		float frame	= frame_cnt * ntime;
+		int pixel_x	= int( floor( frame ) ) * 4; 		// 4 Pixels per Mat4x4
+		pos 		= mtx_bone_transform( pos, a_bone_idx, a_bone_wgt, pixel_x );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		w_pos		= pos;
+		cam_pos		= global.camera_pos;
+		gl_Position = global.proj_view * model.view_matrix * vec4( pos, 1.0 );
+	}`;
+
+	const frag_src = `#version 300 es
+	precision mediump float;
+
+	uniform vec3 color;
+
+	in vec3 w_pos;
+	flat in vec3 cam_pos;
+
+	out vec4 out_color;
+
+	//------------------------------------------
+
+	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
+	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
+	const float uAmbientStrength	= 0.5;
+	const float uDiffuseStrength	= 0.5;
+	const float uSpecularStrength	= 0.2f;	//0.15
+	const float uSpecularShininess	= 1.0f; //256.0
+
+	void main(void){ 
+		vec3 pixelNorm = normalize( cross( dFdx(w_pos), dFdy(w_pos) ) ); //Calc the Normal of the Rasterizing Pixel
+
+		// Ambient Lighting
+		vec3 cAmbient		= lightColor * uAmbientStrength;
+		
+		// Diffuse Lighting
+		vec3 lightVector	= normalize(lightPosition - w_pos);		//light direction based on pixel world position
+		float diffuseAngle	= max( dot(pixelNorm,lightVector) ,0.0);	//Angle between Light Direction and Pixel Direction (1==90d)
+		vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
+
+		// Specular Lighting
+		vec3 camVector		= normalize( cam_pos - w_pos );	//Camera Direction based on pixel world position
+		vec3 reflectVector	= reflect(-lightVector, pixelNorm);		//Reflective direction of line from pixel direction as pivot.
+		float specular		= pow( max( dot(reflectVector,camVector) ,0.0), uSpecularShininess ); //Angle of reflected light and camera eye
+		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
+
+		out_color = vec4( color * (cAmbient + cDiffuse + cSpecular), 1.0 );
+	}`;
 </script><page-layout></page-layout>
