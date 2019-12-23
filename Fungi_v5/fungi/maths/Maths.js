@@ -314,6 +314,20 @@ class Maths{
 	//Maths.EPSILON_SQR	= Maths.EPSILON * Maths.EPSILON;
 
 
+// https://github.com/CiaccoDavide/CiaccoPRNG
+class CiaccoRandom{
+    static seed( v ){
+        this.tree = Math.abs( v ) % 9999999+1;
+        return this.rand( 0, 9999999 );
+    }
+
+    static rand( min, max ){
+        this.tree = ( this.tree * 123 ) % 69522569;
+        return this.tree % ( max - min + 1 ) + min;
+    }
+}
+CiaccoRandom.tree = 0;
+
 
 /*
 https://stackoverflow.com/questions/5674149/3d-coordinates-on-a-sphere-to-latitude-and-longitude

@@ -4,6 +4,7 @@ class Matrix4 extends Float32Array{
 	////////////////////////////////////////////////////////////////////
 	// GETTERS / SETTERS
 	////////////////////////////////////////////////////////////////////
+		
 		translate(ary){	Matrix4.translate(this,ary[0],ary[1],ary[2]); return this;}
 		reset_translation(){ this[12] = this[13] = this[14] = 0; this[15] = 1; return this; }
 
@@ -21,7 +22,6 @@ class Matrix4 extends Float32Array{
 		}
 
 		invert(){ Matrix4.invert( null, this ); return this; }
-
 
 		from_mul( a, b ){ 
 			let a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
@@ -248,6 +248,43 @@ class Matrix4 extends Float32Array{
 		}
 
 	////////////////////////////////////////////////////////////////////
+	// OPERATIONS
+	////////////////////////////////////////////////////////////////////
+		
+		mul( b ){ 
+			let a00 = this[0],	a01 = this[1],	a02 = this[2],	a03 = this[3],
+				a10 = this[4],	a11 = this[5],	a12 = this[6],	a13 = this[7],
+				a20 = this[8],	a21 = this[9],	a22 = this[10],	a23 = this[11],
+				a30 = this[12],	a31 = this[13],	a32 = this[14],	a33 = this[15];
+
+			// Cache only the current line of the second matrix
+			let b0  = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+			this[0] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+			this[1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+			this[2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+			this[3] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+
+			b0 = b[4]; b1 = b[5]; b2 = b[6]; b3 = b[7];
+			this[4] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+			this[5] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+			this[6] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+			this[7] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+
+			b0 = b[8]; b1 = b[9]; b2 = b[10]; b3 = b[11];
+			this[8] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+			this[9] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+			this[10] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+			this[11] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+
+			b0 = b[12]; b1 = b[13]; b2 = b[14]; b3 = b[15];
+			this[12] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+			this[13] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+			this[14] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+			this[15] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+			return this;	
+		}
+
+	////////////////////////////////////////////////////////////////////
 	// TRANSFORMS
 	////////////////////////////////////////////////////////////////////
 
@@ -261,7 +298,6 @@ class Matrix4 extends Float32Array{
 			out[3] = this[3] * x + this[7] * y + this[11]	* z + this[15] * w;
 			return out;
 		}
-		
 
 	////////////////////////////////////////////////////////////////////
 	// STATIC SETTERS
@@ -445,7 +481,6 @@ class Matrix4 extends Float32Array{
 			return out;
 		}
 
-
 	////////////////////////////////////////////////////////////////////
 	// STATIC CONVERSIONS
 	////////////////////////////////////////////////////////////////////
@@ -490,7 +525,6 @@ class Matrix4 extends Float32Array{
 			out[8] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
 			return out;
 		}
-
 
 	////////////////////////////////////////////////////////////////////
 	// STATIC OPERATIONS
@@ -832,7 +866,6 @@ class Matrix4 extends Float32Array{
 			}
 			return out;
 		}
-
 
 	////////////////////////////////////////////////////////////////////
 	// STATIC TRANSFORMATION

@@ -1,0 +1,219 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+import Animation		from "../../fungi/lib/Animation.js";
+import Mat4 			from "../../fungi/maths/Mat4.js";
+
+import PoseAnimator			from "../../fungi.armature/PoseAnimator.js";
+
+
+//#####################################################
+App.builder()
+	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
+	.use_armature()
+	.set_camera( 0, 0, 3, 0, 0.8, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse( on_draw )
+	.build();
+
+let gSession, gPlay = null;
+
+//#####################################################
+
+function on_draw( dt, ss ){ if( gPlay ) gPlay( dt ); }
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../_tmp/walking.gltf", "json", 
+		"../../_tmp/walking.bin", "arraybuffer",
+	);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Data
+	let src 	= init_source( dl[0], dl[1] )
+	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
+
+	animation_to_texture( src, anim );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup Retargeting and Run
+	//gSession = new RetargetAnimation()
+	//	.set_rigs( src, tgt, true )
+	//	.set_animation( anim );
+
+	//gPlay = ( dt )=>gSession.play_realtime( dt );	// Realtime Retargeting
+	//gPlay = test_build_animation( tgt.IKRig );	// Build New Animation, Play Only that.
+
+	return true;
+}
+
+//#########################################################
+
+function init_source( json, bin ){
+	let mat		= App.new_mat( "LowPolySkin" ),
+		e		= GltfUtil.get_debug_view( "src_entity", json, bin, mat );
+		//rig 	= e.add_com( "IKRig" ).init( null, true ); // Need Offsets Applied
+
+//e.Node.set_pos( 0, 0, 0 );
+	return e;
+}
+
+function test_build_animation( rig ){
+	let anim		= gSession.build(),		// Retarget animation and save to new object
+		animator	= new PoseAnimator(),
+		f 			= 0;
+
+	return ( dt )=>{
+		animator.tick( dt ).update( anim, rig.pose );	// Run Animation
+
+		//f += dt;
+		//animator.key_frame( Math.round( f ), anim, rig.pose ); // Test Frames Only
+
+		rig.apply_pose();
+	}
+}
+
+//#########################################################
+
+function new_data_texture( w, h, data ){
+	let tex = gl.ctx.createTexture();
+	
+	gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, tex );
+	gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.NEAREST ); // Turn off Filtering for exact pixel selection
+	gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MAG_FILTER, gl.ctx.NEAREST );
+	gl.ctx.texImage2D(
+	    gl.ctx.TEXTURE_2D,
+	    0,          	// level
+	    gl.ctx.RGBA32F, 
+	    w,          	// 
+	    h,   			// 
+	    0,          	// border
+	    gl.ctx.RGBA,    // format
+	    gl.ctx.FLOAT,   // type
+	    data
+	);
+
+	gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, null );
+	return tex;
+}
+
+function animation_to_texture( e, anim ){
+	//gAnim 		= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
+	//gPose 		= e.Armature.new_pose();
+	//gAnimator	= new PoseAnimator();
+
+	let frame_cnt	= anim.frame_cnt,
+		bone_cnt	= e.Armature.bones.length,
+		pixel_w 	= frame_cnt * 4,		// 4 Floats Per Pixel(RGBA), Need 16 floats for Mat4x4, so 4 pixels worth.
+		pixel_h		= bone_cnt,
+		pixel_cnt 	= pixel_w * pixel_h,
+		float_cnt	= pixel_cnt * 4,
+		row_cnt 	= frame_cnt * 4 * 4, 	// how many floats makes one pixel row
+		i, j;
+
+	let animator	= new PoseAnimator();
+	let pose		= e.Armature.new_pose();
+	let mat = new Mat4();
+	let data = new Float32Array( float_cnt );
+	console.log( frame_cnt, bone_cnt );
+	// How Many Frames?
+	// How Many Bones.
+
+	for( i=0; i < frame_cnt; i++ ){
+		animator.key_frame( i, anim, pose );	// Generate Pose
+		pose.update_world();					// Update World Space
+
+		let ii = i * 16;		// what column to start saving the bone matrix
+
+		for( j=0; j < bone_cnt; j++ ){
+			let b = e.Armature.bones[ j ].ref.Bone;
+			let p = pose.bones[ j ];
+			let jj = ii + j * row_cnt;
+
+			// Convert to Matrix, Get Offset from Bind Pose
+			mat	.from_quat_tran_scale( p.world.rot, p.world.pos, p.world.scl )
+				.mul( b.bind_pose );
+
+			//
+			data[ jj+0 ]	= mat[ 0 ];
+			data[ jj+1 ]	= mat[ 1 ];
+			data[ jj+2 ]	= mat[ 2 ];
+			data[ jj+3 ]	= mat[ 3 ];
+			data[ jj+4 ]	= mat[ 4 ];
+			data[ jj+5 ]	= mat[ 5 ];
+			data[ jj+6 ]	= mat[ 6 ];
+			data[ jj+7 ]	= mat[ 7 ];
+			data[ jj+8 ]	= mat[ 8 ];
+			data[ jj+9 ]	= mat[ 9 ];
+			data[ jj+10 ]	= mat[ 10 ];
+			data[ jj+11 ]	= mat[ 11 ];
+			data[ jj+12 ]	= mat[ 12 ];
+			data[ jj+13 ]	= mat[ 13 ];
+			data[ jj+14 ]	= mat[ 14 ];
+			data[ jj+15 ]	= mat[ 15 ];
+		}
+		//break;
+	}
+
+	pose.apply();
+}
+
+/*
+build(){
+	let arm 		= this.entity.Armature,
+		bones 		= arm.bones,
+		frame_cnt	= this.animation.frame_cnt,
+		bone_cnt	= arm.bones.length,
+		pixel_w 	= frame_cnt * 2,		// Store Bone's Dual Quat for each frame
+		pixel_h 	= bone_cnt,				// How Many rows of frames will we need
+		pixel_cnt	= pixel_w * pixel_h, 	// Every bone Dual Quat will need 2 pixels, times total frames
+		float_cnt 	= pixel_cnt * 4,
+		row_cnt 	= frame_cnt * 2 * 4,
+		dq 			= new DualQuat(),
+		b, i, ii, j, jj, p;
+
+	let data = new Float32Array( float_cnt );
+	console.log( "FrameCount", frame_cnt, "Bone Count", bone_cnt, "pixel", pixel_cnt, "float", float_cnt );
+
+
+	for( i=0; i < frame_cnt; i++ ){
+		this.animator.key_frame( i, this.animation, this.pose ); // Generate Pose
+		this.pose.update_world();	// Update World Space 
+
+		ii = i * 8;
+
+		for( j=0; j < bone_cnt; j++ ){
+			b = bones[ j ].Bone;
+			p = this.pose.bones[ j ];
+			jj = ii + j * row_cnt;
+
+			dq
+				.set( p.world.rot, p.world.pos )
+				.mul( b.dqBindPose );
+
+			data[ jj+0 ] = dq[ 0 ];
+			data[ jj+1 ] = dq[ 1 ];
+			data[ jj+2 ] = dq[ 2 ];
+			data[ jj+3 ] = dq[ 3 ];
+			data[ jj+4 ] = dq[ 4 ];
+			data[ jj+5 ] = dq[ 5 ];
+			data[ jj+6 ] = dq[ 6 ];
+			data[ jj+7 ] = dq[ 7 ];
+
+			//DualQuat.mul( dq, e.Bone.dqBindPose, e.Bone.dqOffset );
+			//console.log( dq, b, p );
+		}
+
+		//console.log( this.pose );
+		//break;
+	}
+
+	//console.log( data );
+
+	return [ pixel_w, pixel_h, data ];
+}
+*/
+
+</script><page-layout></page-layout>
