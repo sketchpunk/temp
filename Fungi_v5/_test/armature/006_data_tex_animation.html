@@ -47,8 +47,8 @@ async function init(){
 //#########################################################
 // CONVERT ANIMATION TO A DATA TEXTURE
 	function new_data_texture( w, h, data ){
-		let gl = App.gl;
-		let tex = gl.ctx.createTexture();
+		let gl	= App.gl, 
+			tex	= gl.ctx.createTexture();
 		
 		gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, tex );
 		gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.NEAREST ); // Turn off Filtering for exact pixel selection
@@ -70,32 +70,32 @@ async function init(){
 	}
 
 	function animation_to_texture( e, anim ){
-		let frame_cnt	= anim.frame_cnt,
-			bone_cnt	= e.Armature.bones.length,
+		let bones 		= e.Armature.bones,		// Armature Bones
+			frame_cnt	= anim.frame_cnt,		// How Many frames = How Many Items Per Pixel Row
 			pixel_w 	= frame_cnt * 4,		// 4 Floats Per Pixel(RGBA), Need 16 floats for Mat4x4, so 4 pixels worth.
-			pixel_h		= bone_cnt,
-			pixel_cnt 	= pixel_w * pixel_h,
-			float_cnt	= pixel_cnt * 4,
+			pixel_h		= bones.length,			// Each Bone will represent a pixel row
+			pixel_cnt 	= pixel_w * pixel_h,	// How many total pixels
+			float_cnt	= pixel_cnt * 4,		// How many floats to create one image
 			row_cnt 	= frame_cnt * 4 * 4, 	// how many floats makes one pixel row
-			i, j;
+			i, ii, j, jj, b, p;
 
-		let animator	= new PoseAnimator();
-		let pose		= e.Armature.new_pose();
-		let mat 		= new Mat4();
-		let data 		= new Float32Array( float_cnt );
+		let animator	= new PoseAnimator(),				// Generate Pose from Key Frames
+			pose		= e.Armature.new_pose(),			// Pose Container
+			mat 		= new Mat4(),						// Temp Mat4 to compute offset matrix
+			data 		= new Float32Array( float_cnt );	// Pixel data as one big float array
 
 		for( i=0; i < frame_cnt; i++ ){
 			animator.key_frame( i, anim, pose );	// Generate Pose
 			pose.update_world();					// Update World Space
 
-			let ii = i * 16;		// what column to start saving the bone matrix
+			ii = i * 16;							// X-Coord, How many columns offset to save data
 
-			for( j=0; j < bone_cnt; j++ ){
-				let b = e.Armature.bones[ j ].ref.Bone;
-				let p = pose.bones[ j ];
-				let jj = ii + j * row_cnt;
+			for( j=0; j < pixel_h; j++ ){
+				b	= bones[ j ].ref.Bone;	// Bone Component, Need BindPose Matrix
+				p	= pose.bones[ j ];		// Pose Bone
+				jj	= ii + j * row_cnt;		// Index to save Offset Matrix
 
-				// Convert to Matrix, Get Offset from Bind Pose
+				// World Space Transform to Matrix, Get Offset by mul Bind Pose
 				mat	.from_quat_tran_scale( p.world.rot, p.world.pos, p.world.scl )
 					.mul( b.bind_pose );
 
@@ -169,20 +169,16 @@ async function init(){
 	vec3 mtx_bone_transform( vec3 pos, vec4 b_idx, vec4 b_wgt, int x ){
 		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		NORMALIZE BONE WEIGHT VECTOR */
-		int a = int( b_idx.x ),
-			b = int( b_idx.y ),
-			c = int( b_idx.z ),
-			d = int( b_idx.w );
-
+		ivec4 i = ivec4( b_idx );
 		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// WEIGHT
 		mat4x4 wgt_mtx = 
-			get_m4_tex( skin_tex, x, a ) * b_wgt.x +
-			get_m4_tex( skin_tex, x, b ) * b_wgt.y +
-			get_m4_tex( skin_tex, x, c ) * b_wgt.z +
-			get_m4_tex( skin_tex, x, d ) * b_wgt.w;
+			get_m4_tex( skin_tex, x, i.x ) * b_wgt.x +
+			get_m4_tex( skin_tex, x, i.y ) * b_wgt.y +
+			get_m4_tex( skin_tex, x, i.z ) * b_wgt.z +
+			get_m4_tex( skin_tex, x, i.w ) * b_wgt.w;
 
 		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
 	}

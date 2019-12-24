@@ -16,7 +16,7 @@ class gl{
 			this.canvas = canvas;
 		}
 
-		this.ctx = canvas.getContext("webgl2");
+		this.ctx = canvas.getContext("webgl2"); //canvas.getContext( 'webgl2', { antialias: false } );
 		if( !this.ctx ){ console.error("WebGL context is not available."); return false; }
 
 

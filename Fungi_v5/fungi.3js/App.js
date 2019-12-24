@@ -159,13 +159,16 @@ let App = {
 //////////////////////////////////////////////////////////////////
 	function init_3js(){
 		App.canvas = document.getElementById( "pg_canvas" );
-
+		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Setup Renderer
 		let w = window.innerWidth,
 			h = window.innerHeight;
 
-		App.renderer = new THREE.WebGLRenderer( { canvas: App.canvas, antialias:true } );
+		//App.renderer = new THREE.WebGLRenderer( { canvas: App.canvas, antialias:true } );
+		let ctx = App.canvas.getContext( "webgl2" ); //, { alpha: false }
+		App.renderer = new THREE.WebGLRenderer( { canvas:App.canvas, context:ctx, antialias:true } );
+
 		App.renderer.setClearColor( 0x3a3a3a, 1 );
 		App.renderer.setSize( w, h );
 
@@ -186,7 +189,6 @@ let App = {
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Fungi Stuff
 		App.input = new InputTracker( App.canvas );
-
 		return true;
 	}
 

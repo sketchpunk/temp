@@ -3,6 +3,7 @@ import App, {THREE} 	from "../../fungi.3js/App.js";
 import GltfUtil, {Gltf} from "../../fungi.3js/lib/GltfUtil.js";
 import XhrPromise		from "../../fungi/lib/XhrPromise.js";
 import Animation		from "../../fungi/lib/Animation.js";
+import Mat4 			from "../../fungi/maths/Mat4.js";
 
 import PoseAnimator			from "../../fungi.armature/PoseAnimator.js";
 import RetargetAnimation	from "../../fungi.armature/RetargetAnimation.js";
@@ -10,87 +11,264 @@ import IKRig 				from "../../fungi.armature/IKRig.js";
 
 // https://medium.com/@pailhead011/extending-three-js-materials-with-glsl-78ea7bbb9270
 // https://github.com/mrdoob/three.js/blob/dev/examples/webgl_buffergeometry_instancing_lambert.html  COPY existing Shader
-// 
+// https://github.com/mrdoob/three.js/tree/master/src/renderers/shaders/ShaderChunk
 // https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_vert.glsl.js
 // https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_frag.glsl.js
 
 //#####################################################
 App.builder()
 	.init_mod( "./com/Armature.js" )
-	.set_camera( 0, 0, 2.5, 0.5, 0.85, 0 )
+	.set_camera( 0, 0, 2.5, 0, 0.85, 0 )
 	.add( init )
-	.render_loop( on_draw )
-	//.render_on_mouse( on_draw )
+	//.render_loop()
+	.render_on_mouse()
 	.build();
 
-let gSession, gPlay = null;
 
 //#####################################################
-
-function on_draw( dt, ss ){
-	if( gPlay ) gPlay( dt );
-}
 
 async function init(){
 	let dl = await XhrPromise.get( 
 		"../../_tmp/walking.gltf", "json", 
 		"../../_tmp/walking.bin", "arraybuffer",
-		"../../files/models/vegeta.gltf", "json", 
-		"../../files/models/vegeta.bin", "arraybuffer",
 	);
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load Data
-	let src 	= init_source( dl[0], dl[1] )
-	let tgt 	= init_target( dl[2], dl[3] );
-	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
+	//load_shader();																// Load Custom Shader
+	//let mat 	= SHADER.new_material( "skin_tex" );							// Create a Material from it
+	let mat 	= phong_material();
+	let e 		= GltfUtil.get_skin_mesh( "char", dl[0], dl[1], mat );			// Load Mesh + Armature from File
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Setup Retargeting and Run
-	gSession = new RetargetAnimation()
-		.set_rigs( src, tgt, true )
-		.set_animation( anim );
+	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );	// Load Animation From File.
 
-	gPlay = ( dt )=>gSession.play_realtime( dt );	// Realtime Retargeting
-	//gPlay = test_build_animation( tgt.IKRig );	// Build New Animation, Play Only that.
+	let info 	= animation_to_texture( e, anim );								// Convert Animation to a Data Texture
+	let tex 	= new_data_texture( info.w, info.h, info.data );				// Pass Data to GPU
 
+	mat.onBeforeCompile = (sh)=>{ 
+		sh.vertexShader			= PHONG_VERTEX_TMPL;
+		sh.uniforms.skin_tex	= { value: tex };
+	};
+
+	//mat.set_uniform( "skin_tex", tex );										// Set Texture to Material
+
+	let arm = e.Armature, tm = THREE.Math;
+	arm.get_bone( "LeftUpLeg" ).rotation.x = tm.degToRad( 120 );
 
 	return true;
 }
 
+
+//#########################################################
+// CONVERT ANIMATION TO A DATA TEXTURE
+
+	function new_data_texture( w, h, data ){
+		let tex = new THREE.DataTexture( data, w, h, THREE.RGBAFormat, THREE.FloatType );
+		tex.magFilter	= THREE.NearestFilter;
+		tex.needsUpdate	= true;
+		/*
+		let gl	= App.gl, 
+			tex	= gl.ctx.createTexture();
+		
+		gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, tex );
+		gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.NEAREST ); // Turn off Filtering for exact pixel selection
+		gl.ctx.texParameteri( gl.ctx.TEXTURE_2D, gl.ctx.TEXTURE_MAG_FILTER, gl.ctx.NEAREST );
+		gl.ctx.texImage2D(
+		    gl.ctx.TEXTURE_2D,
+		    0,          	// level
+		    gl.ctx.RGBA32F, 
+		    w,          	// 
+		    h,   			// 
+		    0,          	// border
+		    gl.ctx.RGBA,    // format
+		    gl.ctx.FLOAT,   // type
+		    data
+		);
+
+		gl.ctx.bindTexture( gl.ctx.TEXTURE_2D, null );
+		*/
+		return tex;
+	}
+
+	function animation_to_texture( e, anim ){
+		let bones 		= e.Armature.bones,		// Armature Bones
+			frame_cnt	= anim.frame_cnt,		// How Many frames = How Many Items Per Pixel Row
+			pixel_w 	= frame_cnt * 4,		// 4 Floats Per Pixel(RGBA), Need 16 floats for Mat4x4, so 4 pixels worth.
+			pixel_h		= bones.length,			// Each Bone will represent a pixel row
+			pixel_cnt 	= pixel_w * pixel_h,	// How many total pixels
+			float_cnt	= pixel_cnt * 4,		// How many floats to create one image
+			row_cnt 	= frame_cnt * 4 * 4, 	// how many floats makes one pixel row
+			i, ii, j, jj, b, p;
+
+		let animator	= new PoseAnimator(),				// Generate Pose from Key Frames
+			pose		= e.Armature.new_pose(),			// Pose Container
+			mat 		= new Mat4(),						// Temp Mat4 to compute offset matrix
+			bind 		= new Mat4(),
+			data 		= new Float32Array( float_cnt );	// Pixel data as one big float array
+
+		for( i=0; i < frame_cnt; i++ ){
+			animator.key_frame( i, anim, pose );	// Generate Pose
+			pose.update_world();					// Update World Space
+
+			ii = i * 16;							// X-Coord, How many columns offset to save data
+
+			for( j=0; j < pixel_h; j++ ){
+				b	= bones[ j ];	// Bone Component, Need BindPose Matrix
+				p	= pose.bones[ j ];		// Pose Bone
+				jj	= ii + j * row_cnt;		// Index to save Offset Matrix
+
+
+				bind.from_quat_tran_scale( b.world.rot, b.world.pos, b.world.scl )
+					.invert();
+
+				// World Space Transform to Matrix, Get Offset by mul Bind Pose
+				mat	.from_quat_tran_scale( p.world.rot, p.world.pos, p.world.scl )
+					.mul( bind );
+
+				// Save Matrix to Texture Buffer
+				data[ jj+0 ]	= mat[ 0 ];
+				data[ jj+1 ]	= mat[ 1 ];
+				data[ jj+2 ]	= mat[ 2 ];
+				data[ jj+3 ]	= mat[ 3 ];
+				data[ jj+4 ]	= mat[ 4 ];
+				data[ jj+5 ]	= mat[ 5 ];
+				data[ jj+6 ]	= mat[ 6 ];
+				data[ jj+7 ]	= mat[ 7 ];
+				data[ jj+8 ]	= mat[ 8 ];
+				data[ jj+9 ]	= mat[ 9 ];
+				data[ jj+10 ]	= mat[ 10 ];
+				data[ jj+11 ]	= mat[ 11 ];
+				data[ jj+12 ]	= mat[ 12 ];
+				data[ jj+13 ]	= mat[ 13 ];
+				data[ jj+14 ]	= mat[ 14 ];
+				data[ jj+15 ]	= mat[ 15 ];
+			}
+		}
+
+		return { w: pixel_w, h: pixel_h, data };
+	}
+
 //#########################################################
 
-function init_source( json, bin ){
-	let mat		= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } ),
-		e		= GltfUtil.get_debug_view( "src_entity", json, bin, mat ),
-		rig 	= e.add_com( "IKRig" ).init( null, true ); // Need Offsets Applied
-	//e.Obj.set_pos( -0.5, 0, 0 );
-	return e;
+/*
+   If you got nothing, check console to see if you have this extension
+   If not: use Uint8Array instead of Float32Array and THREE.UnsignedByteType istead of 
+   THREE.FloatType in texture constructor
+var dataTex = new THREE.DataTexture(data, side, side, THREE.LuminanceFormat, THREE.UnsignedByteType);
+console.log(dataTex);
+  In order to use the types THREE.FloatType and THREE.HalfFloatType, the WebGL implementation must support the respective extensions OES_texture_float and OES_texture_half_float.
+  https://threejs.org/docs/index.html#Reference/Textures/DataTexture
+  https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Using_Extensions
+
+dataTex.magFilter = THREE.NearestFilter; // also check out THREE.LinearFilter just to see the results
+dataTex.needsUpdate = true; // somehow this line is required for this demo to work. I have not figured that out yet. 
+
+*/
+
+function phong_material(){
+	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } )
+	return mat;
 }
+// https://stackoverflow.com/questions/49060488/how-to-create-custom-shaders-using-three-shaderlib
+// https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_vert.glsl.js
+const PHONG_VERTEX_TMPL = `#version 300 es
+#define PHONG
 
-function init_target( json, bin ){
-	let mat		= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } ),
-		e		= GltfUtil.get_debug_view( "tgt_entity", json, bin, mat ),
-		tpose	= GltfUtil.get_pose( e, json, "tpose", true ),
-		rig 	= e.add_com( "IKRig" ).init( tpose, false );
-	tpose.apply();
-	e.Obj.set_pos( 1.0, 0, 0 );
-	return e;
-}
+uniform sampler2D skin_tex;
 
-function test_build_animation( rig ){
-	let anim		= gSession.build(),		// Retarget animation and save to new object
-		animator	= new PoseAnimator(),
-		f 			= 0;
+varying vec3 vViewPosition;
 
-	return ( dt )=>{
-		animator.tick( dt ).update( anim, rig.pose );	// Run Animation
+#ifndef FLAT_SHADED
 
-		//f += dt;
-		//animator.key_frame( Math.round( f ), anim, rig.pose ); // Test Frames Only
+	varying vec3 vNormal;
 
-		rig.apply_pose();
+#endif
+
+	mat4x4 get_m4_tex( sampler2D tex, int x, int y ){
+		return mat4x4( 
+			texelFetch( tex, ivec2( x, y ), 0 ), 
+			texelFetch( tex, ivec2( x+1, y ), 0 ),
+			texelFetch( tex, ivec2( x+2, y ), 0 ),
+			texelFetch( tex, ivec2( x+3, y ), 0 )
+		);
 	}
-}
+
+	vec3 mtx_bone_transform( vec3 pos, vec4 b_idx, vec4 b_wgt, int x ){
+		/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		NORMALIZE BONE WEIGHT VECTOR */
+		ivec4 i = ivec4( b_idx );
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT
+		mat4x4 wgt_mtx = 
+			get_m4_tex( skin_tex, x, i.x ) * b_wgt.x +
+			get_m4_tex( skin_tex, x, i.y ) * b_wgt.y +
+			get_m4_tex( skin_tex, x, i.z ) * b_wgt.z +
+			get_m4_tex( skin_tex, x, i.w ) * b_wgt.w;
+
+		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
+	}
+
+
+#include <common>
+#include <uv_pars_vertex>
+#include <uv2_pars_vertex>
+#include <displacementmap_pars_vertex>
+#include <envmap_pars_vertex>
+#include <color_pars_vertex>
+#include <fog_pars_vertex>
+#include <morphtarget_pars_vertex>
+#include <skinning_pars_vertex>
+#include <shadowmap_pars_vertex>
+#include <logdepthbuf_pars_vertex>
+#include <clipping_planes_pars_vertex>
+
+void main() {
+
+	#include <uv_vertex>
+	#include <uv2_vertex>
+	#include <color_vertex>
+
+	#include <beginnormal_vertex>
+	#include <morphnormal_vertex>
+	#include <skinbase_vertex>
+	#include <skinnormal_vertex>
+	#include <defaultnormal_vertex>
+
+#ifndef FLAT_SHADED // Normal computed with derivatives when FLAT_SHADED
+
+	vNormal = normalize( transformedNormal );
+
+#endif
+
+	#include <begin_vertex>
+	#include <morphtarget_vertex>
+
+	//#include <skinning_vertex>
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	const float frame_cnt = 32.0;
+	const float anim_time = 1.0333333015441895;
+
+	float time	= mod( 1.0, anim_time );
+	float ntime	= time / anim_time;
+	float frame	= frame_cnt * ntime;
+	int pixel_x	= int( floor( frame ) ) * 4; 		// 4 Pixels per Mat4x4
+	transformed = mtx_bone_transform( transformed, skinIndex, skinWeight, pixel_x );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+	#include <displacementmap_vertex>
+	#include <project_vertex>
+	#include <logdepthbuf_vertex>
+	#include <clipping_planes_vertex>
+
+	vViewPosition = - mvPosition.xyz;
+
+	#include <worldpos_vertex>
+	#include <envmap_vertex>
+	#include <shadowmap_vertex>
+	#include <fog_vertex>
+
+}`;
 
 </script><page-layout></page-layout>
