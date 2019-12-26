@@ -9,23 +9,26 @@ import PoseAnimator			from "../../fungi.armature/PoseAnimator.js";
 import RetargetAnimation	from "../../fungi.armature/RetargetAnimation.js";
 import IKRig 				from "../../fungi.armature/IKRig.js";
 
-// https://medium.com/@pailhead011/extending-three-js-materials-with-glsl-78ea7bbb9270
-// https://github.com/mrdoob/three.js/blob/dev/examples/webgl_buffergeometry_instancing_lambert.html  COPY existing Shader
-// https://github.com/mrdoob/three.js/tree/master/src/renderers/shaders/ShaderChunk
-// https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_vert.glsl.js
-// https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_frag.glsl.js
-
 //#####################################################
 App.builder()
 	.init_mod( "./com/Armature.js" )
-	.set_camera( 0, 0, 2.5, 0, 0.85, 0 )
+	.set_camera( 40, 0, 2.5, 0, 0.85, 0 )
 	.add( init )
-	//.render_loop()
-	.render_on_mouse()
+	.render_loop( on_draw )
+	//.render_on_mouse()
 	.build();
 
 
 //#####################################################
+let gShader = null;
+
+function on_draw( dt, ss ){
+	// VERY HACKY - The Way Materials/Shaders are designed doesn't support
+	// an easier way modify uniforms of a shader.
+	if( gShader ){ 
+		gShader.uniforms.frame_time.value = ss;
+	}
+}
 
 async function init(){
 	let dl = await XhrPromise.get( 
@@ -34,25 +37,23 @@ async function init(){
 	);
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//load_shader();																// Load Custom Shader
-	//let mat 	= SHADER.new_material( "skin_tex" );							// Create a Material from it
-	let mat 	= phong_material();
+	let mat 	= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } )
 	let e 		= GltfUtil.get_skin_mesh( "char", dl[0], dl[1], mat );			// Load Mesh + Armature from File
-
 	let anim	= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );	// Load Animation From File.
-
 	let info 	= animation_to_texture( e, anim );								// Convert Animation to a Data Texture
 	let tex 	= new_data_texture( info.w, info.h, info.data );				// Pass Data to GPU
 
-	mat.onBeforeCompile = (sh)=>{ 
+	// VERY HACKY - Makes a very sad VoR :(
+	mat.onBeforeCompile = (sh)=>{ 	
 		sh.vertexShader			= PHONG_VERTEX_TMPL;
 		sh.uniforms.skin_tex	= { value: tex };
+		sh.uniforms.frame_time	= { value: 0.0 };
+		gShader = sh;
 	};
 
-	//mat.set_uniform( "skin_tex", tex );										// Set Texture to Material
-
-	let arm = e.Armature, tm = THREE.Math;
-	arm.get_bone( "LeftUpLeg" ).rotation.x = tm.degToRad( 120 );
+	// Test Skinning
+	//let arm = e.Armature;
+	//arm.get_bone( "LeftUpLeg" ).rotation.x = THREE.Math.degToRad( 120 );
 
 	return true;
 }
@@ -66,6 +67,7 @@ async function init(){
 		tex.magFilter	= THREE.NearestFilter;
 		tex.needsUpdate	= true;
 		/*
+		Fungi Example of Creating a Data Texture as reference.
 		let gl	= App.gl, 
 			tex	= gl.ctx.createTexture();
 		
@@ -112,7 +114,7 @@ async function init(){
 			ii = i * 16;							// X-Coord, How many columns offset to save data
 
 			for( j=0; j < pixel_h; j++ ){
-				b	= bones[ j ];	// Bone Component, Need BindPose Matrix
+				b	= bones[ j ];			// Bone Component, Need BindPose Matrix
 				p	= pose.bones[ j ];		// Pose Bone
 				jj	= ii + j * row_cnt;		// Index to save Offset Matrix
 
@@ -148,32 +150,15 @@ async function init(){
 	}
 
 //#########################################################
+// CUSTOMIZE PHONG MATERIAL TO HANDLE ANIMATION TIME AND DATA TEXTURE
 
-/*
-   If you got nothing, check console to see if you have this extension
-   If not: use Uint8Array instead of Float32Array and THREE.UnsignedByteType istead of 
-   THREE.FloatType in texture constructor
-var dataTex = new THREE.DataTexture(data, side, side, THREE.LuminanceFormat, THREE.UnsignedByteType);
-console.log(dataTex);
-  In order to use the types THREE.FloatType and THREE.HalfFloatType, the WebGL implementation must support the respective extensions OES_texture_float and OES_texture_half_float.
-  https://threejs.org/docs/index.html#Reference/Textures/DataTexture
-  https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Using_Extensions
-
-dataTex.magFilter = THREE.NearestFilter; // also check out THREE.LinearFilter just to see the results
-dataTex.needsUpdate = true; // somehow this line is required for this demo to work. I have not figured that out yet. 
-
-*/
-
-function phong_material(){
-	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } )
-	return mat;
-}
 // https://stackoverflow.com/questions/49060488/how-to-create-custom-shaders-using-three-shaderlib
 // https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_vert.glsl.js
-const PHONG_VERTEX_TMPL = `#version 300 es
+const PHONG_VERTEX_TMPL = `
 #define PHONG
 
 uniform sampler2D skin_tex;
+uniform float frame_time;
 
 varying vec3 vViewPosition;
 
@@ -182,6 +167,8 @@ varying vec3 vViewPosition;
 	varying vec3 vNormal;
 
 #endif
+	
+	//-----------------------
 
 	mat4x4 get_m4_tex( sampler2D tex, int x, int y ){
 		return mat4x4( 
@@ -209,6 +196,7 @@ varying vec3 vViewPosition;
 		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
 	}
 
+	//-----------------------
 
 #include <common>
 #include <uv_pars_vertex>
@@ -244,15 +232,16 @@ void main() {
 	#include <begin_vertex>
 	#include <morphtarget_vertex>
 
+
 	//#include <skinning_vertex>
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	const float frame_cnt = 32.0;
-	const float anim_time = 1.0333333015441895;
+	const float frame_cnt = 32.0;				// Hardcoded Frame Count of Animation
+	const float anim_time = 1.0333333015441895;	// Hardcoded Length of Animation
 
-	float time	= mod( 1.0, anim_time );
-	float ntime	= time / anim_time;
-	float frame	= frame_cnt * ntime;
-	int pixel_x	= int( floor( frame ) ) * 4; 		// 4 Pixels per Mat4x4
+	float time	= mod( frame_time, anim_time );	// Loop Time
+	float ntime	= time / anim_time;				// Normalize Time
+	float frame	= frame_cnt * ntime;			// Get Current Frame
+	int pixel_x	= int( floor( frame ) ) * 4; 	// Frame X Position for Data Texture, 4 Pixels per Mat4x4
 	transformed = mtx_bone_transform( transformed, skinIndex, skinWeight, pixel_x );
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
