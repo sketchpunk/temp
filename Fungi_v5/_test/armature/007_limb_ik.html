@@ -1,0 +1,59 @@
+<!DOCTYPE html><script type="module">
+import App			from "../../fungi/App.js";
+import VecBuffer	from "../../fungi/data/VecBuffer.js";
+import { Chain }	from "../../fungi.armature/IKRig.js";
+import IKTarget 	from "../../fungi.armature/IKTarget.js";
+
+//#####################################################
+
+App.builder( true )
+	.use_armature()
+	.set_camera( 0, 0, 2, 0, 0.2, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Build Skeleton
+	
+	let e 	= App.$Draw( "Test" ),
+		arm	= e.add_com( "Armature" ),
+		b0	= arm.add_bone( "b0", 0.4, null ),
+		b1	= arm.add_bone( "b1", 0.4, b0.Bone.index ),
+		b2	= arm.add_bone( "b2", 0.4, b1.Bone.index );
+
+	arm.finalize();
+
+	e.add_com( "BoneView" ).init();		// Add Bone Preview
+	e.Node.set_pos( 0.1, 0.1, -0.1 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	let tpose	= arm.new_pose(),
+		pose	= arm.new_pose(),
+		chain	= new Chain()
+		.add_bone( 0, arm.bones[0].len )
+		.add_bone( 1, arm.bones[1].len )
+		.add_bone( 2, arm.bones[2].len );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	let p_wt	= e.Node.get_world_transform(),
+		tar		= new IKTarget();
+
+	tar.from_pos( p_wt.pos, [0.6,0.6,0], [0,0.5,0.5] );
+	tar.debug( App.Debug );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	// tar.aim( chain, tpose, pose, p_wt );
+	// tar.limb( chain, tpose, pose, p_wt );
+	tar.three_bone( chain, tpose, pose, p_wt );
+	pose.apply();
+
+	return true;
+}
+</script><page-layout></page-layout>

@@ -78,6 +78,36 @@ class Mesh{
 			return m;
 		}
 
+		static from_data_vert4( name, vert, idx=null, norm=null ){
+			let m 	= new Mesh( name ),
+				vao = new Vao().bind();
+
+			m.buf.vert = Buf.new_array( vert, 4, true, false );
+			vao.add_buf( m.buf.vert, Shader.POS_LOC );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			
+			if( idx ){
+				m.buf.idx = Buf.new_element( idx, true, false );
+				vao.add_indices( m.buf.idx );
+			}
+
+			if( norm ){
+				m.buf.norm = Buf.new_array( norm, 3, true, false );
+				vao.add_buf( m.buf.norm, Shader.NORM_LOC );
+			}
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			Vao.unbind();
+			Buf.unbind_array();
+			if( idx ) Buf.unbind_element();
+
+			m.elm_cnt	= ( idx )? idx.length : vert.length / 4;
+			m.vao		= vao;
+
+			return m;
+		}
+
 		static from_bin( name, json, bin, load_skin=false ){
 			let m 	= new Mesh( name ),
 				vao = new Vao().bind(),

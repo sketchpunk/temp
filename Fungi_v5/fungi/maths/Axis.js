@@ -152,15 +152,6 @@ class Axis{
 	////////////////////////////////////////////////////////////////////
 	// STATIC
 	////////////////////////////////////////////////////////////////////
-		
-		static debug( o, axis, origin=null, scl=1.0 ){
-			origin = origin || Vec3.ZERO;
-
-			var v = new Vec3();
-			o.line( origin, v.from_scale( axis.z, scl ).add( origin ), 1 );
-			o.line( origin, v.from_scale( axis.y, scl ).add( origin ), 2 );
-			o.line( origin, v.from_scale( axis.x, scl ).add( origin ), 0 );
-		}
 }
 
 

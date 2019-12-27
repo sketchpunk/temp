@@ -153,6 +153,23 @@ class Node{
 			out[2] = z * len * scale;
 			return out;
 		}
+
+		get_world_transform( tf=null ){
+			tf = tf || new Transform();
+			tf.copy( this.local );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			if( this.parent != null ){ 
+				// Parents Exist, loop till reaching the root
+				let n = this.parent.Node;
+				while( n.parent != null ){
+					n = n.parent.Node;
+					tf.add_rev( n.local );
+				}
+			}
+			return tf;
+		}
+
 		/*
 
 		get_world_rot( out = null, incChild=true ){

@@ -56,7 +56,7 @@ class Pose{
 
 		//get_index( bname ){ return this.arm.names[ bname ]; }
 		//get_bone( bname ){ return this.bones[ this.arm.name_map[ bname ] ]; }
-		//get_local_rot( idx ){ return this.bones[ idx ].local.rot; }
+		get_local_rot( idx ){ return this.bones[ idx ].local.rot; }
 
 	/////////////////////////////////////////////////////////////////
 	// Methods
@@ -72,8 +72,9 @@ class Pose{
 			return this;
 		}
 
-		get_parent_world( b_idx, pt, ct=null, t_offset=null ){
+		get_parent_world( b_idx, pt=null, ct=null, t_offset=null ){
 			let cbone = this.bones[ b_idx ];
+			pt = pt || new Transform();
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
