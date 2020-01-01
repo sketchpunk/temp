@@ -78,7 +78,7 @@ function align_chain( pose, dir, b_names ){
 	}
 }
 
-
+// Spins Bone Forward
 function align_foot_forward( pose, foot ){
 	let pt	= new Transform(),
 		ct	= new Transform(),
@@ -86,7 +86,7 @@ function align_foot_forward( pose, foot ){
 		q	= new Quat(),
 		b	= pose.get_bone( foot );
 
-	pose.get_parent_world( b.idx, pt, ct );	// Get the Parent and Child Transforms. e.Armature,
+	pose.get_parent_world( b.idx, pt, ct );		// Get the Parent and Child Transforms. e.Armature,
 	
 	ct.transform_vec( [0,b.len,0], v );			// Get the Tails of the Bone
 	v.sub( ct.pos );							// Get The direction to the tail
@@ -97,6 +97,100 @@ function align_foot_forward( pose, foot ){
 		.pmul_invert( pt.rot );					// To Local Space
 	pose.set_bone( b.idx, q );					// Save to Pose
 }
+
+
+/*
+set_foot( f, name, spin_fwd=false, find_up=false, align_fwd=false ){
+			let o = ( f==0 )? this.foot_l : this.foot_r;
+			o.idx = this.bind_pose.get_index( name );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			let pt, ct, b, q, v, rot;
+			if( spin_fwd || find_up || align_fwd ){
+				pt	= new Transform();
+				ct	= new Transform();
+				b	= this.bind_pose.bones[ o.idx ];
+				q 	= new Quat();
+				//rot = new Quat();
+				v 	= new Vec3();
+
+				Pose.parent_world( this.bind_pose, o.idx, pt, ct );
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Spin forward
+			if( spin_fwd ){
+				v.from_quat( ct.rot, Vec3.UP );
+				v[1] = 0;
+
+				if( Math.abs( Vec3.dot( v, Vec3.LEFT ) ) < 1e2 ){
+					q.from_unit_vecs( v, Vec3.FORWARD );
+					ct.rot.pmul( q );
+				}
+				
+				//let pt	= new Transform(),
+				//	ct	= new Transform(),
+				//	v	= new Vec3(),
+				//	q	= new Quat(),
+				//	b	= pose.get_bone( foot );
+
+				//Pose.parent_world( pose, b.idx, pt, ct );	// Get the Parent and Child Transforms. e.Armature,
+				
+				//ct.transform_vec( [0,b.len,0], v );			// Get the Tails of the Bone
+				//v.sub( ct.pos );							// Get The direction to the tail
+				//v[1] = 0;									// Flatten vector to 2D by removing Y Position
+				//v.norm();									// Make it a unit vector
+				//q	.from_unit_vecs( v, Vec3.FORWARD )		// Rotation needed to point the foot forward.
+				//	.mul( ct.rot )							// Move WS Foot to point forward
+				//	.pmul( pt.rot.invert() );				// To Local Space
+				//pose.set_bone( b.idx, q );		// Save to Pose
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Find Foot's Up direction that will look forward when transformed by the bind rotation.
+			if( find_up ){
+				v.from_quat( ct.rot, Vec3.UP );			// Get Current Direction
+				q.from_unit_vecs( Vec3.FORWARD, v );	// Difference between Forward and Dir
+				o.up.from_quat( q, Vec3.UP );			// UP offset to form Forward
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			if( align_fwd ){
+				v.from_quat( ct.rot, o.up );
+				ct.rot.pmul( q.from_unit_vecs( v, Vec3.FORWARD ) );
+
+				//App.debug.line( ct.pos, Vec3.add( ct.pos, v ) );
+				//App.debug.line( ct.pos, Vec3.add( ct.pos, Vec3.FORWARD ) );
+
+				//let b = gRigB.bind_pose.get_bone("LeftFoot");
+				//let p = gRigB.bind_pose.bones[ b.p_idx ];
+				//let v = Vec3.transform_quat( Vec3.UP, b.world.rot );
+				//let q = Quat.unit_vecs( v, Vec3.FORWARD )
+				//		.mul( b.world.rot )
+				//		.pmul_invert( p.world.rot );
+
+				//gRigB.bind_pose.set_bone( b.idx, q );
+				//b.world
+				//	.copy( p.world )
+				//	.add( q, b.local.pos, b.local.scl );
+
+				//gRigB.bind_pose.apply();
+
+
+
+				//App.debug.point( b.world.pos );
+				//App.debug.line( b.world.pos, Vec3.add( b.world.pos, v ) );
+				//App.debug.line( b.world.pos, Vec3.add( b.world.pos, Vec3.FORWARD ), 1 );
+			}
+
+
+			if( spin_fwd || find_up || align_fwd ){
+				q.copy( ct.rot ).pmul_invert( pt.rot );
+				this.bind_pose.set_bone( b.idx, q );
+			}
+			return this;
+		}
+*/
 
 
 export default TPose;

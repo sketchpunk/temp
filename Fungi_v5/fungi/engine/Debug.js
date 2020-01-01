@@ -8,7 +8,9 @@ class Debug{
 		this.eLn	= Lines.$( "debug_ln" );
 
 		this.ePnt.Draw.priority	= 1001;
+		this.ePnt.Draw.items[0].material.options.depthTest = false;
 		this.eLn.Draw.priority	= 1000;
+		this.eLn.Draw.items[0].material.options.depthTest = false;
 
 		this.Pnt 	= this.ePnt.Points;
 		this.Ln 	= this.eLn.Lines;

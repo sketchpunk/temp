@@ -66,6 +66,16 @@ class IKRig{
 			this.chains[ name ] = ch;
 			return this;
 		}
+
+	/////////////////////////////////////////////////
+	// MANAGE RIG DATA
+	/////////////////////////////////////////////////
+
+		first_bone( ch_name ){
+			let idx = this.chains[ ch_name ].bones[ 0 ].idx;
+			return this.pose.bones[ idx ];
+		}
+
 } App.Components.reg( IKRig ); //This will not work well for 3JS, need to Reg Comp Differently.
 
 

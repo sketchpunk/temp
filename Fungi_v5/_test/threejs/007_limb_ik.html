@@ -1,0 +1,67 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} 	from "../../fungi.3js/App.js";
+import GltfUtil, {Gltf} from "../../fungi.3js/lib/GltfUtil.js";
+
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import Transform		from "../../fungi/maths/Transform.js";
+import IKRig 			from "../../fungi.armature/IKRig.js";
+import IKTarget 		from "../../fungi.armature/IKTarget.js";
+
+//#####################################################
+App.builder()
+	.init_mod( "./com/Armature.js" )
+	.set_camera( -20, 10, 2.5, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	let mat 	= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
+	let e 		= GltfUtil.get_debug_view( "Test", dl[0], dl[1], mat );
+	let tpose	= GltfUtil.get_pose( e, dl[0], "tpose", true );
+	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+	//tpose.apply();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Do some IK on the Limbs.
+	
+	ik( rig, "arm_l", [ 0.32, 0.95 ,-0.1 ], [0,0,-1] );
+	ik( rig, "arm_r", [ -0.35, 0.9 ,0.1 ], [0,0,-1] );
+
+	ik( rig, "leg_l", [ 0.1, 0.5 ,0.1 ], [0.15,0,0.85] );
+	ik( rig, "leg_r", [ -0.1, 0.15 ,0.0 ], [0,0,1] );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	rig.apply_pose();
+
+	return true;
+}
+
+// Apply IK to a Chain of an IKRig
+function ik( rig, ch_name, pos, dir ){
+	let b		= rig.first_bone( ch_name );			// Get First Pose Bone of Chain
+	let c_wt 	= new Transform();						// Compute First Bone plus its parent World Transform
+	let p_wt	= new Transform();
+	rig.tpose.get_parent_world( b.idx, p_wt, c_wt );	// Use TPose for World Transforms
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	let tar = new IKTarget();							// Setup IK Target Data based on Start+End Positions
+	tar.from_pos( c_wt.pos, pos, dir );					
+	//tar.debug( App.Debug, 0.1 );						// Visualize Data
+	
+	let ch = rig.chains[ ch_name ];
+	tar.limb( ch, rig.tpose, rig.pose, p_wt );			// Run Solver on Chain
+}
+
+</script><page-layout></page-layout>

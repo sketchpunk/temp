@@ -1,6 +1,7 @@
 <!DOCTYPE html><script type="module">
 import App			from "../../fungi/App.js";
 import VecBuffer	from "../../fungi/data/VecBuffer.js";
+import Transform	from "../../fungi/maths/Transform.js";
 import { Chain }	from "../../fungi.armature/IKRig.js";
 import IKTarget 	from "../../fungi.armature/IKTarget.js";
 
@@ -8,14 +9,24 @@ import IKTarget 	from "../../fungi.armature/IKTarget.js";
 
 App.builder( true )
 	.use_armature()
-	.set_camera( 0, 0, 2, 0, 0.2, 0 )
+	.set_camera( 0, 0, 2.5, 0, 0.7, 0 )
 	.add( init )
 	.render_on_mouse()
 	.build();
 
 //#####################################################
 
-function init(){
+async function init(){
+	
+	//raw_bone_test();
+	await mesh_test();
+
+	return true;
+}
+
+//#####################################################
+
+function raw_bone_test(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Build Skeleton
 	
@@ -53,7 +64,65 @@ function init(){
 	// tar.limb( chain, tpose, pose, p_wt );
 	tar.three_bone( chain, tpose, pose, p_wt );
 	pose.apply();
+}
 
-	return true;
+async function mesh_test(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Dynamic Load Modules
+	
+	let ary = await Promise.all([
+		import("../../fungi/lib/XhrPromise.js"),
+		import("../../fungi/lib/GltfUtil.js"),
+		import("../../fungi.armature/IKRig.js"),
+		import("../../fungi.armature/LowPolySkin.js"),
+	]);
+	let XhrPromise	= ary[0].default;
+	let GltfUtil	= ary[1].default;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Download and setup Mesh With IKRig
+	
+	let dl = await XhrPromise.get( 
+		"../../files/models/vegeta.gltf", "json", 
+		"../../files/models/vegeta.bin", "arraybuffer",
+	);
+
+	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	let e		= GltfUtil.get_debug_view( "entity", dl[0], dl[1], mat );
+	//let e		= GltfUtil.get_bone_view( "entity", dl[0], dl[1] );
+	let tpose	= GltfUtil.get_pose( e, dl[0], "tpose", true );
+	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+	tpose.apply();
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Do some IK on the Limbs.
+	
+	ik( rig, "arm_l", [ 0.32, 0.95 ,-0.1 ], [0,0,-1] );
+	ik( rig, "arm_r", [ -0.35, 0.9 ,0.1 ], [0,0,-1] );
+
+	ik( rig, "leg_l", [ 0.1, 0.5 ,0.1 ], [0.15,0,0.85] );
+	ik( rig, "leg_r", [ -0.1, 0.15 ,0.0 ], [0,0,1] );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	rig.apply_pose();
+}
+
+// Apply IK to a Chain of an IKRig
+function ik( rig, ch_name, pos, dir ){
+	let b		= rig.first_bone( ch_name );			// Get First Pose Bone of Chain
+	let c_wt 	= new Transform();						// Compute First Bone plus its parent World Transform
+	let p_wt	= new Transform();
+	rig.tpose.get_parent_world( b.idx, p_wt, c_wt );	// Use TPose for World Transforms
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	let tar = new IKTarget();							// Setup IK Target Data based on Start+End Positions
+	tar.from_pos( c_wt.pos, pos, dir );					
+	tar.debug( App.Debug, 0.1 );						// Visualize Data
+	
+	let ch = rig.chains[ ch_name ];
+	tar.limb( ch, rig.tpose, rig.pose, p_wt );			// Run Solver on Chain
 }
 </script><page-layout></page-layout>

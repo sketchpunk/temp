@@ -1,15 +1,29 @@
 <!DOCTYPE html><script type="module">
 import App		from "../../fungi/App.js";
+import Ray		from "../../fungi.ray/Ray.js";
+import { Vec3 } from "../../fungi/maths/Maths.js";
+
 
 //#####################################################
 App.builder( true )
 	.set_camera( 0, 20, 4, 0, 0.75, 0 )
 	.add( init )
-	.render_on_mouse()
+	.render_on_mouse( on_draw )
 	.build();
 
+
 //#####################################################
+
+function on_draw( dt, ss ){
+	gizmo_camera_adjust( eGizmo, App.camera );
+}
+
+let eGizmo;
 function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 	init_shader();
 	let mat = SHADER.new_material();
 	let ary = prepare_geo();
@@ -18,9 +32,12 @@ function init(){
 	e.Draw.add( ary[0].mesh, mat, ary[0].draw_mode );
 	e.Draw.add( ary[1].mesh, mat, ary[1].draw_mode );
 
+	eGizmo = e;
+
 	return true;
 }
 
+//-----------------------------------------------
 
 function prepare_geo(){
 	let w, u, vert, idx, ary = [];
@@ -98,6 +115,8 @@ function prepare_geo(){
 	return ary;
 }
 
+//-----------------------------------------------
+
 let SHADER;
 function init_shader(){
 	SHADER = App.Shader.from_src( "LineDash", v_src, f_src )
@@ -132,6 +151,7 @@ let v_src = `#version 300 es
 	const float CAM_SCL	= 1.0 / 8.0;
 	
 	void main(void){
+		/*
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Based on angle of view, mirror flip the gizmo
 		vec3 m_pos		= vec3( model.view_matrix[0][3], model.view_matrix[1][3], model.view_matrix[2][3] );
@@ -149,13 +169,14 @@ let v_src = `#version 300 es
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 		vec4 w_pos	= vec4( a_pos.xyz * scl, 1.0 );
+		*/
+
+		vec4 w_pos	= vec4( a_pos.xyz, 1.0 );
 		frag_color 	= color_ary[ int(a_pos.w) ];
 
 		gl_Position	= global.proj_view * model.view_matrix * w_pos;
 	}`;
 
-
-//-----------------------------------------------
 let f_src = `#version 300 es
 	precision mediump float;
 
@@ -166,6 +187,105 @@ let f_src = `#version 300 es
 		out_color = vec4( frag_color, 1.0);
 	}`;
 
+//-----------------------------------------------
+
+//#############################################################################
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	let pos = App.input.toCoord( e );
+
+	gRay.set_screen_mouse( pos[0], pos[1] );
+
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	ray_to_axis( gRay, eGizmo.Node.local );
+
+	console.log( gRay );
+}
+
+const CAMERA_SCALE	= 8;
+const MIN_ADJUST	= -0.02;
+function gizmo_camera_adjust( e, cam ){
+	let eye_dir	= Vec3.sub( cam.Node.local.pos, e.Node.local.pos ),
+		eye_len = eye_dir.len(),
+		scl 	= e.Node.local.scl;
+
+	eye_dir.norm();
+	scl.set( 1, 1, 1 ).scale( eye_len / CAMERA_SCALE );
+
+	if( Vec3.dot( eye_dir, Vec3.LEFT )		< MIN_ADJUST )	scl.x *= -1;
+	if( Vec3.dot( eye_dir, Vec3.FORWARD )	< MIN_ADJUST )	scl.z *= -1;
+	if( Vec3.dot( eye_dir, Vec3.UP )		< MIN_ADJUST )	scl.y *= -1;
+	
+	e.Node.updated = true;
+}
+
+
+const AXIS_MIN_RNG	= 0.001;
+const UNIT_AXIS		= [ Vec3.FORWARD, Vec3.LEFT, Vec3.UP ];
+
+function ray_to_axis( ray, wt ){
+	let p			= new Vec3(),
+		min_len		= Infinity,
+		min_axis	= -1,
+		len, pnt, i;
+
+	for( i=0; i < 3; i++ ){
+		p.from_mul( UNIT_AXIS[ i ], wt.scl ).add( wt.pos );
+
+		pnt = ray.near_segment( wt.pos, p );
+		if( pnt ){
+			len = Vec3.len_sqr( pnt[0], pnt[1] );
+
+			if( len <= AXIS_MIN_RNG && len < min_len ){
+				min_len		= len;
+				min_axis	= i;
+
+				App.Debug
+					.pnt( pnt[0], "green" )
+					.pnt( pnt[1], "red" );
+				console.log( len, UNIT_AXIS[ i ] );
+			}
+			
+		}
+	}
+}
+
+/*
+
+
+		static rayToAxisSegments( ray, wt ){
+			let p 		= new Vec3(),
+				minLen	= Infinity,
+				minAxis	= -1,
+				i, info, len;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			for( i=0; i < 3; i++ ){
+				// Get Axis End Point at World Space Scale.
+				// Axis gets Camera Adjusted, so by taking the scale of a unit axis works.
+				Vec3.mul( UNIT_AXIS[ i ], wt.scl, p ).add( wt.pos );
+
+				// Get the closest two points between the ray and the axis line
+				info = Ray.nearSegmentPoints( ray, wt.pos, p );
+				if( info != null ){
+					len = info[0].len_sqr( info[1] );
+					if( len <= AXIS_MIN_RNG && len < minLen ){
+						minLen	= len;
+						minAxis	= i;
+					}
+				}
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			return minAxis;
+		}
+
+
+*/
 
 
 /*
