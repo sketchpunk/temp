@@ -9,3 +9,9 @@ https://github.com/jforjustin/ProcSky
 https://ebruneton.github.io/precomputed_atmospheric_scattering/ WebGL example
 
 https://github.com/spacejack/terra grass terrain + skydome, VERY VERY COOL
+
+VERY AWSOME Way to bring down meshes into movable Voxels
+https://www.gamasutra.com/blogs/PhiDinh/20180523/318444/Game_Design_Deep_Dive_Rendering_the_player_as_a_form_of_pure_energy_in_Recompile.php
+
+Lots of amazing Tutorials
+https://twitter.com/i/events/1122251136239570947

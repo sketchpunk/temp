@@ -5,10 +5,10 @@ import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 import TPose 			from "../../fungi.armature/TPose.js";
 
 //#####################################################
-App.builder( true )
+App.builder( true, false )
 	.use_armature()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
-	.set_camera( 0, 0, 2.2, 0, 0.75, 0 )
+	.set_camera( 0, 0, 3.2, 0, 0.65, 0 )
 	.add( init )
 	.render_on_mouse()
 	.build();
@@ -35,19 +35,22 @@ async function init(){
 		.align_leg( ["RightUpLeg", "RightKnee", "RightShin"] )
 		//.align_arm_left( ["LeftArm", "LeftForeArm"] )
 		//.align_arm_right( ["RightArm", "RightForeArm"] )
-		//.align_foot( "LeftFoot" )
-		//.align_foot( "RightFoot" )
+		.align_foot( "LeftFoot" )
+		.align_foot( "RightFoot" )
+		//.spin_bone_forward( "LeftFoot" )
+		//.spin_bone_forward( "RightFoot" )
+		//.align_bone_forward( "LeftFoot" )
+		//.align_bone_forward( "RightFoot" )
 		.build();
 
 	
 
 	tpose.apply();
-	e.Node.set_pos(0, 0.5, 0);
+	//e.Node.set_pos(0, 0.5, 0);
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-	//console.log( GltfUtil.serialize_pose( "tpose", 0, tpose ) );
-	
+	console.log( GltfUtil.serialize_pose( "tpose", 0, tpose ) );
 	return true;
 }
 
