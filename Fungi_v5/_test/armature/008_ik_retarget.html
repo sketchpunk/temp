@@ -22,7 +22,7 @@ App.builder( true )
 
 //#####################################################
 
-let gAnimate;
+let gAnimate, gEntitySrc;
 function on_draw( dt, ss ){
 	gAnimate( dt );
 }
@@ -42,22 +42,28 @@ async function init(){
 	//load_mesh_a( dl[2], dl[3] );
 	//load_mesh_b( dl[4], dl[5] );
 
-	gAnimate( 0 );
+	gAnimate( 0.2 );
 
+	complete_ik_pose( gEntitySrc, null );
 	return true;
 }
 
 //#####################################################
 
 function load_src( json, bin ){	
+	//let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	//let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
+
 	let e		= GltfUtil.get_bone_view( "src", json, bin );
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
-	let pose	= e.Armature.new_pose();
 	let pm		= new PoseAnimator();
+	let rig 	= e.add_com( "IKRig" ).init( null, true, IKRig.ARM_MIXAMO );
+
+	gEntitySrc  = e;
 
 	return ( dt )=>{
-		pm.tick( dt ).update( anim, pose );
-		pose.apply();
+		pm.tick( dt ).update( anim, rig.pose );
+		rig.apply_pose();
 	}
 }
 
@@ -83,7 +89,76 @@ function load_mesh_b( json, bin ){
 	e.Node.set_pos( -1.5, 0, 0 );
 }
 
-
 //#####################################################
+
+import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
+
+class IKPose{
+	constructor(){
+		this.hip = {
+			bind_height	: 0, // Use to help Scale movement.
+			pos 		: new Vec3(),
+			dir			: new Vec3(),
+			twist		: 0,
+		};
+	}
+}
+
+function complete_ik_pose( e, ik_pose ){
+	let rig 	= e.IKRig,
+		pose 	= rig.pose;
+
+	pose.update_world();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let i_hip	= rig.points.hip;			// Hip IK Info
+	let hip 	= pose.bones[ i_hip.idx ];	// Hip Bone
+
+	let a = new Vec3();
+	let b = new Vec3();
+	//let c = new Vec3();
+	App.Debug.pnt( hip.world.pos, "orange", 0.03 );
+
+	a.from_quat( hip.world.rot, Vec3.FORWARD ).scale( 0.4 ).add( hip.world.pos );
+	b.from_quat( hip.world.rot, Vec3.UP ).scale( 0.4 ).add( hip.world.pos );
+	App.Debug
+		.ln( hip.world.pos, a, "orange" )
+		.ln( hip.world.pos, b, "orange" );
+
+
+	/*
+	let tb = rig.tpose.bones[ i_hip.idx ];	
+	a.from_quat( tb.world.rot, Vec3.FORWARD ).scale( 0.3 ).add( hip.world.pos ); // See T Pose Forward
+	b.from_quat( tb.world.rot, Vec3.UP ).scale( 0.3 ).add( hip.world.pos );
+	App.Debug
+		.ln( hip.world.pos, a, "red" )
+		.ln( hip.world.pos, b, "red" );
+
+	a.from_scale( Vec3.FORWARD, 0.2 ).add( hip.world.pos );	// See Axis Forward
+	b.from_scale( Vec3.UP, 0.2 ).add( hip.world.pos );
+	App.Debug
+		.ln( hip.world.pos, a, "cyan" )
+		.ln( hip.world.pos, b, "cyan" );
+	*/
+}
+
+// Find Foot's Up direction that will look forward when transformed by the bind rotation.
+//if( find_up ){
+//	v.from_quat( ct.rot, Vec3.UP );			// Get Current Direction
+//	q.from_unit_vecs( Vec3.FORWARD, v );	// Difference between Forward and Dir
+//	o.up.from_quat( q, Vec3.UP );			// UP offset to form Forward
+//}
+//
+/*
+	"black"		: "#000000",
+	"white"		: "#ffffff",
+	"red"		: "#ff0000",
+	"green"		: "#00ff00",
+	"blue"		: "#0000ff",
+	"fuchsia"	: "#ff00ff",
+	"cyan"		: "#00ffff",
+	"yellow"	: "#ffff00",
+	"orange"	: "#ff8000",
+ */
 
 </script><page-layout></page-layout>
