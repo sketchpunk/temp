@@ -13,15 +13,15 @@ let COLORS = {
 const NORMALIZE_RGB = 1 / 255.0;
 
 //######################################################################
-function Colour( c ){
-	if( c == null || c == undefined ) return rgbArray( "#ff0000" );
+function Colour( c, use_alpha=null ){
+	if( c ){
+		if( typeof c == "string" ){
+			if( c.charAt(0) == "#" )	return ( c.length == 7 )? rgb_array( c ) : rgba_array( c );
+			else if( COLORS[ c ] )		return (!use_alpha)? rgb_array( COLORS[ c ] ) : rgba_array( COLORS[ c ]+use_alpha );
+		}else if( Array.isArray(c) ) 	return (!use_alpha)? rgb_array.apply( null, c ) : rgba_array.apply( null, c );
+	}
 
-	if( typeof c == "string" ){
-		if( c.charAt(0) == "#" )	return ( c.length == 7 )? rgb_array( c ) : rgba_array( c );
-		else if( COLORS[ c ] )		return rgb_array( COLORS[ c ] );
-	}else if( Array.isArray(c) ) 	return c;
-
-	return rgb_array( "#ff0000" );		
+	return (!use_alpha)? rgb_array( "#ff0000" ) : rgba_array( "#ff0000ff" );
 }
 
 //######################################################################

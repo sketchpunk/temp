@@ -57,12 +57,18 @@ class IKRig{
 
 		add_point( name, idx ){ this.points[ name ] = { idx }; return this; }
 		
-		add_chain( name, name_ary, axis="z" ){
+		add_chain( name, name_ary, axis="z", end_name=null ){
 			let i, b, ch = new Chain( axis );
 			for( i of name_ary ){
 				b = this.pose.get_bone( i );
 				ch.add_bone( b.idx, b.len );
 			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			if( end_name ){
+				ch.end_idx = this.pose.get_bone( end_name ).idx;
+			}
+
 			this.chains[ name ] = ch;
 			return this;
 		}
@@ -96,6 +102,7 @@ class Chain{
 		this.len_sqr	= 0;			// Chain Length Squared, Cached for Checks without SQRT
 		this.cnt		= 0;			// How many Bones in the chain
 		this.align_axis	= axis;			// Chain is aligned to which axis
+		this.end_idx 	= null;			// Joint that Marks the true end of the chain
 	}
 
 	add_bone( idx, len ){
@@ -105,6 +112,9 @@ class Chain{
 		this.len_sqr	= this.len * this.len;
 		return this;
 	}
+
+	first(){ return this.bones[0].idx; }
+	last(){ return this.bones[ this.cnt-1 ].idx; }
 }
 
 //#########################################################
@@ -118,11 +128,11 @@ function init_mixamo_rig( arm, rig ){
 		.add_point( "foot_l", arm.name_map["LeftFoot"] )
 		.add_point( "foot_r", arm.name_map["RightFoot"] )
 
-		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ], "x" )
-		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "x" )
+		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ], "x", "RightHand" )
+		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "x", "LeftHand" )
 
-		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "z" )
-		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "z" )
+		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "z", "RightFoot" )
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "z", "LeftFoot" )
 
 		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ], "y" )
 	;

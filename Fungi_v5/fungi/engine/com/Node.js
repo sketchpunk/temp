@@ -161,7 +161,7 @@ class Node{
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			if( this.parent != null ){ 
 				// Parents Exist, loop till reaching the root
-				let n = this.parent.Node;
+				let n = this;
 				while( n.parent != null ){
 					n = n.parent.Node;
 					tf.add_rev( n.local );
@@ -171,7 +171,6 @@ class Node{
 		}
 
 		/*
-
 		get_world_rot( out = null, incChild=true ){
 			out = out || new Quat();
 

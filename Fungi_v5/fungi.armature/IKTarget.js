@@ -28,6 +28,19 @@ class IKTarget{
 			return this;
 		}
 
+		from_pos_dir( pos, dir, up_dir, len ){
+			this.start_pos.copy( pos );
+			this.end_pos
+				.from_scale( dir, len )
+				.add( pos );
+
+			this.len_sqr	= len*len;
+			this.len		= len;
+
+			this.axis.from_dir( dir, up_dir );
+			return this;
+		}
+
 	/////////////////////////////////////////////////////////////////////
 	// 
 	/////////////////////////////////////////////////////////////////////

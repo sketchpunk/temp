@@ -823,6 +823,18 @@ class Quat extends Float32Array{
 		    return out;
 		}
 
+		// Axis must be normlized
+		static axis_angle( axis, angle ){ 
+			let half	= angle * .5,
+				s		= Math.sin( half ), 
+				q 		= new Quat();
+			q[0] = axis[0] * s;
+			q[1] = axis[1] * s;
+			q[2] = axis[2] * s;
+			q[3] = Math.cos( half );
+			return q;
+		}
+
 	////////////////////////////////////////////////////////////////////
 	// INTERPOLATION
 	////////////////////////////////////////////////////////////////////
