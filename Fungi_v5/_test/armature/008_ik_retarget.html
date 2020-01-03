@@ -14,7 +14,7 @@ import IKRig			from "../../fungi.armature/IKRig.js";
 App.builder( true )
 	.use_armature()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
-	.set_camera( 0, 0, 3.5, 0, 0.7, 0 )
+	.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
 	.add( init )
 	//.render_loop( on_draw )
 	.render_on_mouse()
@@ -92,6 +92,7 @@ function load_mesh_b( json, bin ){
 //#####################################################
 
 import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
+import Axis from "../../fungi/maths/Axis.js";
 
 class IKPose{
 	constructor(){
@@ -104,6 +105,7 @@ class IKPose{
 	}
 }
 
+
 function complete_ik_pose( e, ik_pose ){
 	let rig 	= e.IKRig,
 		pose 	= rig.pose;
@@ -111,29 +113,82 @@ function complete_ik_pose( e, ik_pose ){
 	pose.update_world();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// REFACTORED
 	let i_hip	= rig.points.hip;			// Hip IK Info
 	let hip 	= pose.bones[ i_hip.idx ];	// Hip Bone
+	
+	let tb		= rig.tpose.bones[ i_hip.idx ];	
+
+	let a_axis 	= new Axis().from_quat( hip.world.rot ); // Animated Axis
+	let t_axis 	= new Axis().from_quat( tb.world.rot ); // TPose Axis
+
+	App.Debug.axis( a_axis, hip.world.pos, 0.4, "orange" );
+	App.Debug.axis( t_axis, hip.world.pos, 0.3, "red" );
+
+	let q = new Quat();
+	q	.from_unit_vecs( t_axis.z, a_axis.z )
+		.mul( tb.world.rot );
+
+	let s_axis 	= new Axis().from_quat( q ); // Swing Axis
+	App.Debug.axis( s_axis, hip.world.pos, 0.3, "yellow" );
+
+	let sign	= ( Vec3.dot( s_axis.x, a_axis.y ) >= 0 )? -1:1;
+	let twist	= Vec3.angle( s_axis.y, a_axis.y );
+	
+	q.pmul_axis_angle( a_axis.z, twist*sign);
+
+	App.Debug.quat( q, hip.world.pos, 0.2, "cyan"  );
+}
+
+
+function complete_ik_pose_x( e, ik_pose ){
+	let rig 	= e.IKRig,
+		pose 	= rig.pose;
+
+	pose.update_world();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Original
+	let i_hip	= rig.points.hip;			// Hip IK Info
+	let hip 	= pose.bones[ i_hip.idx ];	// Hip Bone
+	
+	let tb		= rig.tpose.bones[ i_hip.idx ];	
 
 	let a = new Vec3();
 	let b = new Vec3();
-	//let c = new Vec3();
+	let c = new Vec3();
+	let d = new Vec3();
 	App.Debug.pnt( hip.world.pos, "orange", 0.03 );
 
-	a.from_quat( hip.world.rot, Vec3.FORWARD ).scale( 0.4 ).add( hip.world.pos );
-	b.from_quat( hip.world.rot, Vec3.UP ).scale( 0.4 ).add( hip.world.pos );
+	a.from_quat( hip.world.rot, Vec3.FORWARD );
+	b.from_quat( hip.world.rot, Vec3.UP );
+
+	let q = new Quat();
+	let r = new Quat();
+	q.from_unit_vecs( Vec3.FORWARD, a );
+	q.mul( tb.world.rot );
+
+	c.from_quat( q, Vec3.FORWARD );
+	d.from_quat( q, Vec3.UP );
+
+	r.from_axis_angle( a, -Vec3.angle( b, d ) );
+	q.pmul( r );
+	d.from_quat( q, Vec3.UP );
+
 	App.Debug
-		.ln( hip.world.pos, a, "orange" )
-		.ln( hip.world.pos, b, "orange" );
+		.ln( hip.world.pos, a.scale( 0.4 ).add( hip.world.pos ), "orange" )
+		.ln( hip.world.pos, b.scale( 0.4 ).add( hip.world.pos ), "orange" );
 
+	App.Debug
+		.ln( hip.world.pos, c.scale( 0.3 ).add( hip.world.pos ), "yellow" )
+		.ln( hip.world.pos, d.scale( 0.3 ).add( hip.world.pos ), "yellow" );
 
-	/*
-	let tb = rig.tpose.bones[ i_hip.idx ];	
 	a.from_quat( tb.world.rot, Vec3.FORWARD ).scale( 0.3 ).add( hip.world.pos ); // See T Pose Forward
 	b.from_quat( tb.world.rot, Vec3.UP ).scale( 0.3 ).add( hip.world.pos );
 	App.Debug
 		.ln( hip.world.pos, a, "red" )
 		.ln( hip.world.pos, b, "red" );
-
+	/*
 	a.from_scale( Vec3.FORWARD, 0.2 ).add( hip.world.pos );	// See Axis Forward
 	b.from_scale( Vec3.UP, 0.2 ).add( hip.world.pos );
 	App.Debug
