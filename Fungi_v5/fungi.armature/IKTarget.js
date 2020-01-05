@@ -28,16 +28,16 @@ class IKTarget{
 			return this;
 		}
 
-		from_pos_dir( pos, dir, up_dir, len ){
+		from_pos_dir( pos, dir, up_dir, len_scl ){
 			this.start_pos.copy( pos );
 			this.end_pos
-				.from_scale( dir, len )
+				.from_scale( dir, len_scl )	// Compute End Effector
 				.add( pos );
 
-			this.len_sqr	= len*len;
-			this.len		= len;
+			this.len_sqr	= Vec3.len_sqr( pos, this.end_pos );
+			this.len		= Math.sqrt( this.len_sqr );
 
-			this.axis.from_dir( dir, up_dir );
+			this.axis.from_dir( dir, up_dir ); // Target Axis
 			return this;
 		}
 

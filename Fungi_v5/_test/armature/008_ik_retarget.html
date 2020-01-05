@@ -17,15 +17,15 @@ App.builder( true )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
 	.set_camera( 0, 20, 3.5, 0, 0.7, 0 )
 	.add( init )
-	//.render_loop( on_draw )
-	.render_on_mouse()
+	.render_loop( on_draw )
+	//.render_on_mouse()
 	.build();
 
 //#####################################################
 
 let gAnimate, gEntitySrc, gModelA, gModelB, gIKPose;
 function on_draw( dt, ss ){
-	gAnimate( dt );
+	gAnimate( dt * 0.1 );
 }
 
 async function init(){
@@ -50,7 +50,7 @@ async function init(){
 	//App.Debug.pnt( wt.pos, "red", 0.09 );
 	//App.Debug.ln( wt.pos, Vec3.transform_quat( Vec3.BACK, wt.rot ).add( wt.pos ), "red" );
 
-	gAnimate( 0.2 );
+	gAnimate( 0.18 );
 
 	
 	/*
@@ -71,14 +71,17 @@ function load_src( json, bin ){
 	let e		= GltfUtil.get_bone_view( "src", json, bin );
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
 	let pm		= new PoseAnimator();
-	let rig 	= e.add_com( "IKRig" ).init( null, true, IKRig.ARM_MIXAMO );
+	let rig 	= e.add_com( "IKRig" )
+		.init( null, true, IKRig.ARM_MIXAMO )
+		.recompute_from_tpose(); // Mesh requires a few bits to be recomputed because of Mixamo Scaling
 
 	gEntitySrc  = e;
 
 	return ( dt )=>{
 		pm.tick( dt ).update( anim, rig.pose );
 		rig.apply_pose();
-		complete_ik_pose( gEntitySrc, gIKPose );
+		//complete_ik_pose( gEntitySrc, gIKPose );
+		complete_ik_pose_cp( gEntitySrc, gIKPose );
 		compute_limb( gEntitySrc, gIKPose );
 		
 		if( gModelA ){
@@ -96,7 +99,7 @@ function load_mesh_a( json, bin ){
 	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
 	tpose.apply();
 
-	//e.Node.set_pos( 1.5, 0, 0 );
+	e.Node.set_pos( 1.0, 0, 0 );
 	//e.Node.set_pos( 0, .2, 0 );
 	gModelA = e;
 }
@@ -128,9 +131,17 @@ class IKPose{
 			pos_dif 	: new Vec3(),
 			dir			: new Vec3(),
 			twist		: 0,
+
+			tmp    		: new Vec3(),
 		};
 
 		this.leg_l = {
+			len_scale	: 0,
+			dir 		: new Vec3(),
+			joint_dir 	: new Vec3(),
+		};
+
+		this.leg_r = {
 			len_scale	: 0,
 			dir 		: new Vec3(),
 			joint_dir 	: new Vec3(),
@@ -150,6 +161,12 @@ class IKPose{
 		this.leg_l.len_scale = len_scl;
 		return this;
 	}
+	set_leg_r( dir, j_dir, len_scl ){
+		this.leg_r.dir.copy( dir );
+		this.leg_r.joint_dir.copy( j_dir );
+		this.leg_r.len_scale = len_scl;
+		return this;
+	}
 
 	apply_rig( rig ){
 		let i_hip	= rig.points.hip,
@@ -158,11 +175,14 @@ class IKPose{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		let q 		= new Quat();
+		let q2      = new Quat().from_axis_angle(this.hip.dir, this.hip.twist);
 		q.from_unit_vecs( Vec3.FORWARD, this.hip.dir );		// Compute Sway, TODO, Need Bone's actual Forward Direction
 		q.mul( tb.world.rot );								// Add to WS Bind Pose
-		q.pmul_axis_angle( this.hip.dir, this.hip.twist );	// Add Twist
+		//q.pmul_axis_angle( this.hip.dir, this.hip.twist );	// Add Twist
+		q.mul( q2 );
+
 		if( tb.p_idx != null ){								// To Local Space
-			q.pmul_invert( rig.tpose.bones[ tb.p_idx ].world.rot );
+			//q.pmul_invert( rig.tpose.bones[ tb.p_idx ].world.rot );
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -175,6 +195,10 @@ class IKPose{
 		//p[2] += ik.hip_dif_pos[2] * this.hip_scale[1];
 
 		rig.pose.set_bone( i_hip.idx, q, p );
+		//App.Debug.quat( q, Vec3.add(p,[0,0.185,-0.02]), 0.3 );
+		App.Debug.quat( q, this.hip.tmp, 0.2 );
+
+		//App.Debug.quat( q, Vec3.add(p,[0.2,0.185,-0.02]), 0.3 );
 
 		this.run_limb( rig );
 	}
@@ -194,11 +218,25 @@ class IKPose{
 		// Need to update Chain Length using TPose WorldSpace Positions
 		let len = chain.len * limb.len_scale; //(this.ik_leg_l_len || chain.len) * ik.len_scale
 
-
-		console.log( limb );
+		//console.log( limb );
 
 		this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );
-		this.target.debug( App.Debug );
+		//this.target.debug( App.Debug, 0.4 );
+
+		this.target.limb( chain, rig.tpose, rig.pose, pt );
+
+
+		chain = rig.chains.leg_r;
+		limb = this.leg_r;
+		rig.pose.get_parent_world( chain.first(), pt, ct );
+		len = chain.len * limb.len_scale;
+		this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );
+		//this.target.debug( App.Debug, 0.4 );
+		this.target.limb( chain, rig.tpose, rig.pose, pt );
+
+
+
+		//console.log( rig.arm.bones );
 
 		// Get Position of Chain
 		// Compute End Effector
@@ -235,7 +273,7 @@ function complete_ik_pose( e, ik_pose ){
 	let a_axis 	= new Axis().from_quat( hip.world.rot ); // Animated Axis
 	let t_axis 	= new Axis().from_quat( tb.world.rot ); // TPose Axis
 
-	//App.Debug.axis( a_axis, hip.world.pos, 0.4, "orange" );
+	App.Debug.axis( a_axis, hip.world.pos, 0.4, "orange" );
 	//App.Debug.axis( t_axis, hip.world.pos, 0.3, "red" );
 
 	let q = new Quat();
@@ -246,15 +284,17 @@ function complete_ik_pose( e, ik_pose ){
 	//App.Debug.axis( s_axis, hip.world.pos, 0.3, "yellow" );
 
 	let sign	= ( Vec3.dot( s_axis.x, a_axis.y ) >= 0 )? -1:1;
-	let twist	= Vec3.angle( s_axis.y, a_axis.y );
+	let twist	= Vec3.angle( s_axis.y, a_axis.y ) * sign;
 	
-	q.pmul_axis_angle( a_axis.z, twist*sign);
+	q.pmul_axis_angle( a_axis.z, twist);
 
 	//App.Debug.quat( q, hip.world.pos, 0.2, "cyan" );
 
 
 	let pos_dif = Vec3.sub( hip.world.pos, tb.world.pos );
 	ik_pose.set_hip( a_axis.z, twist, pos_dif, tb.world.pos.y );
+
+	ik_pose.hip.tmp.copy( hip.world.pos );
 }
 
 
@@ -263,12 +303,15 @@ function complete_ik_pose_cp( e, ik_pose ){
 		pose 	= rig.pose;
 
 	pose.update_world();
+	App.Debug.reset();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// REFACTORED
 	let i_hip	= rig.points.hip;			// Hip IK Info
 	let hip 	= pose.bones[ i_hip.idx ];	// Hip Bone
 	
+	App.Debug.quat( hip.world.rot, hip.world.pos, 0.4, "orange" );
+
 	let tb		= rig.tpose.bones[ i_hip.idx ];	
 
 	let t_up 	= Vec3.transform_quat( Vec3.UP, tb.world.rot ); // TPose Up
@@ -282,10 +325,14 @@ function complete_ik_pose_cp( e, ik_pose ){
 	let twist 	= Vec3.angle( s_up, a_up ) * sign;
 
 	// Test
-	let q		= Quat.axis_angle( a_fwd, twist );
-	let up		= Vec3.transform_quat( s_up, q );
+	//let q		= Quat.axis_angle( a_fwd, twist );
+	//let up		= Vec3.transform_quat( s_up, q );
 
-	App.Debug.ln( hip.world.pos, up.add( hip.world.pos ), "yellow" );
+	//App.Debug.ln( hip.world.pos, up.add( hip.world.pos ), "yellow" );
+
+	let pos_dif = Vec3.sub( hip.world.pos, tb.world.pos );
+	ik_pose.set_hip( a_fwd, twist, pos_dif, tb.world.pos.y );
+	ik_pose.hip.tmp.copy( hip.world.pos );
 
 
 	//ik_pose.set_hip( a_fwd, twist );
@@ -378,19 +425,29 @@ function compute_limb( e, ik_pose ){
 		chain 	= rig.chains.leg_l,
 		pose 	= rig.pose;
 
-	let bf = pose.bones[ chain.first() ];
-	let be = pose.bones[ chain.end_idx ];
+	let bf,be,dir,len,j_dir;
+
+	bf = pose.bones[ chain.first() ];
+	be = pose.bones[ chain.end_idx ];
 
 	//App.Debug.pnt( bf.world.pos, "green", 0.07 );
 	//App.Debug.pnt( be.world.pos, "red", 0.07 );
 
-	let dir		= Vec3.sub( be.world.pos, bf.world.pos );
-	let len		= dir.len();
-	let j_dir	= Vec3.transform_quat( Vec3.BACK, bf.world.rot ); // THE Axis is Backwards, So farward is pointing back, Need to use Back to point forward
+	dir		= Vec3.sub( be.world.pos, bf.world.pos );
+	len		= dir.len();
+	j_dir	= Vec3.transform_quat( Vec3.BACK, bf.world.rot ); // THE Axis is Backwards, So farward is pointing back, Need to use Back to point forward
 
 	ik_pose.set_leg_l( dir, j_dir, len / chain.len );
-}
 
+
+	chain 	= rig.chains.leg_r;
+	bf = pose.bones[ chain.first() ];
+	be = pose.bones[ chain.end_idx ];
+	dir		= Vec3.sub( be.world.pos, bf.world.pos );
+	len		= dir.len();
+	j_dir	= Vec3.transform_quat( Vec3.BACK, bf.world.rot );
+	ik_pose.set_leg_r( dir, j_dir, len / chain.len );
+}
 /*
 	// Chain is the arm or leg bones, where end is the hand or foot.
 	ik_compute_limb( chain, end, out, dt ){

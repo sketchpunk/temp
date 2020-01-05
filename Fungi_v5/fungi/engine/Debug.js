@@ -15,7 +15,7 @@ class Debug{
 		this.Pnt 	= this.ePnt.Points;
 		this.Ln 	= this.eLn.Lines;
 
-		this.Pnt.use_size	= 0.03;
+		this.Pnt.use_size	= 0.04;
 		this.Pnt.use_shape	= 1;
 	}
 
@@ -24,12 +24,14 @@ class Debug{
 	////////////////////////////////////////////////////////////////////
 	// POINTS
 	////////////////////////////////////////////////////////////////////
+		
 		static pnt( pos, col="red", size=null, shape=null ){ this.Pnt.add( pos, col, size, shape ); return this; }
 		static pnt_raw( x, y, z, col="red", size=null, shape=null ){ this.Pnt.add( [x,y,z], col, size, shape ); return this; }
 
 	////////////////////////////////////////////////////////////////////
 	// LINES
 	////////////////////////////////////////////////////////////////////
+		
 		static ln( v0, v1, col_a="red", col_b=null, is_dash=false ){ this.Ln.add( v0, v1, col_a, col_b, is_dash ); return this; }
 
 		static box( v0, v1, col="red", is_dash=false ){
@@ -76,7 +78,6 @@ class Debug{
 			return this;
 		}
 		
-	
 		static reset( flag = 3 ){
 			if( (flag & 1) != 0 ) this.Pnt.reset();
 			if( (flag & 2) != 0 ) this.Ln.reset();

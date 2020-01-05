@@ -1,3 +1,4 @@
+import Vec3 from "../fungi/maths/Vec3.js";
 
 //#########################################################
 
@@ -82,6 +83,19 @@ class IKRig{
 			return this.pose.bones[ idx ];
 		}
 
+	/////////////////////////////////////////////////
+	// 
+	/////////////////////////////////////////////////
+
+		recompute_from_tpose(){
+			console.log("Recompute");
+
+			this.chains.leg_l.compute_len_from_bones( this.tpose.bones );
+			this.chains.leg_r.compute_len_from_bones( this.tpose.bones );
+
+			return this;
+		}
+
 } App.Components.reg( IKRig ); //This will not work well for 3JS, need to Reg Comp Differently.
 
 
@@ -94,7 +108,6 @@ IKRig.ARM_MIXAMO = 1;
 
 //#########################################################
 
-
 class Chain{
 	constructor( axis="z" ){
 		this.bones		= new Array();	// Index to a bone in an armature / pose
@@ -105,16 +118,37 @@ class Chain{
 		this.end_idx 	= null;			// Joint that Marks the true end of the chain
 	}
 
-	add_bone( idx, len ){
-		this.bones.push({ idx, len });
-		this.cnt++;
-		this.len		+= len;
-		this.len_sqr	= this.len * this.len;
-		return this;
-	}
+	/////////////////////////////////////////////////
+	// 
+	/////////////////////////////////////////////////
+		
+		add_bone( idx, len ){
+			this.bones.push({ idx, len });
+			this.cnt++;
+			this.len		+= len;
+			this.len_sqr	= this.len * this.len;
+			return this;
+		}
 
-	first(){ return this.bones[0].idx; }
-	last(){ return this.bones[ this.cnt-1 ].idx; }
+		first(){ return this.bones[0].idx; }
+		last(){ return this.bones[ this.cnt-1 ].idx; }
+
+	/////////////////////////////////////////////////
+	// 
+	/////////////////////////////////////////////////
+		
+		compute_len_from_bones( bones ){
+			let b		= bones[ this.bones[ this.cnt-1 ].idx ],	// Get Last Bone
+				tail	= new Vec3( 0, b.len , 0 );					
+			b.world.transform_vec( tail );							// Compute Tail End
+
+			b = bones[ this.bones[ 0 ].idx ];						// Get First Bone.
+
+			this.len = Vec3.len( b.world.pos, tail );				// Compute Physical Length of Chain.
+			this.len = this.len * this.len;
+
+			return this;
+		}
 }
 
 //#########################################################
