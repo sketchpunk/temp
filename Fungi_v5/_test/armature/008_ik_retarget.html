@@ -25,7 +25,7 @@ App.builder( true )
 
 let gAnimate, gEntitySrc, gModelA, gModelB, gIKPose;
 function on_draw( dt, ss ){
-	gAnimate( dt * 0.1 );
+	gAnimate( dt  ); // * 0.1
 }
 
 async function init(){
@@ -80,9 +80,12 @@ function load_src( json, bin ){
 	return ( dt )=>{
 		pm.tick( dt ).update( anim, rig.pose );
 		rig.apply_pose();
+
+		compute_ik_pose( gEntitySrc, gIKPose );
+
 		//complete_ik_pose( gEntitySrc, gIKPose );
-		complete_ik_pose_cp( gEntitySrc, gIKPose );
-		compute_limb( gEntitySrc, gIKPose );
+		//complete_ik_pose_cp( gEntitySrc, gIKPose );
+		//compute_limb( gEntitySrc, gIKPose );
 		
 		if( gModelA ){
 			gIKPose.apply_rig( gModelA.IKRig );
@@ -135,17 +138,10 @@ class IKPose{
 			tmp    		: new Vec3(),
 		};
 
-		this.leg_l = {
-			len_scale	: 0,
-			dir 		: new Vec3(),
-			joint_dir 	: new Vec3(),
-		};
-
-		this.leg_r = {
-			len_scale	: 0,
-			dir 		: new Vec3(),
-			joint_dir 	: new Vec3(),
-		};
+		this.leg_l = { len_scale:0,	dir:new Vec3(),	joint_dir:new Vec3() };
+		this.leg_r = { len_scale:0,	dir:new Vec3(), joint_dir:new Vec3() };
+		this.arm_l = { len_scale:0,	dir:new Vec3(),	joint_dir:new Vec3() };
+		this.arm_r = { len_scale:0,	dir:new Vec3(), joint_dir:new Vec3() };
 	}
 
 	set_hip( dir=null, twist=null, pos=null, bind_h=null ){
@@ -155,12 +151,15 @@ class IKPose{
 		if( bind_h != null)	this.hip.bind_height	= bind_h;
 		return this;
 	}
+
 	set_leg_l( dir, j_dir, len_scl ){
 		this.leg_l.dir.copy( dir );
 		this.leg_l.joint_dir.copy( j_dir );
 		this.leg_l.len_scale = len_scl;
 		return this;
+	
 	}
+	
 	set_leg_r( dir, j_dir, len_scl ){
 		this.leg_r.dir.copy( dir );
 		this.leg_r.joint_dir.copy( j_dir );
@@ -169,6 +168,7 @@ class IKPose{
 	}
 
 	apply_rig( rig ){
+		/*
 		let i_hip	= rig.points.hip,
 			tb 		= rig.tpose.bones[ i_hip.idx ],
 			pb		= rig.pose.bones[ i_hip.idx ];
@@ -199,8 +199,37 @@ class IKPose{
 		App.Debug.quat( q, this.hip.tmp, 0.2 );
 
 		//App.Debug.quat( q, Vec3.add(p,[0.2,0.185,-0.02]), 0.3 );
+		*/
 
+		this.apply_hip( rig );
 		this.run_limb( rig );
+	}
+
+	apply_hip( rig ){
+		let b_info	= rig.points.hip,							// Bone Info
+			tb 		= rig.tpose.bones[ b_info.idx ],			// TPose Bone (Bind Pose info)
+			pb		= rig.pose.bones[ b_info.idx ],				// Pose Bone
+			q 		= new Quat(),
+			p 		= new Vec3();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ROTATION
+		q	.from_unit_vecs( Vec3.FORWARD, this.hip.dir )		// Compute Swing Rotation, TODO, Need Bone's actual Forward Direction if different
+			.mul( tb.world.rot )								// Add World Space Bind Pose of the bone
+			.pmul_axis_angle( this.hip.dir, this.hip.twist );	// Add Twist, using direction as rotation axis
+
+		if( tb.p_idx != null ){									// To Local Space
+			q.pmul_invert( rig.tpose.bones[ tb.p_idx ].world.rot );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// TRANSLATION
+		let h_scl = tb.world.pos.y / this.hip.bind_height;		// Create Scale value from Src's Hip Height and Target's Hip Height
+		
+		p	.from_scale( this.hip.pos_dif, h_scl )				// Scale the Translation of Source Animation
+			.add( tb.local.pos );								// Apply translation to Hip's Bind Position
+
+		rig.pose.set_bone( b_info.idx, q, p );					// Save Rotation/Translation back to the pose.
 	}
 
 	run_limb( rig ){
@@ -226,6 +255,7 @@ class IKPose{
 		this.target.limb( chain, rig.tpose, rig.pose, pt );
 
 
+		/**/
 		chain = rig.chains.leg_r;
 		limb = this.leg_r;
 		rig.pose.get_parent_world( chain.first(), pt, ct );
@@ -233,7 +263,7 @@ class IKPose{
 		this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );
 		//this.target.debug( App.Debug, 0.4 );
 		this.target.limb( chain, rig.tpose, rig.pose, pt );
-
+		
 
 
 		//console.log( rig.arm.bones );
@@ -254,6 +284,80 @@ class IKPose{
 			*/
 	}
 }
+
+
+function compute_ik_pose( e, ik_pose ){
+	let rig = e.IKRig;
+
+	rig.pose.update_world();
+
+	App.Debug.reset();
+
+	compute_hip_QUAT( rig, ik_pose );
+	//compute_hip_VEC( rig, ik_pose );
+	compute__limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
+	compute__limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
+}
+
+function compute_hip_QUAT( rig, ik_pose ){
+	let b_info	= rig.points.hip,						// Bone Info
+		pb		= rig.pose.bones[ b_info.idx ],			// Hip Pose Bone
+		tb		= rig.tpose.bones[ b_info.idx ],		// Hip TPose Bone
+		a_axis 	= new Axis().from_quat( pb.world.rot ),	// Animated Axis from Quaternion
+		t_axis 	= new Axis().from_quat( tb.world.rot ),	// TPose (Bind) Axis
+		q		= new Quat();
+
+	// Create Swing rotation between the Bind+Animated Forward Direction
+	// Rotate the TPose Rotation, this moves Bind forward to match the animated Forward
+	// While Keeping UP and Left where it would be without any Twisting motion.
+	q	.from_unit_vecs( t_axis.z, a_axis.z )			
+		.mul( tb.world.rot );							
+
+	let s_axis 	= new Axis().from_quat( q ), 						// Swing Axis 
+		sign	= ( Vec3.dot( s_axis.x, a_axis.y ) >= 0 )? -1:1,	// Is the Angle going to be Negative?, use Swing Left to determine
+		twist	= Vec3.angle( s_axis.y, a_axis.y ) * sign,			// Get Angle Between TPose Swing UP and Animated UP
+		pos_dif = Vec3.sub( pb.world.pos, tb.world.pos );			// How much translation from bind pose has the animated hip gone.
+
+	// Set all the required info needed to perform some IK on the target Hip Bone
+	ik_pose.set_hip( a_axis.z, twist, pos_dif, tb.world.pos.y );
+}
+
+function compute_hip_VEC( rig, ik_pose ){
+	let b_info	= rig.points.hip,										// Bone Info
+		pb 		= rig.pose.bones[ b_info.idx ],							// Hip Pose Bone
+		tb		= rig.tpose.bones[ b_info.idx ],						// Hip TPose Bone
+		
+		t_up 	= Vec3.transform_quat( Vec3.UP, tb.world.rot ),			// TPose Up
+		a_fwd 	= Vec3.transform_quat( Vec3.FORWARD, pb.world.rot ),	// Animated Fwd
+		a_up 	= Vec3.transform_quat( Vec3.UP, pb.world.rot ),			// Animated Up
+
+		s_lft 	= Vec3.cross( t_up, a_fwd ).norm(),						// Swing Left
+		s_up 	= Vec3.cross( a_fwd, s_lft ).norm(), 					// Swing Up
+		sign	= ( Vec3.dot( s_lft, a_up ) < 0 )? 1:-1,				// Is the Angle going to be Negative?, use Swing Left to determine
+		twist 	= Vec3.angle( s_up, a_up ) * sign,						// Get Angle Between TPose Swing UP and Animated UP
+		pos_dif	= Vec3.sub( pb.world.pos, tb.world.pos );				// How much translation from bind pose has the animated hip gone.
+
+	// Set all the required info needed to perform some IK on the target Hip Bone
+	ik_pose.set_hip( a_fwd, twist, pos_dif, tb.world.pos.y );
+}
+
+function compute__limb( pose, chain, ik_limb ){
+	let bf		= pose.bones[ chain.first() ],				// First Bone
+		be		= pose.bones[ chain.end_idx ],				// END Bone, which is not part of the chain (Hand,Foot)
+		dir		= Vec3.sub( be.world.pos, bf.world.pos );	// Direction from start of chain, toward end bone, which is te Effector
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Mixamo's Legs are backwards, so Need to use BACK to get Forward
+	// TODO, May need to store a "What is Forward or Joint Aiming" direction for each chain in IKRig
+	// Save Direction that the Joint is pointing, Like the KNEE, ELBOW, Etc.
+	// Using the First bone rotation to determine it's joint direction seems to produce the smoothest animation
+	ik_limb.joint_dir.copy( Vec3.transform_quat( Vec3.BACK, bf.world.rot ) ); 
+
+	ik_limb.dir.copy( dir );					// Save Direction to end Effector
+	ik_limb.len_scale = dir.len() / chain.len;	// Normalize the length to the End Effector using the Chain Length as Max.
+}
+
+ 
 
 
 function complete_ik_pose( e, ik_pose ){
