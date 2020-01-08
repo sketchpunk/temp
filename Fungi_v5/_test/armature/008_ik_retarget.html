@@ -15,17 +15,17 @@ App.builder( true )
 	.use_armature()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 0, 20, 1.5, 0, 0.1, 0 )
+	.set_camera( 20, 20, 3.0, 0, 0.7, 0 )
 	.add( init )
-	.render_loop( on_draw )
-	//.render_on_mouse()
+	//.render_loop( on_draw )
+	.render_on_mouse()
 	.build();
 
 //#####################################################
 
 let gAnimate, gEntitySrc, gModelA, gModelB, gIKPose;
 function on_draw( dt, ss ){
-	gAnimate( dt * 0.8 ); // * 0.1
+	gAnimate( dt * 0.1 ); // * 0.1
 }
 
 async function init(){
@@ -40,7 +40,7 @@ async function init(){
 
 	gAnimate = load_src( dl[0], dl[1] );
 	
-	load_mesh_a( dl[2], dl[3] );
+	//load_mesh_a( dl[2], dl[3] );
 	//load_mesh_b( dl[4], dl[5] );
 
 	gIKPose = new IKPose();
@@ -136,10 +136,10 @@ async function init(){
 //#####################################################
 
 function load_src( json, bin ){	
-	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
-	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
+	//let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	//let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
 
-	//let e		= GltfUtil.get_bone_view( "src", json, bin );
+	let e		= GltfUtil.get_bone_view( "src", json, bin );
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
 	let pm		= new PoseAnimator();
 	let rig 	= e.add_com( "IKRig" )
@@ -331,7 +331,6 @@ class IKPose{
 			rig.pose.set_bone( b_idx, q );		
 		}
 
-
 		apply_foot( rig ){
 			let b_info	= rig.points.foot_l,  //rig.pose.get_bone("LeftFoot") , 							// Bone Info
 				tb 		= rig.tpose.bones[ b_info.idx ],			// TPose Bone (Bind Pose info)
@@ -390,13 +389,15 @@ function compute_ik_pose( e, ik_pose ){
 
 	App.Debug.reset();
 
-	compute_hip_QUAT( rig, ik_pose );
+	//compute_hip_QUAT( rig, ik_pose );
 	//compute_hip_VEC( rig, ik_pose );
-	compute_limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
-	compute_limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
+	//compute_limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
+	//compute_limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
 
-	compute_foot( rig, rig.points.foot_l.idx, ik_pose.foot_l );
-	compute_foot( rig, rig.points.foot_r.idx, ik_pose.foot_r );
+	//compute_foot( rig, rig.points.foot_l.idx, ik_pose.foot_l );
+	//compute_foot( rig, rig.points.foot_r.idx, ik_pose.foot_r );
+
+	compute_look_twist( rig, rig.chains.spine.last() );
 }
 
 function compute_hip_QUAT( rig, ik_pose ){
@@ -532,6 +533,53 @@ function compute_foot( rig, b_idx, ik ){
 	// Set all the required info needed to perform some IK on the target Hip Bone
 	ik_pose.set_hip( a_axis.z, twist, pos_dif, tb.world.pos.y );
 	*/
+}
+
+function compute_look_twist( rig, b_idx ){
+	let pb		= rig.pose.bones[ b_idx ],						// Pose Bone
+		tb		= rig.tpose.bones[ b_idx ],						// TPose Bone
+		q		= new Quat().from_invert( tb.world.rot ),		// TPose WS Rotation Inverted
+		t_fwd	= Vec3.transform_quat( Vec3.FORWARD, q ),		// Calc TPose WS Inverted Directions
+		t_up	= Vec3.transform_quat( Vec3.UP, q ),			
+		p_fwd	= Vec3.transform_quat( t_fwd, pb.world.rot ),	// Use Inverted Directions to get Pose's WS Direction
+		p_up	= Vec3.transform_quat( t_up, pb.world.rot );
+
+	q.from_unit_vecs( Vec3.FORWARD, p_fwd )			// Rotation Difference From True FWD and Pose FWD, Swing Rotation
+		.mul( tb.world.rot );						// Apply Swing to TPose WS Rotation, gives Swing in WS
+
+	let s_up	= Vec3.transform_quat( t_up, q ),	// Get UP Direction of the Swing Rotation
+		twist	= Vec3.angle( s_up, p_up );			// Swing+Pose have same Fwd, Use Angle between both UPs for twist
+
+	if( twist <= (0.01 * Math.PI / 180) ){
+		twist = 0; // If Less the .01 Degree, dont bother twisting.
+	}else{
+		// Swing FWD and Pose FWD Should be the same in ws, So no need to calc it,
+		// So using Pose Fwd and Swing up to get Swing left
+		// Is the Angle going to be Negative?, use Swing Left to determine if 
+		// its in the left or right side of UP
+		let s_lft = Vec3.cross( s_up, p_fwd ).norm();
+		if( Vec3.dot( s_lft, p_up ) >= 0 )	twist = -twist; 
+	}
+
+	//
+	//ik.dir.copy( p_fwd );
+	//ik.twist = twist;
+
+	App.Debug.pnt( pb.world.pos );
+	App.Debug.ln( pb.world.pos, Vec3.scale( p_fwd, 0.4).add( pb.world.pos ), "orange" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( p_up, 0.4).add( pb.world.pos ), "orange" );
+
+	let s_fwd = Vec3.transform_quat( t_fwd, q );	// Get Swing Forward
+	App.Debug.ln( pb.world.pos, Vec3.scale( s_fwd, 0.3).add( pb.world.pos ), "yellow" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3).add( pb.world.pos ), "yellow" );
+
+	// test
+	q.from_axis_angle( p_fwd, twist );
+	let tmp = Vec3.transform_quat( s_up, q );
+
+	App.Debug.ln( pb.world.pos, Vec3.scale( tmp, 0.4).add( pb.world.pos ), "red" );
+
+
 }
 
 // Find Foot's Up direction that will look forward when transformed by the bind rotation.
