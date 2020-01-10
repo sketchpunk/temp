@@ -1,0 +1,127 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+
+// https://codelabs.developers.google.com/codelabs/ar-with-webxr/#3
+// https://github.com/vogloblinsky/webxr-codelab/blob/master/step-05/app.js
+// https://github.com/mrdoob/three.js/blob/dev/src/renderers/webxr/WebXRManager.js
+
+// https://developer.mozilla.org/en-US/docs/Web/API/XR/requestSession
+// https://developer.mozilla.org/en-US/docs/Web/API/XRSession
+// https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer
+
+// GEO LOCATION
+// https://medium.com/chialab-open-source/location-based-gps-augmented-reality-on-the-web-7a540c515b3c
+// https://medium.com/chialab-open-source/build-your-location-based-augmented-reality-web-app-c2442e716564
+
+//#####################################################
+App.builder( true )
+	.set_camera( 20, 20, 3.0, 0, 0.7, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+async function init(){
+	return true;
+}
+
+//#####################################################
+
+class XR{
+	constructor(){
+		this.device = null;
+		this.context = null;
+		this.session = null;
+	}
+
+	async init(){
+		if( navigator.xr && XRSession.prototype.requestHitTest ){
+			this.device = await navigator.xr.requestDevice();
+			console.log( this.device );
+
+			this.context = gl.canvas.getContext("xrpresent");
+			this.session = await this.device.requestSession({
+				outputContext			: this.context,
+				environmentIntegration	: true,
+			});
+
+			console.log( this.session );
+			return true;
+		}
+		return false;
+	}
+
+
+	
+
+}
+
+async onEnterAR() {
+    const outputCanvas = document.createElement('canvas');
+    const ctx = outputCanvas.getContext('xrpresent');
+    
+    try {
+      const session = await this.device.requestSession({
+        outputContext: ctx,
+        environmentIntegration: true,
+      });
+      document.body.appendChild(outputCanvas);
+      this.onSessionStarted(session);
+    } catch (e) {
+      this.onNoXRDevice();
+    }
+  }
+
+async onSessionStarted(session) {
+this.session = session;
+
+document.body.classList.add('ar');
+
+this.renderer = new THREE.WebGLRenderer({
+	alpha: true,
+	preserveDrawingBuffer: true,
+});
+this.renderer.autoClear = false;
+
+this.gl = this.renderer.getContext();
+
+await this.gl.setCompatibleXRDevice(this.session.device);
+
+this.session.baseLayer = new XRWebGLLayer(this.session, this.gl);
+
+this.scene = DemoUtils.createCubeScene();
+
+this.camera = new THREE.PerspectiveCamera();
+this.camera.matrixAutoUpdate = false;
+//https://github.com/immersive-web/webxr-reference/blob/master/webxr-device-api/requestframeofreference.md
+this.frameOfRef = await this.session.requestFrameOfReference('eye-level');
+this.session.requestAnimationFrame(this.onXRFrame);
+}
+
+
+  onXRFrame(time, frame) {
+    const session = frame.session;
+    const pose = frame.getDevicePose(this.frameOfRef);
+
+    session.requestAnimationFrame(this.onXRFrame);
+
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.session.baseLayer.framebuffer);
+
+    if (pose) {
+      for (let view of frame.views) {
+        const viewport = session.baseLayer.getViewport(view);
+        this.renderer.setSize(viewport.width, viewport.height);
+
+        this.camera.projectionMatrix.fromArray(view.projectionMatrix);
+        const viewMatrix = new THREE.Matrix4().fromArray(pose.getViewMatrix(view));
+        this.camera.matrix.getInverse(viewMatrix);
+        this.camera.updateMatrixWorld(true);
+
+        this.renderer.clearDepth();
+
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+</script><page-layout></page-layout>
