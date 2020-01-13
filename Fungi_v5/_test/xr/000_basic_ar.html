@@ -14,28 +14,66 @@ import App				from "../../fungi/App.js";
 // https://medium.com/chialab-open-source/build-your-location-based-augmented-reality-web-app-c2442e716564
 
 //#####################################################
+/*
 App.builder( true )
 	.set_camera( 20, 20, 3.0, 0, 0.7, 0 )
 	.add( init )
 	//.render_loop( on_draw )
 	.render_on_mouse()
 	.build();
+*/
 
 //#####################################################
 async function init(){
+
+  console.log("test");
+
+  xr = new XR();
+  xr.init();
+
 	return true;
+}
+
+
+let xr;
+window.addEventListener("load", init );
+
+function onResize() {
+  gl.canvas.width = gl.canvas.clientWidth * window.devicePixelRatio;
+  gl.canvas.height = gl.canvas.clientHeight * window.devicePixelRatio;
 }
 
 //#####################################################
 
 class XR{
 	constructor(){
-		this.device = null;
-		this.context = null;
-		this.session = null;
+		//this.device = null;
+		//this.context = null;
+		//this.session = null;
+
+    this.referance_space = "";
 	}
 
 	async init(){
+
+    // Does XR exist?
+    if( navigator.xr ){
+
+      // Does device/browser support AR mode
+      let is_ar = await navigator.xr.isSessionSupported('immersive-ar');
+      if( !is_ar ){ console.error("Device does not support immersive-ar"); return false; }
+      
+      // Request an AR Session(inline) instead of VR Session(immersive-vr)
+      // Inline allows to render results to the browser, no external device needed to see results.
+      navigator.xr
+        .requestSession( 'inline' ) //'' immersive-ar
+        .then( (s)=>{ this.on_session_start(s); } );
+
+      return true;
+    }
+
+    console.log("NO AR");
+    /*
 		if( navigator.xr && XRSession.prototype.requestHitTest ){
 			this.device = await navigator.xr.requestDevice();
 			console.log( this.device );
@@ -50,13 +88,78 @@ class XR{
 			return true;
 		}
 		return false;
+    */
 	}
 
+  on_session_end( session ){ session.end(); console.log("Session Ended"); }
 
-	
+  on_session_start( session ){
+    console.log("session", session );
+
+
+    session.addEventListener( "end", this.on_session_ended );
+
+    App.gl.init("pg_canvas"); // { xrCompatible: true }
+
+    App.gl//.set_color( "#3a3a3a" )
+      .set_size( App.gl.canvas.clientWidth * window.devicePixelRatio, App.gl.canvas.clientHeight * window.devicePixelRatio )
+      .clear();
+
+    console.log("Context", App.gl.ctx );
+    session.updateRenderState( { baseLayer: new XRWebGLLayer( session, App.gl.ctx ) });
+
+    this.session = session;
+
+    // https://developer.mozilla.org/en-US/docs/Web/API/XRSession/requestReferenceSpace
+    // https://developer.mozilla.org/en-US/docs/Web/API/XRReferenceSpace
+    // Get the sort of coord system to track user
+     session.requestReferenceSpace( "viewer" ) //local = 
+        .then( (refSpace) => {
+          this.referance_space = refSpace;
+          console.log( refSpace );
+          //if (session.isImmersive ) {
+          //  xrImmersiveRefSpace = refSpace;
+          //} else {
+          //  inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
+          //}
+
+          session.requestAnimationFrame( on_render );
+
+
+        });
+  }
 
 }
 
+function test(){}
+function on_render( time, frame ){
+  console.log("render", time, frame );
+
+  let session = frame.session; // == xr.session
+  let pose = frame.getViewerPose( xr.referance_space );
+
+  session.requestAnimationFrame(test);
+
+  let layer = session.renderState.baseLayer;
+  console.log( layer );
+  
+  let gl = App.gl.ctx;
+
+  //gl.bindFramebuffer( gl.FRAMEBUFFER, layer.framebuffer );
+
+//        scene.startFrame();
+  //      session.requestAnimationFrame(onXRFrame);
+    //    scene.drawXRFrame(frame, pose);
+      //  scene.endFrame();
+
+
+  //session.requestAnimationFrame(this.onXRFrame);
+
+  //this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.session.baseLayer.framebuffer);
+
+}
+
+/*
 async onEnterAR() {
     const outputCanvas = document.createElement('canvas');
     const ctx = outputCanvas.getContext('xrpresent');
@@ -124,4 +227,5 @@ this.session.requestAnimationFrame(this.onXRFrame);
       }
     }
 
+*/
 </script><page-layout></page-layout>
