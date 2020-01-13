@@ -6,45 +6,240 @@
 	div{ display:flex; width:100%; height:100%; align-items:center; justify-content:center; }
 	button{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
 </style></head><body>
-	<button>START AR SESSION</button>
+	<button>x</button>
 	<div><canvas id="pg_canvas"></canvas></div>
 	
 <script type="module">
+// https://github.com/immersive-web/webxr-samples/tree/master/proposals
 
-let gl, canvas, shader, pg_width, pg_height, mesh;
+let shader, mesh;
 
-let camera = { 
-	pos		: [1,0,2], 			// Vector Position
-	view	: m4_identity(),	// View Matrix
-	proj	: m4_identity(),	// Projection Matrix
-	updated : true,
-	set( x,y,z ){ this.pos[0]=x; this.pos[1]=y; this.pos[2]=z; this.updated=true; },
-};
+window.addEventListener( "load", async ()=>{
+	let btn = document.getElementsByTagName("button")[0];
 
-window.addEventListener("load", ()=>{
-	console.log( document.getElementsByTagName("button") );
+	/*
+	ar.is_available()	
+		.then( _=>{
+			btn.innerHTML = "Launch AR Now";
+			btn.addEventListener( "click", _=>ar.init() );
+		})
+		.catch( err=>{ btn.innerHTML = "AR is not Available"; });
+	*/
 
-	init_gl();
+	
+	//btn.addEventListener( "click", _=>ar.init() );
+	ar.init();
+
+	//console.log( await ar.init() );
+
+	/*
+	gl.init();
 	init_shader();
-	init_camera();
 
 	let idx		= new Uint16Array( [ 0,1,2, 2,3,0 ] );
 	let vert	= new Float32Array( [ -0.5, 0.5, 0.0, -0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.5, 0.5, 0.0, ] );
-	mesh		= new_vao( vert, idx );
+	mesh		= gl.mesh_vao( vert, idx );
 
 	draw();
+	*/
 });
 
+// #region WebGL + WebXR Simple Wrappers
+class ar{
+	static is_available(){
+		if( navigator.xr ){
+			try{
+				// https://developer.mozilla.org/en-US/docs/Web/API/XR/isSessionSupported
+				// https://developer.mozilla.org/en-US/docs/Web/API/XRSessionMode  
+				// immersive-ar isn't 100% supported yet, def not on desktop.
+				return navigator.xr.isSessionSupported( 'immersive-ar' );
+			}catch( e ){ console.warn( e ); }
+		}
+		return Promise.reject();
+	}
+
+	static async init(){
+		console.log("init");
+		// https://developer.mozilla.org/en-US/docs/Web/API/XR/requestSession
+		navigator.xr
+			.requestSession( "inline" ) // immersive-ar
+			.then( this.on_session_start );
+	}
+
+	static on_session_start( s ){
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRSession
+		console.log( "session start", s );
+
+		/*
+		session.addEventListener( "end", this.on_session_ended );
+
+		App.gl.init("pg_canvas"); // { xrCompatible: true }
+
+		App.gl//.set_color( "#3a3a3a" )
+		.set_size( App.gl.canvas.clientWidth * window.devicePixelRatio, App.gl.canvas.clientHeight * window.devicePixelRatio )
+		.clear();
+
+		console.log("Context", App.gl.ctx );
+		session.updateRenderState( { baseLayer: new XRWebGLLayer( session, App.gl.ctx ) });
+
+		this.session = session;
+
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRSession/requestReferenceSpace
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRReferenceSpace
+		// Get the sort of coord system to track user
+		session.requestReferenceSpace( "viewer" ) //local = 
+			.then( (refSpace) => {
+			this.referance_space = refSpace;
+			console.log( refSpace );
+			//if (session.isImmersive ) {
+			//  xrImmersiveRefSpace = refSpace;
+			//} else {
+			//  inlineViewerHelper = new InlineViewerHelper(gl.canvas, refSpace);
+			//}
+
+			session.requestAnimationFrame( on_render );
+
+
+			});
+		*/
+
+	}
+}
+
+ar.session = null;
+
+class gl{
+	static init(){
+		if( this.ctx ) return;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.width	= window.innerWidth;
+		this.height	= window.innerHeight;
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.canvas			= document.getElementById( "pg_canvas" );
+		this.canvas.width	= this.width;
+		this.canvas.height	= this.height;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.ctx = this.canvas.getContext( "webgl2" );
+		this.ctx.viewport( 0, 0, this.width, this.height );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.init_camera();
+	}
+
+	static init_camera(){
+		this.camera = { 
+			pos		: [1,0,2], 			// Vector Position
+			view	: m4.identity(),	// View Matrix
+			proj	: m4.identity(),	// Projection Matrix
+			updated : true,
+			set 	: function( x,y,z ){ this.pos[0]=x; this.pos[1]=y; this.pos[2]=z; this.updated=true; },
+			update 	: function(){
+				if( !this.updated ) return;
+				m4.look_at( this.pos, [0,0,0], [0,1,0], this.view ); 
+				this.updated = false;
+			}
+		}
+
+		m4.perspective( this.camera.proj, 45 * Math.PI / 180, this.width / this.height, 0.01, 1000 );
+	}
+
+	static new_shader( v_src, f_src ){
+		let vert_sh		= this.compile_shader( v_src, gl.ctx.VERTEX_SHADER );
+		if( !vert_sh )	return null;
+
+		let frag_sh		= this.compile_shader( f_src, gl.ctx.FRAGMENT_SHADER);
+		if( !frag_sh ){	gl.ctx.deleteShader( vert_sh ); return null; }
+
+		//Link shaders together
+		let prog = gl.ctx.createProgram();
+		gl.ctx.attachShader( prog, vert_sh );
+		gl.ctx.attachShader( prog, frag_sh );
+		gl.ctx.linkProgram( prog );
+
+		// Check if successful
+		if( !gl.ctx.getProgramParameter( prog, gl.ctx.LINK_STATUS ) ){
+			console.error("Error creating shader program.", gl.ctx.getProgramInfoLog(prog));
+			gl.ctx.deleteProgram( prog ); return null;
+		}
+				
+		// Can delete the shaders since the program has been made.
+		gl.ctx.detachShader( prog, vert_sh ); // TODO, detaching might cause issues on some browsers, Might only need to delete.
+		gl.ctx.detachShader( prog, frag_sh );
+		gl.ctx.deleteShader( frag_sh );
+		gl.ctx.deleteShader( vert_sh );
+		return { prog };
+	}
+
+	static compile_shader( src, type ){
+		let shader = gl.ctx.createShader( type );
+		gl.ctx.shaderSource( shader, src );
+		gl.ctx.compileShader( shader );
+
+		//Get Error data if shader failed compiling
+		if( !gl.ctx.getShaderParameter( shader, gl.ctx.COMPILE_STATUS )){
+			console.error( "Error compiling shader : " + src, gl.ctx.getShaderInfoLog(shader) );
+			gl.ctx.deleteShader( shader );
+			return null;
+		}
+		return shader;
+	}
+
+	static mesh_vao( v_ary, i_ary=null ){
+		let elm_cnt, buf, vao = gl.ctx.createVertexArray();
+		gl.ctx.bindVertexArray( vao );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Vertex Attribute Buffer
+		buf = gl.ctx.createBuffer();
+		gl.ctx.bindBuffer( gl.ctx.ARRAY_BUFFER, buf );
+		gl.ctx.bufferData( gl.ctx.ARRAY_BUFFER, v_ary, gl.ctx.STATIC_DRAW );
+		gl.ctx.enableVertexAttribArray( 0 );
+		gl.ctx.vertexAttribPointer( 0, 3, gl.ctx.FLOAT, false, 0, 0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Index Buffer
+		if( i_ary ){
+			buf = gl.ctx.createBuffer();
+			gl.ctx.bindBuffer( gl.ctx.ELEMENT_ARRAY_BUFFER, buf );
+			gl.ctx.bufferData( gl.ctx.ELEMENT_ARRAY_BUFFER, i_ary, gl.ctx.STATIC_DRAW );
+			elm_cnt = i_ary.length;
+		}else elm_cnt = v_ary.length / 3;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// CLEANUP
+		gl.ctx.bindVertexArray( null );
+		gl.ctx.bindBuffer( gl.ctx.ARRAY_BUFFER, null );
+
+		return { 
+			vao, draw_mode:4, elm_cnt, is_index: (i_ary),
+			draw: function(){
+				gl.ctx.bindVertexArray( this.vao );
+				if( this.is_index )	gl.ctx.drawElements( this.draw_mode, this.elm_cnt, gl.ctx.UNSIGNED_SHORT, 0 );
+				else 				gl.ctx.drawArrays( this.draw_mode, 0, this.elm_cnt );
+			}
+		};
+	}
+}
+
+gl.ctx		= null;
+gl.canvas	= null;
+gl.width	= 0;
+gl.height	= 0;
+gl.camera	= null;
+// #endregion
 
 // #region RENDERING
 let time = 0;
 function draw(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	time += 0.008;
-	camera.set( 5 * Math.cos( time ), 0, 5 * Math.sin( time ) );
+	gl.camera.set( 5 * Math.cos( time ), 0, 5 * Math.sin( time ) );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	update_camera();
+	gl.camera.update();
 	shader.use();
 	mesh.draw();
 
@@ -53,235 +248,179 @@ function draw(){
 }
 // #endregion
 
-
 // #region INITIAL
-function init_gl(){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	pg_width		= window.innerWidth;
-	pg_height		= window.innerHeight;
-	
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	canvas			= document.getElementById( "pg_canvas" );
-	canvas.width	= pg_width;
-	canvas.height	= pg_height;
+async function init_ar(){
+	// Does XR Exist
+	if( navigator.xr ){
+		/*
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Does device/browser support Immersive AR mode
+		try{
+			// https://developer.mozilla.org/en-US/docs/Web/API/XR/isSessionSupported
+			// https://developer.mozilla.org/en-US/docs/Web/API/XRSessionMode  immersive-ar isn't 100% supported yet, def not on desktop.
+			let is_ar = await navigator.xr.isSessionSupported( 'immersive-ar' );
+		}catch( e ){ console.warn( e ); return false; }
+		*/
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	gl				= canvas.getContext( "webgl2" );
-	gl.viewport( 0, 0, pg_width, pg_height );
+		navigator.xr
+			.requestSession( "inline" )
+			.then( AR.on_session_start );
+
+		/*		
+		// Request an AR Session(inline) instead of VR Session(immersive-vr)
+		// Inline allows to render results to the browser, no external device needed to see results.
+		navigator.xr
+			.requestSession( 'inline' ) //'' immersive-ar
+			.then( (s)=>{ console.log( session ) } );
+
+		return true;
+		*/
+	}
+	return false;
+
+
+
+	/*
+		// Does XR exist?
+		if( navigator.xr ){
+
+		// Does device/browser support AR mode
+		let is_ar = await navigator.xr.isSessionSupported('immersive-ar');
+		if( !is_ar ){ console.error("Device does not support immersive-ar"); return false; }
+		
+		// Request an AR Session(inline) instead of VR Session(immersive-vr)
+		// Inline allows to render results to the browser, no external device needed to see results.
+		navigator.xr
+			.requestSession( 'inline' ) //'' immersive-ar
+			.then( (s)=>{ this.on_session_start(s); } );
+
+		return true;
+		}
+	*/
+
 }
 
 function init_shader(){ 
-	shader = new_shader( VERT_SRC, FRAG_SRC );
-	shader.proj_loc = gl.getUniformLocation( shader.prog, "proj_mtx" );
-	shader.view_loc = gl.getUniformLocation( shader.prog, "view_mtx" );
+	shader = gl.new_shader( VERT_SRC, FRAG_SRC );
+	shader.proj_loc = gl.ctx.getUniformLocation( shader.prog, "proj_mtx" );
+	shader.view_loc = gl.ctx.getUniformLocation( shader.prog, "view_mtx" );
 
 	shader.use = function(){
-		gl.useProgram( this.prog );
-		gl.uniformMatrix4fv( this.proj_loc, false, camera.proj );
-		gl.uniformMatrix4fv( this.view_loc, false, camera.view );
+		gl.ctx.useProgram( this.prog );
+		gl.ctx.uniformMatrix4fv( this.proj_loc, false, gl.camera.proj );
+		gl.ctx.uniformMatrix4fv( this.view_loc, false, gl.camera.view );
 	}
-}
-
-function init_camera(){
-	m4_perspective( camera.proj, 45 * Math.PI / 180, pg_width / pg_height, 0.01, 1000 );
-}
-
-function update_camera(){
-	if( !camera.updated ) return;
-	m4_look_at( camera.pos, [0,0,0], [0,1,0], camera.view );
-	camera.updated = false;
 }
 // #endregion
 
-
-// #region SHADERS
-function new_shader( v_src, f_src ){
-	let vert_sh		= compile_shader( v_src, gl.VERTEX_SHADER );
-	if( !vert_sh )	return null;
-
-	let frag_sh		= compile_shader( f_src, gl.FRAGMENT_SHADER);
-	if( !frag_sh ){	gl.deleteShader( vert_sh ); return null; }
-
-	//Link shaders together
-	let prog = gl.createProgram();
-	gl.attachShader( prog, vert_sh );
-	gl.attachShader( prog, frag_sh );
-	gl.linkProgram( prog );
-
-	// Check if successful
-	if( !gl.getProgramParameter( prog, gl.LINK_STATUS ) ){
-		console.error("Error creating shader program.", gl.getProgramInfoLog(prog));
-		gl.deleteProgram( prog ); return null;
+class m4{
+	static identity(){
+		let out = new Float32Array( 16 );
+		out[0] = out[5] = out[10] = out[15] = 1;
+		return out;
 	}
-			
-	// Can delete the shaders since the program has been made.
-	gl.detachShader( prog, vert_sh ); // TODO, detaching might cause issues on some browsers, Might only need to delete.
-	gl.detachShader( prog, frag_sh );
-	gl.deleteShader( frag_sh );
-	gl.deleteShader( vert_sh );
 
-	return { prog };
-}
-
-function compile_shader( src, type ){
-	let shader = gl.createShader( type );
-	gl.shaderSource(shader,src);
-	gl.compileShader(shader);
-
-	//Get Error data if shader failed compiling
-	if( !gl.getShaderParameter( shader, gl.COMPILE_STATUS )){
-		console.error("Error compiling shader : " + src, gl.getShaderInfoLog(shader));
-		gl.deleteShader(shader);
-		return null;
+	static perspective( out, fovy, aspect, near, far ){
+		let f = 1.0 / Math.tan(fovy / 2),
+			nf = 1 / (near - far);
+		out[0] = f / aspect;
+		out[1] = 0;
+		out[2] = 0;
+		out[3] = 0;
+		out[4] = 0;
+		out[5] = f;
+		out[6] = 0;
+		out[7] = 0;
+		out[8] = 0;
+		out[9] = 0;
+		out[10] = (far + near) * nf;
+		out[11] = -1;
+		out[12] = 0;
+		out[13] = 0;
+		out[14] = (2 * far * near) * nf;
+		out[15] = 0;
 	}
-	return shader;
-}
-// #endregion
 
+	//This creates a View Matrix, not a World Matrix. That means Inverted World Matrix
+	static look_at( eye, center, up, out ){
+		let x0, x1, x2, y0, y1, y2, z0, z1, z2, len,
+			eyex	= eye[0],
+			eyey	= eye[1],
+			eyez	= eye[2],
+			upx		= up[0],
+			upy 	= up[1],
+			upz		= up[2],
+			centerx	= center[0],
+			centery	= center[1],
+			centerz	= center[2];
 
-// #region MESH
-function new_vao( v_ary, i_ary=null ){
-	let elm_cnt, buf, vao = gl.createVertexArray();
-	gl.bindVertexArray( vao );
-
-	///ELEMENT_ARRAY_BUFFER
-	buf = gl.createBuffer();
-	gl.bindBuffer( gl.ARRAY_BUFFER, buf );
-	gl.bufferData( gl.ARRAY_BUFFER, v_ary, gl.STATIC_DRAW );
-	gl.enableVertexAttribArray( 0 );
-	gl.vertexAttribPointer( 0, 3, gl.FLOAT, false, 0, 0 );
-
-	if( i_ary ){
-		buf = gl.createBuffer();
-		gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buf );
-		gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, i_ary, gl.STATIC_DRAW );
-		elm_cnt = i_ary.length;
-	}else elm_cnt = v_ary.length / 3;
-
-	gl.bindVertexArray( null );
-	gl.bindBuffer( gl.ARRAY_BUFFER, null );
-
-	return { 
-		vao, draw_mode:4, elm_cnt, is_index: (i_ary),
-		draw: function(){
-			gl.bindVertexArray( this.vao );
-			if( this.is_index )	gl.drawElements( this.draw_mode, this.elm_cnt, gl.UNSIGNED_SHORT, 0 );
-			else 				gl.drawArrays( this.draw_mode, 0, this.elm_cnt );
+		if (Math.abs(eyex - centerx) < 0.000001 &&
+			Math.abs(eyey - centery) < 0.000001 &&
+			Math.abs(eyez - centerz) < 0.000001) {
+			return Mat4.identity( out );
 		}
-	};
-}
-// #endregion
 
+		z0 = eyex - centerx;
+		z1 = eyey - centery;
+		z2 = eyez - centerz;
 
-// #region MATRIX 4x4
-function m4_identity(){
-	let out = new Float32Array( 16 );
-	out[0] = out[5] = out[10] = out[15] = 1;
-	return out;
-}
+		len = 1 / Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2);
+		z0 *= len;
+		z1 *= len;
+		z2 *= len;
 
-function m4_perspective( out, fovy, aspect, near, far ){
-	let f = 1.0 / Math.tan(fovy / 2),
-		nf = 1 / (near - far);
-	out[0] = f / aspect;
-	out[1] = 0;
-	out[2] = 0;
-	out[3] = 0;
-	out[4] = 0;
-	out[5] = f;
-	out[6] = 0;
-	out[7] = 0;
-	out[8] = 0;
-	out[9] = 0;
-	out[10] = (far + near) * nf;
-	out[11] = -1;
-	out[12] = 0;
-	out[13] = 0;
-	out[14] = (2 * far * near) * nf;
-	out[15] = 0;
-}
+		x0 = upy * z2 - upz * z1;
+		x1 = upz * z0 - upx * z2;
+		x2 = upx * z1 - upy * z0;
+		len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
 
-//This creates a View Matrix, not a World Matrix. That means Inverted World Matrix
-function m4_look_at( eye, center, up, out ){
-	let x0, x1, x2, y0, y1, y2, z0, z1, z2, len;
-	let eyex = eye[0];
-	let eyey = eye[1];
-	let eyez = eye[2];
-	let upx = up[0];
-	let upy = up[1];
-	let upz = up[2];
-	let centerx = center[0];
-	let centery = center[1];
-	let centerz = center[2];
+		if (!len) {
+			x0 = 0;
+			x1 = 0;
+			x2 = 0;
+		} else {
+			len = 1 / len;
+			x0 *= len;
+			x1 *= len;
+			x2 *= len;
+		}
 
-	if (Math.abs(eyex - centerx) < 0.000001 &&
-		Math.abs(eyey - centery) < 0.000001 &&
-		Math.abs(eyez - centerz) < 0.000001) {
-		return Mat4.identity( out );
+		y0 = z1 * x2 - z2 * x1;
+		y1 = z2 * x0 - z0 * x2;
+		y2 = z0 * x1 - z1 * x0;
+
+		len = Math.sqrt(y0 * y0 + y1 * y1 + y2 * y2);
+		if (!len) {
+			y0 = 0;
+			y1 = 0;
+			y2 = 0;
+		} else {
+			len = 1 / len;
+			y0 *= len;
+			y1 *= len;
+			y2 *= len;
+		}
+
+		out[0] = x0;
+		out[1] = y0;
+		out[2] = z0;
+		out[3] = 0;
+		out[4] = x1;
+		out[5] = y1;
+		out[6] = z1;
+		out[7] = 0;
+		out[8] = x2;
+		out[9] = y2;
+		out[10] = z2;
+		out[11] = 0;
+		out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+		out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+		out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+		out[15] = 1;
+
+		return out;
 	}
-
-	z0 = eyex - centerx;
-	z1 = eyey - centery;
-	z2 = eyez - centerz;
-
-	len = 1 / Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2);
-	z0 *= len;
-	z1 *= len;
-	z2 *= len;
-
-	x0 = upy * z2 - upz * z1;
-	x1 = upz * z0 - upx * z2;
-	x2 = upx * z1 - upy * z0;
-	len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
-
-	if (!len) {
-		x0 = 0;
-		x1 = 0;
-		x2 = 0;
-	} else {
-		len = 1 / len;
-		x0 *= len;
-		x1 *= len;
-		x2 *= len;
-	}
-
-	y0 = z1 * x2 - z2 * x1;
-	y1 = z2 * x0 - z0 * x2;
-	y2 = z0 * x1 - z1 * x0;
-
-	len = Math.sqrt(y0 * y0 + y1 * y1 + y2 * y2);
-	if (!len) {
-		y0 = 0;
-		y1 = 0;
-		y2 = 0;
-	} else {
-		len = 1 / len;
-		y0 *= len;
-		y1 *= len;
-		y2 *= len;
-	}
-
-	out[0] = x0;
-	out[1] = y0;
-	out[2] = z0;
-	out[3] = 0;
-	out[4] = x1;
-	out[5] = y1;
-	out[6] = z1;
-	out[7] = 0;
-	out[8] = x2;
-	out[9] = y2;
-	out[10] = z2;
-	out[11] = 0;
-	out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
-	out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
-	out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
-	out[15] = 1;
-
-	return out;
 }
-// #endregion
-
 
 // #region CONSTANTS
 const VERT_SRC = `#version 300 es
