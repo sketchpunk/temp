@@ -12,6 +12,10 @@
 <script type="module">
 // https://github.com/immersive-web/webxr-samples/tree/master/proposals
 
+// https://github.com/immersive-web/webxr/blob/master/explainer.md
+// https://github.com/immersive-web/webxr/blob/master/spatial-tracking-explainer.md
+
+
 let shader, mesh;
 
 window.addEventListener( "load", async ()=>{
@@ -26,7 +30,6 @@ window.addEventListener( "load", async ()=>{
 		.catch( err=>{ btn.innerHTML = "AR is not Available"; });
 	*/
 
-	
 	//btn.addEventListener( "click", _=>ar.init() );
 	ar.init();
 
@@ -44,15 +47,55 @@ window.addEventListener( "load", async ()=>{
 	*/
 });
 
+function on_render( time, frame ){
+	// Example of Bare Bones Rendering - https://github.com/immersive-web/webxr/blob/master/explainer.md#viewer-tracking
+	console.log( arguments );
+	let session = frame.session;
+    let pose 	= frame.getViewerPose( ar.ref_space );
+	let layer 	= session.renderState.baseLayer;
+	
+	//let viewport = layer.getViewport( pose.views[0] );
+	console.log( layer );
+
+	
+
+	//gl.ctx.bindFramebuffer( gl.ctx.FRAMEBUFFER, layer.framebuffer );
+	//gl.ctx.clear(gl.ctx.COLOR_BUFFER_BIT | gl.ctx.DEPTH_BUFFER_BIT);
+
+	// https://developer.mozilla.org/en-US/docs/Web/API/XRView
+	// Documentation says not to assume there is a set number of views, that
+	// developer must iterate and render for each view.
+	let view = pose.views[0]; // Going to assume a SINGLE view... Just to simplify things, will change with different test cases.
+	console.log(
+		view.projectionMatrix,
+		view.transform,
+		view.transform.inverse.matrix
+	);
+
+	/*
+    let views = [];
+    for (let view of pose.views) {
+      views.push(new WebXRView(view, layer));
+    }
+    this.drawViewArray(views);
+	*/
+
+	// session.requestAnimationFrame( on_render );
+}
+
 // #region WebGL + WebXR Simple Wrappers
 class ar{
 	static is_available(){
-		if( navigator.xr ){
+		if( navigator.xr ){  // && XRSession.prototype.requestHitTest
 			try{
 				// https://developer.mozilla.org/en-US/docs/Web/API/XR/isSessionSupported
 				// https://developer.mozilla.org/en-US/docs/Web/API/XRSessionMode  
 				// immersive-ar isn't 100% supported yet, def not on desktop.
 				return navigator.xr.isSessionSupported( 'immersive-ar' );
+
+				// TODO, Need to test for HitTest function exists.
+				// XRSession.prototype.requestHitTest
+
 			}catch( e ){ console.warn( e ); }
 		}
 		return Promise.reject();
@@ -66,9 +109,41 @@ class ar{
 			.then( this.on_session_start );
 	}
 
+	static end_session(){ if( this.session ){ this.session.end();  } }
+
+	static on_session_end( s ){ 
+		ar.session.removeEventListener( "end", ar.on_session_end );
+		ar.session = null;
+		console.log( "Session Ended" );
+	}
+	
 	static on_session_start( s ){
 		// https://developer.mozilla.org/en-US/docs/Web/API/XRSession
-		console.log( "session start", s );
+		console.log( "AR Session Start" );
+		ar.session = s;
+
+		gl.init();
+		s.addEventListener( "end", ar.on_session_end );
+		s.addEventListener( "select", ar.on_select );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// XRWebGLLayer, Creates a link between XR Session and the WebGL Drawing Context
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRSession/updateRenderState
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRRenderStateInit
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer/XRWebGLLayer
+		s.updateRenderState( { baseLayer: new XRWebGLLayer( s, gl.ctx ) });
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// https://developer.mozilla.org/en-US/docs/Web/API/XRSession/requestReferenceSpace
+		// https://github.com/immersive-web/webxr/blob/master/spatial-tracking-explainer.md#reference-spaces
+		// Use viewer if the sesion is set as inline, local if set as immersive-ar
+		s.requestReferenceSpace( "viewer" ) // local = 
+			.then( (ref_space) => {
+				ar.ref_space = ref_space;
+				console.log("Request Space", ref_space );
+
+				s.requestAnimationFrame( on_render );
+			});
 
 		/*
 		session.addEventListener( "end", this.on_session_ended );
@@ -104,9 +179,51 @@ class ar{
 		*/
 
 	}
+
+	static on_select( evt ){
+		let ray_pose = evt.frame.getPose( evt.inputSource.targetRaySpace, ar.ref_space );
+		if( !ray_pose ) return;
+
+		let ray = new XRRay( ray_pose.transform );
+		// ray.origin, ray.direction
+
+		evt.frame.session.requestHitTest( ray, ar.ref_space ).then( hits=>{
+			console.log("HITS", hits );
+		});
+	}
+
+	static get_ray( pose, is_ray_space=false ){
+		// WebXR Hit-test Extension - https://www.chromestatus.com/feature/4755348300759040 
+		// https://github.com/immersive-web/hit-test/blob/master/hit-testing-explainer.md
+
+		let ray;
+
+		if( !is_ray_space ){
+			let m = pose.transform.matrix;
+
+			let ray_origin	= m4.transform_vec3( m, [ 0, 0, 0 ] );
+			let ray_dir		= m4.transform_vec3( m, [ 0, 0, -1 ] );
+
+			v3.sub( ray_dir, ray_origin, ray_dir );
+			v3.norm( ray_dir );
+
+			ray = new XRRay( v3.to_struct( ray_origin ), v3.to_struct( ray_dir ) );
+		}else{
+			ray = new XRRay( ray_pose.transform );
+		}
+
+		ar.session.requestHitTest( ray, ar.ref_space ).then( hits=>{
+			if( hits.length ){
+				let hit = hits[0];
+				console.log( hit.hitMatrix );
+				console.log( hit );
+			}
+		});
+	}
 }
 
-ar.session = null;
+ar.session		= null;
+ar.ref_space	= null;
 
 class gl{
 	static init(){
@@ -122,7 +239,7 @@ class gl{
 		this.canvas.height	= this.height;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.ctx = this.canvas.getContext( "webgl2" );
+		this.ctx = this.canvas.getContext( "webgl2" ); // { xrCompatible: true }
 		this.ctx.viewport( 0, 0, this.width, this.height );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -249,57 +366,6 @@ function draw(){
 // #endregion
 
 // #region INITIAL
-async function init_ar(){
-	// Does XR Exist
-	if( navigator.xr ){
-		/*
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Does device/browser support Immersive AR mode
-		try{
-			// https://developer.mozilla.org/en-US/docs/Web/API/XR/isSessionSupported
-			// https://developer.mozilla.org/en-US/docs/Web/API/XRSessionMode  immersive-ar isn't 100% supported yet, def not on desktop.
-			let is_ar = await navigator.xr.isSessionSupported( 'immersive-ar' );
-		}catch( e ){ console.warn( e ); return false; }
-		*/
-
-		navigator.xr
-			.requestSession( "inline" )
-			.then( AR.on_session_start );
-
-		/*		
-		// Request an AR Session(inline) instead of VR Session(immersive-vr)
-		// Inline allows to render results to the browser, no external device needed to see results.
-		navigator.xr
-			.requestSession( 'inline' ) //'' immersive-ar
-			.then( (s)=>{ console.log( session ) } );
-
-		return true;
-		*/
-	}
-	return false;
-
-
-
-	/*
-		// Does XR exist?
-		if( navigator.xr ){
-
-		// Does device/browser support AR mode
-		let is_ar = await navigator.xr.isSessionSupported('immersive-ar');
-		if( !is_ar ){ console.error("Device does not support immersive-ar"); return false; }
-		
-		// Request an AR Session(inline) instead of VR Session(immersive-vr)
-		// Inline allows to render results to the browser, no external device needed to see results.
-		navigator.xr
-			.requestSession( 'inline' ) //'' immersive-ar
-			.then( (s)=>{ this.on_session_start(s); } );
-
-		return true;
-		}
-	*/
-
-}
-
 function init_shader(){ 
 	shader = gl.new_shader( VERT_SRC, FRAG_SRC );
 	shader.proj_loc = gl.ctx.getUniformLocation( shader.prog, "proj_mtx" );
@@ -420,8 +486,40 @@ class m4{
 
 		return out;
 	}
+
+	static transform_vec3( m, out=[0,0,0] ){
+		let x = out[0], y = out[1], z = out[2],
+			w = m[3] * x + m[7] * y + m[11] * z + m[15];
+			w = w || 1.0;
+
+		out[0] = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
+		out[1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
+		out[2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
+		return out;
+	}
 }
 
+class v3{
+	static sub( a, b, out=[0,0,0] ){
+		out[0] = a[0] - b[0];
+		out[1] = a[1] - b[1];
+		out[2] = a[2] - b[2];
+		return out;
+	}
+
+	static norm( out ){
+  		let len = out[0]**2 + out[1]**2 + out[2]**2;
+  		if( len > 0 ){
+    		len = 1 / Math.sqrt( len );
+    		out[0] *= len;
+    		out[1] *= len;
+    		out[2] *= len;
+  		}
+		return out;
+	}
+
+	static to_struct( a ){ return { x:a[0], y:a[1], z:a[2] }; }
+}
 // #region CONSTANTS
 const VERT_SRC = `#version 300 es
 	layout(location=0) in vec3 a_pos;
