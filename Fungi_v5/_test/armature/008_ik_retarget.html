@@ -52,11 +52,20 @@ async function init(){
 
 	//let rig = gModelA.IKRig;
 
-	/*
+	
 	let rig = gEntitySrc.IKRig;
-	let b = rig.tpose.get_bone("LeftFoot");
-	App.Debug.pnt( b.world.pos );
+	let chain = rig.chains.leg_l;
+	let b0 = rig.tpose.bones[ chain.first() ];
+	let b1 = rig.tpose.bones[ chain.last() ];
 
+	let v = Vec3.sub( b1.world.pos, b0.world.pos ).len();
+	App.Debug.pnt( b0.world.pos, "green" );
+	App.Debug.pnt( b1.world.pos, "red" );
+
+	console.log( v, b0.len );
+
+
+	/*
 	let q = new Quat();
 	let v = new Vec3();
 	v.from_quat( b.world.rot, Vec3.UP );
@@ -122,7 +131,7 @@ async function init(){
 	//console.log( b );
 
 	//gAnimate( 0.48 );
-	gAnimate( 0.8 );
+	//gAnimate( 0.8 );
 
 	
 	/*
@@ -489,14 +498,14 @@ function compute_ik_pose( e, ik_pose ){
 	compute_hip_QUAT( rig, ik_pose );
 	//compute_hip_VEC( rig, ik_pose );
 	compute_limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
-	compute_limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
+	//compute_limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
 
-	compute_foot( rig, rig.points.foot_l.idx, ik_pose.foot_l );
-	compute_foot( rig, rig.points.foot_r.idx, ik_pose.foot_r );
+	//compute_foot( rig, rig.points.foot_l.idx, ik_pose.foot_l );
+	//compute_foot( rig, rig.points.foot_r.idx, ik_pose.foot_r );
 
-	compute_look_twist( rig, rig.chains.spine.last(), ik_pose.spine );
+	//compute_look_twist( rig, rig.chains.spine.last(), ik_pose.spine );
 
-	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
+	//compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
 }
 
 function compute_hip_QUAT( rig, ik_pose ){
@@ -553,14 +562,14 @@ function compute_limb( pose, chain, ik_limb ){
 	// Using the First bone rotation to determine it's joint direction seems to produce the smoothest animation
 	ik_limb.joint_dir.copy( Vec3.transform_quat( Vec3.BACK, bf.world.rot ) ); 
 
-	ik_limb.dir.copy( dir );					// Save Direction to end Effector
+	ik_limb.dir.copy( dir ).norm();				// Save Direction to end Effector
 	ik_limb.len_scale = dir.len() / chain.len;	// Normalize the length to the End Effector using the Chain Length as Max.
 
-	console.log( ik_limb, chain );
+	console.log( ik_limb, chain.len, dir.len() );
 
 	App.Debug.pnt( be.world.pos, "green", 0.07 );
 	App.Debug.pnt( bf.world.pos, "red", 0.07 );
-	App.Debug.ln( bf.world.pos, Vec3.scale( dir, ik_limb.len_scale).add(bf.world.pos), "red" );
+	App.Debug.ln( bf.world.pos, Vec3.scale( dir, ik_limb.len_scale * chain.len ).add(bf.world.pos), "red" );
 }
 
 function compute_foot( rig, b_idx, ik ){
