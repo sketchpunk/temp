@@ -1,0 +1,44 @@
+<html>
+<body>
+
+    <h3>Choose the local(s) zip file(s)</h3>
+    <p class="note">Note : your browser will process the zip file, don't choose a file too big !</p>
+    <input type="file" id="file" name="file" multiple /><br />
+
+    <div id="result_block" class="hidden">
+    <h3>Content :</h3>
+    <div id="result"></div>
+    </div>
+
+    <script src="jszip.min.js"></script>
+    <script>
+        //https://github.com/codedread/bitjs
+        // https://stuk.github.io/jszip/documentation/api_zipobject/async.html
+        window.onload = function(){
+            document.getElementById( "file" ).addEventListener("change", function(e){
+                handleFile( e.target.files[0] );
+            });
+        }
+
+        // Closure to capture the file information.
+        async function handleFile(f) {
+            console.log( f.name );
+            let zip = await JSZip.loadAsync( f );
+            let ary = new Array();
+
+            zip.forEach( ( path, file )=>{
+                if( path.endsWith(".jpg") ) ary.push( path );            
+            });
+
+            let file    = zip.file( ary[1] );
+            //let uint8   = await file.async( "uint8array" );
+            //let blob    = new Blob( [ uint8 ], { type: "image/jpeg" } );
+            let blob   = await file.async( "blob" );
+            let img     = new Image();
+            img.src     = window.URL.createObjectURL( blob );
+
+            document.body.appendChild( img );
+        }
+    </script>
+</body>
+</html>

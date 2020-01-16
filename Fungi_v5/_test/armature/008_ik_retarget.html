@@ -11,14 +11,14 @@ import IKRig			from "../../fungi.armature/IKRig.js";
 
 //#####################################################
 
-App.builder( true, true )
+App.builder( true, false )
 	.use_armature()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
 	.set_camera( 20, 20, 2.0, 0, 0.7, 0 )
 	.add( init )
-	.render_loop( on_draw )
-	//.render_on_mouse()
+	//.render_loop( on_draw )
+	.render_on_mouse()
 	.build();
 
 //#####################################################
@@ -40,13 +40,13 @@ async function init(){
 
 	gAnimate = load_src( dl[0], dl[1] );
 	
-	load_mesh_a( dl[2], dl[3] );
+	//load_mesh_a( dl[2], dl[3] );
 	//load_mesh_b( dl[4], dl[5] );
 
 	gIKPose = new IKPose();
 
-	//gAnimate( 0.48 );
-	gAnimate( 0.8 );
+	gAnimate( 0.70 );
+	//gAnimate( 0.8 );
 
 	return true;
 }
@@ -54,10 +54,11 @@ async function init(){
 //#####################################################
 
 function load_src( json, bin ){	
-	/* 
+	/*
 	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
 	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
 	*/
+	
 	let e		= GltfUtil.get_bone_view( "src", json, bin );
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
 	let pm		= new PoseAnimator();
@@ -189,7 +190,7 @@ class IKPose{
 				q.pmul_invert( rig.tpose.bones[ tb.p_idx ].world.rot );
 			}
 			*/
-			this.apply_look_twist( rig, rig.points.hip.idx, this.hip );
+			this.apply_look_twist( rig, rig.points.hip.idx, this.hip, false );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// TRANSLATION
@@ -257,9 +258,9 @@ class IKPose{
 			ct.from_add( pt, tb.local );			// Add Bone's Bind Local Space
 
 			//App.Debug.pnt( ct.pos, "red", 0.05, 1 );
-			App.Debug.ln( ct.pos, Vec3.transform_quat( Vec3.FORWARD, ct.rot ).add( ct.pos ), "red" );
-			App.Debug.ln( ct.pos, Vec3.scale( Vec3.FORWARD, 0.5 ).add( ct.pos ), "yellow" );
-			App.Debug.ln( ct.pos, Vec3.scale( ik.dir, 0.5 ).add( ct.pos ), "orange" );
+			//App.Debug.ln( ct.pos, Vec3.transform_quat( Vec3.FORWARD, ct.rot ).add( ct.pos ), "red" );
+			//App.Debug.ln( ct.pos, Vec3.scale( Vec3.FORWARD, 0.5 ).add( ct.pos ), "yellow" );
+			//App.Debug.ln( ct.pos, Vec3.scale( ik.dir, 0.5 ).add( ct.pos ), "orange" );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Inverting the BIND World Space rotation, can then transform
@@ -271,7 +272,7 @@ class IKPose{
 
 			v.from_quat( ct.rot, fwd_alt );	// Re create FWD direction based on current animated pose
 
-			App.Debug.ln( ct.pos, Vec3.scale( v, 0.5 ).add( ct.pos ), "green" );
+			//App.Debug.ln( ct.pos, Vec3.scale( v, 0.5 ).add( ct.pos ), "green" );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			q.from_unit_vecs( v, ik.dir )			// Compute Swing Rotation
@@ -428,8 +429,8 @@ function compute_ik_pose( e, ik_pose ){
 	rig.pose.update_world();
 	App.Debug.reset();
 
-	compute_hip_QUAT( rig, ik_pose );
-	//compute_hip_VEC( rig, ik_pose );
+	//compute_hip_QUAT( rig, ik_pose );
+	compute_hip_VEC( rig, ik_pose );
 
 	compute_limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
 	compute_limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
@@ -437,6 +438,8 @@ function compute_ik_pose( e, ik_pose ){
 	compute_foot( rig, rig.points.foot_l.idx, ik_pose.foot_l );
 	compute_foot( rig, rig.points.foot_r.idx, ik_pose.foot_r );
 
+	compute_spine( rig, rig.chains.spine );
+	//compute_look_twist( rig, rig.chains.spine.first(), ik_pose.spine, true )
 	compute_look_twist( rig, rig.chains.spine.last(), ik_pose.spine );
 
 	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
@@ -482,6 +485,11 @@ function compute_hip_VEC( rig, ik_pose ){
 		sign	= ( Vec3.dot( s_lft, a_up ) < 0 )? 1:-1,				// Is the Angle going to be Negative?, use Swing Left to determine
 		twist 	= Vec3.angle( s_up, a_up ) * sign,						// Get Angle Between TPose Swing UP and Animated UP
 		pos_dif	= Vec3.sub( pb.world.pos, tb.world.pos );				// How much translation from bind pose has the animated hip gone.
+
+
+	App.Debug.pnt( pb.world.pos, "orange" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_fwd, 0.5 ).add( pb.world.pos ), "orange" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_up, 0.5 ).add( pb.world.pos ), "orange" );
 
 	// Set all the required info needed to perform some IK on the target Hip Bone
 	ik_pose.set_hip( a_fwd, twist, pos_dif, tb.world.pos.y );
@@ -647,6 +655,23 @@ function compute_look_twist( rig, b_idx, ik, do_debug=false ){
 	/**/
 }
 
+function compute_spine( rig, chain ){
+	let b_idx 	= chain.first(),
+		pb		= rig.pose.bones[ b_idx ],						// Pose Bone
+		tb		= rig.tpose.bones[ b_idx ];						// TPose Bone
+
+	let q = new Quat();
+	q.from_invert( tb.world.rot );
+
+	let alt_fwd = Vec3.transform_quat( Vec3.FORWARD, q );
+	let alt_up 	= Vec3.transform_quat( Vec3.UP, q );
+	let a_fwd 	= Vec3.transform_quat( alt_fwd, pb.world.rot );
+	let a_up 	= Vec3.transform_quat( alt_up, pb.world.rot );
+
+	App.Debug.pnt( pb.world.pos, "yellow" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_fwd, 0.5 ).add( pb.world.pos ), "yellow" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_up, 0.5 ).add( pb.world.pos ), "yellow" );
+}
 
 // #region junk
 
