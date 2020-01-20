@@ -15,7 +15,7 @@ App.builder( true, false )
 	.use_armature()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 20, 20, 2.0, 0, 0.7, 0 )
+	.set_camera( 0, 10, 3, 0.5, 0.8, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse()
@@ -286,7 +286,7 @@ class IKPose{
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			q.from_unit_vecs( v, ik.dir )			// Compute Swing Rotation
 			q.mul( ct.rot );						// Add World Space Rotation
-			//q.pmul_axis_angle( ik.dir, ik.twist );	// Add Twist, using direction as rotation axis
+			q.pmul_axis_angle( ik.dir, ik.twist );	// Add Twist, using direction as rotation axis
 			q.pmul_invert( pt.rot );				// To Local Space
 
 			rig.pose.set_bone( b_idx, q );		
@@ -524,7 +524,8 @@ function compute_ik_pose( e, ik_pose ){
 	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
 	compute_limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
 
-	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
+	//compute_look_twist( rig, rig.points.neck.idx, ik_pose.head, true );
+	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, true );
 }
 
 function compute_hip_QUAT( rig, ik_pose ){

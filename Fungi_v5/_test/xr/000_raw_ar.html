@@ -4,7 +4,7 @@
 	body{background-color:#404040;}
 	canvas{ border:0px solid red; }
 	div{ display:flex; width:100%; height:100%; align-items:center; justify-content:center; }
-	button{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+	button{ position:absolute; left:50%; top:10%; transform:translate(-50%,-50%); }
 </style></head><body>
 	<button>x</button>
 	<div><canvas id="pg_canvas"></canvas></div>
@@ -21,17 +21,23 @@ let shader, mesh;
 window.addEventListener( "load", async ()=>{
 	let btn = document.getElementsByTagName("button")[0];
 
-	/*
+	/**/
 	ar.is_available()	
 		.then( _=>{
 			btn.innerHTML = "Launch AR Now";
-			btn.addEventListener( "click", _=>ar.init() );
+			btn.addEventListener( "click", _=>{ 
+				//ar.init();
+				//btn.style.display = "none";
+
+				if( ar.session )	ar.end_session();
+				else 				ar.init();
+			});
 		})
 		.catch( err=>{ btn.innerHTML = "AR is not Available"; });
-	*/
+	
 
 	//btn.addEventListener( "click", _=>ar.init() );
-	ar.init();
+	//ar.init();
 
 	//console.log( await ar.init() );
 
@@ -49,28 +55,47 @@ window.addEventListener( "load", async ()=>{
 
 function on_render( time, frame ){
 	// Example of Bare Bones Rendering - https://github.com/immersive-web/webxr/blob/master/explainer.md#viewer-tracking
-	console.log( arguments );
 	let session = frame.session;
     let pose 	= frame.getViewerPose( ar.ref_space );
 	let layer 	= session.renderState.baseLayer;
 	
-	//let viewport = layer.getViewport( pose.views[0] );
-	console.log( layer );
+	session.requestAnimationFrame( on_render );
 
 	
+	//console.log( layer );
 
-	//gl.ctx.bindFramebuffer( gl.ctx.FRAMEBUFFER, layer.framebuffer );
+	gl.ctx.bindFramebuffer( gl.ctx.FRAMEBUFFER, layer.framebuffer );
 	//gl.ctx.clear(gl.ctx.COLOR_BUFFER_BIT | gl.ctx.DEPTH_BUFFER_BIT);
 
 	// https://developer.mozilla.org/en-US/docs/Web/API/XRView
 	// Documentation says not to assume there is a set number of views, that
 	// developer must iterate and render for each view.
+	
+	/*
+	if( !pose ) return;
 	let view = pose.views[0]; // Going to assume a SINGLE view... Just to simplify things, will change with different test cases.
 	console.log(
 		view.projectionMatrix,
 		view.transform,
 		view.transform.inverse.matrix
 	);
+	*/
+
+	if( !pose ) return;
+	let view = pose.views[0];
+	let vp = layer.getViewport( pose.views[0] );
+
+	gl.ctx.viewport( vp.x, vp.y, vp.width, vp.height );
+
+	m4.copy( view.projectionMatrix, gl.camera.proj );
+	m4.copy( view.transform.inverse.matrix, gl.camera.view );
+
+
+	//gl.camera.update();
+
+
+	shader.use();
+	mesh.draw();
 
 	/*
     let views = [];
@@ -86,16 +111,12 @@ function on_render( time, frame ){
 // #region WebGL + WebXR Simple Wrappers
 class ar{
 	static is_available(){
-		if( navigator.xr ){  // && XRSession.prototype.requestHitTest
+		if( navigator.xr && XRSession.prototype.requestHitTest ){ 
 			try{
 				// https://developer.mozilla.org/en-US/docs/Web/API/XR/isSessionSupported
 				// https://developer.mozilla.org/en-US/docs/Web/API/XRSessionMode  
 				// immersive-ar isn't 100% supported yet, def not on desktop.
 				return navigator.xr.isSessionSupported( 'immersive-ar' );
-
-				// TODO, Need to test for HitTest function exists.
-				// XRSession.prototype.requestHitTest
-
 			}catch( e ){ console.warn( e ); }
 		}
 		return Promise.reject();
@@ -105,7 +126,7 @@ class ar{
 		console.log("init");
 		// https://developer.mozilla.org/en-US/docs/Web/API/XR/requestSession
 		navigator.xr
-			.requestSession( "inline" ) // immersive-ar
+			.requestSession( "immersive-ar" ) // immersive-ar  inline
 			.then( this.on_session_start );
 	}
 
@@ -137,7 +158,7 @@ class ar{
 		// https://developer.mozilla.org/en-US/docs/Web/API/XRSession/requestReferenceSpace
 		// https://github.com/immersive-web/webxr/blob/master/spatial-tracking-explainer.md#reference-spaces
 		// Use viewer if the sesion is set as inline, local if set as immersive-ar
-		s.requestReferenceSpace( "viewer" ) // local = 
+		s.requestReferenceSpace( "local" ) // local  viewer  
 			.then( (ref_space) => {
 				ar.ref_space = ref_space;
 				console.log("Request Space", ref_space );
@@ -239,11 +260,21 @@ class gl{
 		this.canvas.height	= this.height;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.ctx = this.canvas.getContext( "webgl2" ); // { xrCompatible: true }
+		// WebGL context must be marked as XR compatible in order to use with an immersive XRSession
+		this.ctx = this.canvas.getContext( "webgl2", { xrCompatible: true } ); 
 		this.ctx.viewport( 0, 0, this.width, this.height );
+		this.ctx.disable( this.ctx.CULL_FACE );		// Cull back face, so only show triangles that are created clockwise
+
+		console.log( this.width, this.height );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.init_camera();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		init_shader();
+		let idx		= new Uint16Array( [ 0,1,2, 2,3,0 ] );
+		let vert	= new Float32Array( [ -0.5, 0.5, 0.0, -0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.5, 0.5, 0.0, ] );
+		mesh		= gl.mesh_vao( vert, idx );
 	}
 
 	static init_camera(){
@@ -380,6 +411,10 @@ function init_shader(){
 // #endregion
 
 class m4{
+	static copy( a, b ){
+		for( let i=0; i < 16; i++ ) b[i]=a[i]; 
+	}
+
 	static identity(){
 		let out = new Float32Array( 16 );
 		out[0] = out[5] = out[10] = out[15] = 1;
