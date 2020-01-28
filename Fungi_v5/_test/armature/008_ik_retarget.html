@@ -5,7 +5,7 @@ import IKTarget 		from "../../fungi.armature/IKTarget.js";
 import Animation		from "../../fungi/lib/Animation.js";
 import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
 
-import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
 import GltfUtil, {Gltf}	from "../../fungi/lib/GltfUtil.js";
 import IKRig			from "../../fungi.armature/IKRig.js";
 
@@ -29,31 +29,29 @@ function on_draw( dt, ss ){
 }
 
 async function init(){
-	let dl = await XhrPromise.get( 
-		"../../_tmp/walking.gltf", "json", 
-		"../../_tmp/walking.bin", "arraybuffer",
-		"../../files/models/vegeta.gltf", "json", 
-		"../../files/models/vegeta.bin", "arraybuffer",
-		"../../_tmp/robo_trex.gltf", "json", 
-		"../../_tmp/robo_trex.bin", "arraybuffer",
-	);
+	let dl = await XhrQueue
+		.url( "../../_tmp/" )
+		.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
+		.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
+		.url( "../../files/models/" )
+		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
+		.then();
 
-	gAnimate = load_src( dl[0], dl[1] );
-	
-	//load_mesh_a( dl[2], dl[3] );
-	load_mesh_b( dl[4], dl[5] );
+	if( dl.src ) gAnimate = load_src( dl.src.json, dl.src.bin );
+	//if( dl.veg ) load_mesh_a( dl.veg.json, dl.veg.bin );
+	if( dl.rex ) load_mesh_b( dl.rex.json, dl.rex.bin );
 
 	gIKPose = new IKPose();
 
-	gAnimate( 0.70 );
-	//gAnimate( 0.8 );
+	//gAnimate( 0.70 );
+	gAnimate( 0.5 );
 
 	return true;
 }
 
 //#####################################################
 
-function load_src( json, bin ){		
+function load_src( json, bin ){
 	/*
 	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
 	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
@@ -66,7 +64,6 @@ function load_src( json, bin ){
 		.recompute_from_tpose(); // Mesh requires a few bits to be recomputed because of Mixamo Scaling
 
 	gEntitySrc  = e;
-
 	//e.info.active = false;
 
 	return ( dt )=>{
@@ -83,10 +80,17 @@ function load_src( json, bin ){
 			gIKPose.apply_rig( gModelA.IKRig );
 			gModelA.IKRig.apply_pose();
 		}
+
+		if( gModelB ){
+			gIKPose.apply_rig( gModelB.IKRig );
+			gModelB.IKRig.apply_pose();
+		}
+
 	}
 }
 
-function load_mesh_a( json, bin ){	
+function load_mesh_a( json, bin ){
+	//console.log( json, bin );
 	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
 	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
 	//let e		= GltfUtil.get_bone_view( "target_a", json, bin );
@@ -104,11 +108,24 @@ function load_mesh_b( json, bin ){
 	let e		= GltfUtil.get_debug_view( "target_b", json, bin, mat );
 	//let e		= GltfUtil.get_bone_view( "target_b", json, bin );
 	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
-	//let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+	let rig 	= e
+		.add_com( "IKRig" )
+		.init( tpose, false, 0 )
+
+		.add_point( "hip", "hip" )
+		.add_point( "head", "face_joint" )
+		.add_point( "foot_l", "LeftFoot" )
+		.add_point( "foot_r", "RightFoot" )
+
+		.add_chain( "leg_r", [ "RightUpLeg", "RightKnee", "RightShin" ], "z", "RightFoot", "three_bone" )
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftKnee", "LeftShin" ], "z", "LeftFoot", "three_bone" )
+		.add_chain( "spine", [ "Spine", "Spine1" ] )
+		//.add_chain( "tail", ["tail_1","tail_2","tail_3","tail_4","tail_5","tail_6","tail_7"] )
+		.set_leg_lmt( null, -0.1 )
+	;
+
 	tpose.apply();
-
 	e.Node.set_pos( -1.0, 0, 0 );
-
 	gModelB = e;
 }
 
@@ -158,20 +175,24 @@ class IKPose{
 	// 
 	////////////////////////////////////////////////////////////////////
 		apply_rig( rig ){
+			
 			this.apply_hip( rig );
-
-			this.apply_limb( rig, rig.chains.leg_r, this.leg_r );
-			this.apply_limb( rig, rig.chains.leg_l, this.leg_l );
-
+			
+			this.apply_limb( rig, rig.chains.leg_l, this.leg_l, true );
+			this.apply_limb( rig, rig.chains.leg_r, this.leg_r, true );
+			
 			this.apply_look_twist( rig, rig.points.foot_l.idx, this.foot_l );
 			this.apply_look_twist( rig, rig.points.foot_r.idx, this.foot_r );
-
+			
 			this.apply_look_twist_ends( rig, rig.chains.spine, this.spine );
 
-			this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
-			this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
-
+			if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
+			if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
+			/*
 			this.apply_look_twist( rig, rig.points.neck.idx, this.head );
+			*/
+
+			this.apply_look_twist( rig, rig.points.head.idx, this.head );
 		}
 
 		apply_hip( rig ){
@@ -207,18 +228,45 @@ class IKPose{
 			rig.pose.set_bone( b_info.idx, null, p );					// Save Rotation/Translation back to the pose.
 		}
 
-		apply_limb( rig, chain, limb ){
+		apply_limb( rig, chain, limb, use_limit=false ){
 			// Parent and Chain Start World Transform
 			let pt = new Transform(),	
 				ct = new Transform();
 			rig.pose.get_parent_world( chain.first(), pt, ct );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			let len = chain.len * limb.len_scale;								// How much of the Chain length to use to calc End Effector
-			this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );	// Setup IK Target
-			this.target.limb( chain, rig.tpose, rig.pose, pt );					// Apply IK Solver to Chain.
+			// How much of the Chain length to use to calc End Effector
+			let len;
+			if( use_limit ) len = ( rig.leg_len_lmt || chain.len );
+			else 			len = chain.len;
 
+			len *= limb.len_scale;
+
+			//let len = ( rig.leg_len_lmt || chain.len ) * limb.len_scale;		
+			this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );	// Setup IK Target
+			
+			//this.floor_ik_limit( 0.02 );
+
+			let solver = chain.ik_solver || "limb";
+			this.target[ solver ]( chain, rig.tpose, rig.pose, pt );
+
+			//this.target.limb( chain, rig.tpose, rig.pose, pt );				// Apply IK Solver to Chain.
+			//this.target.three_bone( chain, rig.tpose, rig.pose, pt );
+			
 			//App.Debug.pnt( this.target.end_pos, "red", 0.07 );
+		}
+
+		floor_ik_limit( y_lmt ){
+			if( this.target.end_pos.y >= y_lmt ) return;
+
+			let a = this.target.start_pos,
+				b = this.target.end_pos,
+				s = (y_lmt - a.y) / (b.y - a.y); // Normalize Limit Value
+
+			this.target.end_pos.set( (b.x-a.x)*s+a.x, y_lmt, (b.z-a.z)*s+a.z );
+
+			this.target.len_sqr		= Vec3.len_sqr( this.target.start_pos, this.target.end_pos );
+			this.target.len			= Math.sqrt( this.target.len_sqr );
 		}
 
 		apply_look_twist( rig, b_idx, ik, do_twist=false ){

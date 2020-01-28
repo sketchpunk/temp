@@ -10,6 +10,8 @@ class IKRig{
 		this.pose	= null;		// Pose object to manipulate before applying to bone entities
 		this.chains = {};		// Bone Chains, Usually Limbs / Spine / Hair / Tail
 		this.points = {};		// Main Single Bones of the Rig, like Head / Hip / Chest
+
+		this.leg_len_lmt = 0;
 	}
 
 	// #region METHODS
@@ -59,7 +61,7 @@ class IKRig{
 		return this;
 	}
 	
-	add_chain( name, name_ary, axis="z", end_name=null ){
+	add_chain( name, name_ary, axis="z", end_name=null, ik_solver=null ){
 		let i, b, ch = new Chain( axis );
 		for( i of name_ary ){
 			b = this.pose.get_bone( i );
@@ -71,7 +73,19 @@ class IKRig{
 			ch.end_idx = this.pose.get_bone( end_name ).idx;
 		}
 
+		ch.ik_solver = ik_solver;
+
 		this.chains[ name ] = ch;
+		return this;
+	}
+
+	set_leg_lmt( len=null, offset=0 ){
+		if( !len ){
+			let hip = this.tpose.bones[ this.points.hip.idx ];
+			this.leg_len_lmt = hip.world.pos.y + offset;
+		}else{
+			this.leg_len_lmt = len + offset;
+		}
 		return this;
 	}
 	// #endregion ////////////////////////////////////////////////
@@ -115,6 +129,7 @@ class Chain{
 		this.end_idx 	= null;			// Joint that Marks the true end of the chain
 
 		this.alt_dir 	= Vec3.FORWARD.clone();
+		this.ik_solver 	= null;
 	}
 
 	// #region Getters / Setters

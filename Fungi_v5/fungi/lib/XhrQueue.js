@@ -1,5 +1,5 @@
 class XhrQueue{
-    constructor( cnt=5 ){
+    constructor( cnt=2 ){
 		this.pool		= new Array();
 		this.queue		= new Array();
 		this.pre_url	= "";
@@ -84,18 +84,19 @@ class XhrQueue{
 
 		let p, itm;
 		for( p of this.pool ){
-			if( p.in_use ) continue;
+			if( p._in_use ) continue;
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// If there is no items, just exist loop
 			itm = this.queue.pop();
 			if( !itm ) return true;
+			//console.log("start", p._idx, itm.url );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Pepare XHR object to start downloading
 			p._in_use	= true;
 			p._item		= itm;
-
+			
 			p.open( "GET", itm.url, true );
 			p.responseType = itm.type;
 
@@ -137,6 +138,7 @@ class XhrQueue{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Clean up
+		/* */
 		this.complete 		= null;
 		this.wait_ary 		= null;
 		this.resolve 		= null;
@@ -156,6 +158,7 @@ class XhrQueue{
 	// When an Item is done downloading, Handle how to save it 
 	// and queue up the next to start downloading
 	_item_ready( itm ){
+		//console.log( "done", itm );
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// For Images, Take the extra step into loading the blob into an Image Object
 		if( itm.is_img ){
@@ -204,6 +207,7 @@ class XhrQueue{
 			
 			xhr._in_use	= false;
 			xhr._item	= null;
+			xhr._idx 	= i;
 			this.pool.push( xhr );
 		}
 	}
@@ -211,7 +215,7 @@ class XhrQueue{
 	// #endregion /////////////////////////////////////////////////////
 
 	// #region Xhr Event Handlers
-	on_complete( e ){		
+	on_complete( e ){
 		let xhr		= e.srcElement,
 			itm		= xhr._item,
 			result	= xhr.response;
@@ -232,9 +236,12 @@ class XhrQueue{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Item was successful, continue the queue
+		//console.log( "done", xhr._idx, itm.url );
+
 		itm.data = result;
 		this._item_ready( itm );
 	}
+
 	on_error( e ){		this._unload( false, e.srcElement.statusText ); console.error("onXhrError"); }
 	on_abort( e ){		this._unload( false, e.srcElement.statusText ); console.error("onXhrAbort"); }
 	on_timeout( e ){	this._unload( false, e.srcElement.statusText ); console.error("onXhrTimeout"); }
