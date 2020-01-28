@@ -129,11 +129,13 @@ class Shader{
 				
 				case "int":		gl.ctx.uniform1i(	itm.loc, u_value ); break;
 
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				case "mat4":	gl.ctx.uniformMatrix4fv(	itm.loc, false, u_value ); break;
 				case "mat3":	gl.ctx.uniformMatrix3fv(	itm.loc, false, u_value ); break;
 				case "mat2x4": 	gl.ctx.uniformMatrix2x4fv(	itm.loc, false, u_value ); break;
 				case "mat3x4": 	gl.ctx.uniformMatrix3x4fv(	itm.loc, false, u_value ); break;
 
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				case "sampler2D":
 					//console.log( this.tex_slot, u_value._name_ );
 					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
@@ -145,6 +147,13 @@ class Shader{
 				case "sampler2DArray":
 					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
 					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D_ARRAY, u_value );
+					gl.ctx.uniform1i(		itm.loc, this.tex_slot );
+					this.tex_slot++;
+					break;
+
+				case "samplerCube":
+					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
+					gl.ctx.bindTexture(		gl.ctx.TEXTURE_CUBE_MAP, u_value );
 					gl.ctx.uniform1i(		itm.loc, this.tex_slot );
 					this.tex_slot++;
 					break;
@@ -255,9 +264,10 @@ class Shader{
 				case "rgb"	: value = Colour.rgb( value ); break;
 				case "rgba"	: value = Colour.rgba( value ); break;
 				case "sampler2D" : 
+				case "samplerCube" :
 					let tmp = ( value instanceof WebGLTexture )? value : Cache.get_tex( value ); 
 					if(tmp == null){
-						console.error("Shader.parse_data: Texture not found",value);
+						console.error( "Shader.parse_data: Texture not found", value );
 						return this;
 					}else value = tmp;
 				break;

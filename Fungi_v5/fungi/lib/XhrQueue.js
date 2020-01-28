@@ -55,7 +55,12 @@ class XhrQueue{
 		});
 
 		return this;
-    }
+	}
+	
+	push(){
+		for( let i=0; i < arguments.length; i++ ) this.add( arguments[i] );
+		return this;
+	}
 
 	// Add Group of Items, Grp + Arguments[]
     grp( grp_name, url, itm_name ){

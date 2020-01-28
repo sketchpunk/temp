@@ -244,39 +244,37 @@ class gl{
 			return tex;	
 		}
 
-		/*
-		//imgAry must be 6 elements long and images placed in the right order
-		//RIGHT,LEFT,TOP,BOTTOM,BACK,FRONT
-		ctx.fLoadCubeMap = function(name,imgAry){
-			if(imgAry.length != 6) return null;
+		// imgAry must be 6 elements long and images placed in the right order
+		// RIGHT,LEFT,TOP,BOTTOM,BACK,FRONT
+		static load_cube_texture( name, img_ary, use_mips=false ){
+			if( img_ary.length != 6 ) return null;
 
-			//Cube Constants values increment, so easy to start with right and just add 1 in a loop
-			//To make the code easier costs by making the imgAry coming into the function to have
-			//the images sorted in the same way the constants are set.
+			// Cube Constants values increment, so easy to start with right and just add 1 in a loop
+			// To make the code easier costs by making the imgAry coming into the function to have
+			// the images sorted in the same way the constants are set.
 			//	TEXTURE_CUBE_MAP_POSITIVE_X - Right	:: TEXTURE_CUBE_MAP_NEGATIVE_X - Left
 			//	TEXTURE_CUBE_MAP_POSITIVE_Y - Top 	:: TEXTURE_CUBE_MAP_NEGATIVE_Y - Bottom
 			//	TEXTURE_CUBE_MAP_POSITIVE_Z - Back	:: TEXTURE_CUBE_MAP_NEGATIVE_Z - Front
 
-			var tex = this.createTexture();
-			this.bindTexture(this.TEXTURE_CUBE_MAP,tex);
+			let tex	= gl.ctx.createTexture();
+			gl.ctx.bindTexture( gl.ctx.TEXTURE_CUBE_MAP, tex );
 
-			//push image to specific spot in the cube map.
-			for(var i=0; i < 6; i++){
-				this.texImage2D(this.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, this.RGBA, this.RGBA, this.UNSIGNED_BYTE, imgAry[i]);
+			// push image to specific spot in the cube map.
+			for( let i=0; i < 6; i++){
+				this.texImage2D( gl.ctx.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.ctx.RGBA, gl.ctx.RGBA, gl.ctx.UNSIGNED_BYTE, img_ary[ i ] );
 			}
 
-			this.texParameteri(this.TEXTURE_CUBE_MAP, this.TEXTURE_MAG_FILTER, this.LINEAR);	//Setup up scaling
-			this.texParameteri(this.TEXTURE_CUBE_MAP, this.TEXTURE_MIN_FILTER, this.LINEAR);	//Setup down scaling
-			this.texParameteri(this.TEXTURE_CUBE_MAP, this.TEXTURE_WRAP_S, this.CLAMP_TO_EDGE);	//Stretch image to X position
-			this.texParameteri(this.TEXTURE_CUBE_MAP, this.TEXTURE_WRAP_T, this.CLAMP_TO_EDGE);	//Stretch image to Y position
-			this.texParameteri(this.TEXTURE_CUBE_MAP, this.TEXTURE_WRAP_R, this.CLAMP_TO_EDGE);	//Stretch image to Z position
-			//this.generateMipmap(this.TEXTURE_CUBE_MAP);
+			gl.ctx.texParameteri( gl.ctx.TEXTURE_CUBE_MAP, gl.ctx.TEXTURE_MAG_FILTER, gl.ctx.LINEAR );		// Setup up scaling
+			gl.ctx.texParameteri( gl.ctx.TEXTURE_CUBE_MAP, gl.ctx.TEXTURE_MIN_FILTER, gl.ctx.LINEAR );		// Setup down scaling
+			gl.ctx.texParameteri( gl.ctx.TEXTURE_CUBE_MAP, gl.ctx.TEXTURE_WRAP_S, gl.ctx.CLAMP_TO_EDGE );	// Stretch image to X position
+			gl.ctx.texParameteri( gl.ctx.TEXTURE_CUBE_MAP, gl.ctx.TEXTURE_WRAP_T, gl.ctx.CLAMP_TO_EDGE );	// Stretch image to Y position
+			gl.ctx.texParameteri( gl.ctx.TEXTURE_CUBE_MAP, gl.ctx.TEXTURE_WRAP_R, gl.ctx.CLAMP_TO_EDGE );	// Stretch image to Z position
+			if( use_mips ) gl.ctx.generateMipmap( gl.ctx.TEXTURE_CUBE_MAP );
 
-			this.bindTexture(this.TEXTURE_CUBE_MAP,null);
-			Fungi.Res.Textures[name] = tex;
+			gl.ctx.bindTexture( gl.ctx.TEXTURE_CUBE_MAP, null );
+			Cache.set_tex( name, tex );
 			return tex;
-		};
-		*/
+		}
 }
 
 //.........................

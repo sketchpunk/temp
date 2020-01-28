@@ -1,0 +1,277 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import Cube				from "../../fungi/geo/Cube.js";
+
+//#####################################################
+App.builder()
+	.set_camera( 50, 20, 4, 0, 0.8, 0 )
+	.add( init )
+	.render_loop()
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let dl = await XhrQueue
+		.url( "../../_tmp/" )
+		// RIGHT,LEFT,TOP,BOTTOM,BACK,FRONT
+		.push( "neg-x.jpg", "pos-x.jpg", "pos-y.jpg", "neg-y.jpg", "neg-z.jpg", "pos-z.jpg" )
+		.then();
+
+	//load_shader();
+
+	//App.gl.load_cube_texture( name, img_ary, use_mips=false );
+
+	//gCubeB = FacedCube( "CubeB" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	//let albedo_tex	= App.gl.load_texture( "albedo_tex", dl[2], false ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
+	//let normal_tex	= App.gl.load_texture( "normal_tex", dl[3], false );
+	//let ao_tex		= App.gl.load_texture( "ao_tex", dl[4], false );
+	//let emiss_tex	= App.gl.load_texture( "emiss_tex", dl[5], false );
+
+	/*
+	let mat = SHADER.new_material( "Texture",{ 
+		base_tex		: albedo_tex, 
+		norm_tex		: normal_tex,
+		ao_tex			: ao_tex,
+		emissive_tex	: emiss_tex,
+	});
+
+	cube = Cube( "Cube", mat );
+	*/
+
+	//let mat	= App.new_mat( "LowPoly" );
+	//let e = GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
+	//e.Node.set_pos( 0, 1.0, 0 );
+	//gMotion = Motion.rot_by( e, -20, "z" );
+
+	return true;
+}
+
+/*
+https://webglfundamentals.org/webgl/lessons/webgl-cube-maps.html
+https://webglfundamentals.org/webgl/lessons/webgl-environment-maps.html
+
+var texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+
+const faceInfos = [
+  { target: gl.TEXTURE_CUBE_MAP_POSITIVE_X, faceColor: '#F00', textColor: '#0FF', text: '+X' },
+  { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_X, faceColor: '#FF0', textColor: '#00F', text: '-X' },
+  { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, faceColor: '#0F0', textColor: '#F0F', text: '+Y' },
+  { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, faceColor: '#0FF', textColor: '#F00', text: '-Y' },
+  { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Z, faceColor: '#00F', textColor: '#FF0', text: '+Z' },
+  { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, faceColor: '#F0F', textColor: '#0F0', text: '-Z' },
+];
+faceInfos.forEach((faceInfo) => {
+  const {target, faceColor, textColor, text} = faceInfo;
+  generateFace(ctx, faceColor, textColor, text);
+ 
+  // Upload the canvas to the cubemap face.
+  const level = 0;
+  const internalFormat = gl.RGBA;
+  const format = gl.RGBA;
+  const type = gl.UNSIGNED_BYTE;
+  gl.texImage2D(target, level, internalFormat, format, type, ctx.canvas);
+});
+gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+
+
+attribute vec4 a_position;
+ 
+uniform mat4 u_matrix;
+ 
+varying vec3 v_normal;
+ 
+void main() {
+  // Multiply the position by the matrix.
+  gl_Position = u_matrix * a_position;
+ 
+  // Pass a normal. Since the positions are
+  // centered around the origin we can just 
+  // pass the position
+  v_normal = normalize(a_position.xyz);
+}
+
+
+precision mediump float;
+ 
+// Passed in from the vertex shader.
+varying vec3 v_normal;
+ 
+// The texture.
+uniform samplerCube u_texture;
+ 
+void main() {
+   gl_FragColor = textureCube(u_texture, normalize(v_normal));
+}
+*/
+
+//##############################################################
+
+let SHADER = null;
+function load_shader(){
+	SHADER = App.Shader.from_src( "Texture", vert_src, frag_src )
+		.add_uniform_blocks( ["Global","Model"] )
+		.add_uniform( "base_tex", "sampler2D", null )
+		.add_uniform( "norm_tex", "sampler2D", null )
+		.add_uniform( "ao_tex", "sampler2D", null )
+		.add_uniform( "emissive_tex", "sampler2D", null );
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+	layout(location=2) in vec2 a_uv;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec2 frag_uv;
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_pos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_uv			= a_uv;
+		frag_pos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform sampler2D base_tex;
+	uniform sampler2D norm_tex;
+	uniform sampler2D ao_tex;
+	uniform sampler2D emissive_tex;
+
+	in vec2 frag_uv;
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_pos;
+
+	//-------------------------
+
+	// Without Knowing or precomuting the Vertex Tangent, We can give up a lil
+	// bit of performance by computing a suitable TBN Matrix to use with Normal / Bump Maps.
+
+	vec3 perturb_normal( vec3 surf_norm, vec3 dir_eye_frag, vec2 uv, sampler2D tex ){
+		vec3 tx_norm = texture( tex, uv ).xyz * 255.0/127.0 - 128.0/127.0;
+
+		// https://www.geeks3d.com/20130122/normal-mapping-without-precomputed-tangent-space-vectors/
+		// http://www.thetenthplanet.de/archives/1180
+		// Get edge vectors of the pixel triangle
+		vec3	dp1		= dFdx( dir_eye_frag ),
+				dp2		= dFdy( dir_eye_frag );
+		vec2	duv1	= dFdx( uv ),
+				duv2	= dFdy( uv );
+
+		// Solve the linear system
+		vec3 	dp2perp	= cross( dp2, surf_norm ),
+				dp1perp	= cross( surf_norm, dp1 ),
+				T		= dp2perp * duv1.x + dp1perp * duv2.x,
+				B		= dp2perp * duv1.y + dp1perp * duv2.y;
+
+		// Construct a scale-invariant frame 
+		float invmax	= inversesqrt( max( dot(T,T), dot(B,B) ) );
+		mat3 tbn		= mat3( T * invmax, B * invmax, surf_norm );
+
+		return normalize( tbn * tx_norm );
+	}
+	
+	//-------------------------
+	
+	const vec3 light_pos 			= vec3( 3.0, 5.0, 0.0 );
+	const vec3 light_dir 			= vec3( -0.5, -0.5, 0.0 ); // Keep it Normalized
+	const vec3 light_color			= vec3( 1.0 );
+
+	const float ambient_strength	= 0.4;
+	const float specular_strength	= 0.5;
+	const float shininess 			= 32.0;
+
+	//-------------------------
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BASE 
+
+		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_pos ); // Dir from Fragment to Camera (Need for NormTex & Specular)
+		
+		vec3 dir_light		= normalize( light_pos - frag_pos ); // Direction of light from fragment
+		//vec3 dir_light		= normalize( -light_dir ); // Directional Light Source, no need to compute light dir
+
+		//vec4 base_clr = vec4( 0.8, 0.8, 0.8, 1.0 );
+		vec4 base_clr = texture( base_tex, frag_uv );
+
+		vec3 norm = normalize( frag_norm );
+  		norm = perturb_normal( norm, -dir_frag_cam, frag_uv, norm_tex ); //
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// AMBIENT LIGHT
+		
+		//vec3 ambient = ambient_strength * light_color;
+
+		// Adding A bit a shadow from a texture, just scales the ambient light
+		float occlusion = texture( ao_tex, frag_uv ).r;
+    	vec3 ambient 	= light_color * ambient_strength * occlusion ; // Comment out if occlusion will scale all light
+    							// vec3( 0.3 * Diffuse * AmbientOcclusion );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// DIFFUSED LIGHT
+		
+		float diff			= max( dot( norm, dir_light ), 0.0 );	//
+		vec3 diffuse		= diff * light_color;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPECULAR LIGHT
+		
+		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
+		float spec 			= pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
+		vec3 specular 		= specular_strength * spec * light_color;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// EMISSION LIGHT
+
+		vec3 emission = texture( emissive_tex, frag_uv ).rgb;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// out_color = base_clr;
+		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular + emission ), 1.0 );
+
+		// Another Approach is to scale all light based on Occlusion, instead of it just effecting ambient light.
+		//out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular + emission ) * occlusion, 1.0 );
+		
+		// out_color = vec4( occlusion, occlusion, occlusion , 1.0 ); // See Ambient Occlusion
+	}
+`;
+
+</script><page-layout></page-layout>
