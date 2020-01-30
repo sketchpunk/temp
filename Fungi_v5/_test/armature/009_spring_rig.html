@@ -1,0 +1,305 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+
+import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
+import GltfUtil	        from "../../fungi/lib/GltfUtil.js";
+import IKRig			from "../../fungi.armature/IKRig.js";
+
+//#####################################################
+
+App.builder( true, true )
+	.use_armature()
+	.load_shaders( "../fungi.armature/LowPolySkin.js" )
+	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
+	.set_camera( 0, 10, 3, -0.2, 0.7, 0 )
+	.add( init )
+	.render_loop( on_draw )
+	//.render_on_mouse()
+	.build();
+
+//#####################################################
+
+let gModel;
+function on_draw( dt, ss ){
+}
+
+async function init(){
+	let dl = await XhrQueue
+		.url( "../../_tmp/" )
+		.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
+		.then();
+
+	if( dl.rex ) load_mesh( dl.rex.json, dl.rex.bin );
+
+	return true;
+}
+
+//#####################################################
+
+function load_mesh( json, bin ){	
+	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	let e		= GltfUtil.get_debug_view( "target_b", json, bin, mat );
+	//let e		= GltfUtil.get_bone_view( "target_b", json, bin );
+	let rig 	= e
+		.add_com( "IKRig" )
+		.init( null, false, 0 )
+
+		//.add_point( "hip", "hip" )
+		//.add_point( "head", "face_joint" )
+		//.add_point( "foot_l", "LeftFoot" )
+		//.add_point( "foot_r", "RightFoot" )
+
+		//.add_chain( "leg_r", [ "RightUpLeg", "RightKnee", "RightShin" ], "z", "RightFoot", "three_bone" )
+		//.add_chain( "leg_l", [ "LeftUpLeg", "LeftKnee", "LeftShin" ], "z", "LeftFoot", "three_bone" )
+		//.add_chain( "spine", [ "Spine", "Spine1" ] )
+		.add_chain( "tail", ["tail_1","tail_2","tail_3","tail_4","tail_5","tail_6","tail_7"] )
+		//.set_leg_lmt( null, -0.1 )
+	;
+	
+	let rs	= e.add_com( "RigSpring" );
+	rs.add_chain_semi( "tail", 0.1, 0.1 );
+    
+	//e.Node.set_pos( -1.0, 0, 0 );
+	gModel = e;
+}
+
+//#####################################################
+
+import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
+import Axis from "../../fungi/maths/Axis.js";
+
+class RigSpring{
+	constuctor(){
+		this.chains 	= new Array();
+		this.points 	= new Array();
+		this.do_reset 	= true; // If true, reset All targets, positions with current pose, clear vel
+	}
+
+	use_chain_semi( ch_name, damp=0.5, damp_inc=0.1, osc=1, osc_inc=0.2 ){
+        let o = { items: new Array() };
+        //let rig = App.get_e( this.entity_id ).IKRig;
+        //let ch = rig.chains[ ch_name ];
+
+        for( let i = 0; i < ch.cnt; i++ ){
+            o.items.push({ 
+                idx		: ch.bones[ i ].idx,
+                spring	: new SemiImplicitEuler( osc + osc_inc * i, damp + damp_inc * i ),
+            });
+        }
+
+		// Loop Threw
+		// damp=0.5, damp_inc=0.1, osc=1, osc_inc=0.2 
+
+		//let i;
+		//for( i=0; i < this.nodes.length; i++ ){
+		//	this.nodes[ i ].spring.use_euler(  osc + osc_inc*i, damp + damp_inc * i );
+		//}
+		
+		this.chains.push( o );
+		return this;
+	}
+} App.Components.reg( RigSpring );
+
+class SemiImplicitEuler{
+	constructor( osc=1, damp=1, damp_time=0 ){
+		this.vel = new Vec3();
+		this.pos = new Vec3();
+		this.tar = new Vec3();
+
+		// Damp_ratio = Log(damp) / ( -osc_ps * damp_time ) 
+		// Damp Time, in seconds to damp. So damp 0.5 for every 2 seconds.
+		// Damp needs to be a value between 0 and 1, if 1, creates critical damping.
+		this.osc_ps 	= Math.PI * 2 * osc;
+		if( damp_time )	this.damping = Math.log( damp ) / ( -this.osc_ps * damp_time );
+		else 			this.damping = damp;
+	}
+
+	set_target( p ){ this.tar.copy( p ); return this; }
+	update( dt ){
+		let a = -2.0 * dt * this.damping * this.osc_ps,
+			b = dt * this.osc_ps * this.osc_ps;
+
+		// Compute Acceleration, Add it to Velocity
+		this.vel[0] += ( a * this.vel[0] + b * ( this.tar[0] - this.pos[0] ) ); // * this.mass_inv;
+		this.vel[1] += ( a * this.vel[1] + b * ( this.tar[1] - this.pos[1] ) ); // * this.mass_inv;
+		this.vel[2] += ( a * this.vel[2] + b * ( this.tar[2] - this.pos[2] ) ); // * this.mass_inv;
+
+		// Add Velocity to Position
+		this.pos[0] += this.vel[0] * dt;
+		this.pos[1] += this.vel[1] * dt;
+		this.pos[2] += this.vel[2] * dt;
+		return this.pos;
+	}
+}
+
+class Vec3Spring{
+	constructor( pos=null ){
+		this.vel 		= new Vec3();
+		this.pos 		= new Vec3();
+		this.tar 		= new Vec3();
+
+		this.mode 		= 0;	// Define which spring equation to use.
+		this.osc_ps		= 0;	// used for semi-implicit euler
+		this.tension	= 0;	
+		this.damping	= 0;
+
+		this.mass		= 1;
+		this.mass_inv	= 1 / this.mass;	// a = f / m OR a = f * m_inv
+
+		if( pos ) this.pos.copy( pos );
+	}
+
+	/////////////////////////////////////////////////////////////////
+	// Setters
+	/////////////////////////////////////////////////////////////////
+		use_euler( osc=1, damp=1, damp_time=0 ){
+			this.osc_ps = Math.PI * 2 * osc;
+
+			// Damp_ratio = Log(damp) / ( -osc_ps * damp_time ) 
+			// Damp Time, in seconds to damp. So damp 0.5 for every 2 seconds.
+			// Damp needs to be a value between 0 and 1, if 1, creates critical damping.
+			if( this.damp_time )	this.damping = Math.log( damp ) / ( -this.osc_ps * damp_time );
+			else 					this.damping = damp;
+
+			this.mode = 1;
+			return this;
+		}
+
+		use_tension( tension=2.0, damp=1.2 ){
+			this.tension	= tension;
+			this.damping	= damp;
+			this.mode		= 2;
+			return this;
+		}
+
+		set_mass( m ){ this.mass = m; this.mass_inv = 1 / this.mass; return this; }
+		set_pos( p ){ this.pos.copy( p ); return this; }
+		set_target( p ){ this.tar.copy( p ); return this; }
+
+		get_dir( s=1, out=null ){
+			let mag = 1 / Math.sqrt( this.vel[0] ** 2 + this.vel[1] ** 2 + this.vel[2] ** 2 ) * s;
+
+			out = out || new Vec3();
+			return out.set( this.vel[0] * mag, this.vel[1] * mag, this.vel[2] * mag );
+		}
+
+	/////////////////////////////////////////////////////////////////
+	//
+	/////////////////////////////////////////////////////////////////
+		update( dt ){
+			switch( this.mode ){
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// semi-implicit euler
+				case 1: 
+					let a = -2.0 * dt * this.damping * this.osc_ps,
+						b = dt * this.osc_ps * this.osc_ps;
+
+					this.vel[0] += ( a * this.vel[0] + b * ( this.tar[0] - this.pos[0] ) ) * this.mass_inv;
+					this.vel[1] += ( a * this.vel[1] + b * ( this.tar[1] - this.pos[1] ) ) * this.mass_inv;
+					this.vel[2] += ( a * this.vel[2] + b * ( this.tar[2] - this.pos[2] ) ) * this.mass_inv;
+					break;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Acceleration from Tension
+				case 2: 
+					let ax	= -this.tension * ( this.pos[0] - this.tar[0] ) * this.mass_inv,
+						ay	= -this.tension * ( this.pos[1] - this.tar[1] ) * this.mass_inv,
+						az	= -this.tension * ( this.pos[2] - this.tar[2] ) * this.mass_inv;
+
+					this.vel[0] += ( ax - this.damping * this.vel[0] ) * dt;
+					this.vel[1] += ( ay - this.damping * this.vel[1] ) * dt;
+					this.vel[2] += ( ay - this.damping * this.vel[2] ) * dt;
+					break;
+			}
+
+			this.pos[0] += this.vel[0] * dt;
+			this.pos[1] += this.vel[1] * dt;
+			this.pos[2] += this.vel[2] * dt;
+			return this.pos;
+		}
+}
+
+class ChainSpring{
+	constructor( chain ){
+		this.nodes = new Array( chain.cnt );
+
+		let i;
+		for( i=0; i < chain.cnt; i++ ){
+			this.nodes[ i ] = {
+				idx		: chain.bones[ i ],
+				spring	: new Vec3Spring(),
+			};
+		}
+	}
+
+	/////////////////////////////////////////////////////////////////////
+	// GETTERS - SETTERS
+	/////////////////////////////////////////////////////////////////////	
+		use_euler( damp=0.5, damp_inc=0.1, osc=1, osc_inc=0.2 ){
+			let i;
+			for( i=0; i < this.nodes.length; i++ ){
+				this.nodes[ i ].spring.use_euler(  osc + osc_inc*i, damp + damp_inc * i );
+			}
+			return this;
+		}
+
+		set_pos( pose ){
+			let i, b, pos = new Vec3();
+			for( i of this.nodes ){
+				b = pose.bones[ i.idx ];
+				pos.set( 0, b.len, 0 );
+
+				b.world.transform_vec( pos );
+				i.spring.set_pos( pos );  // save trail position.
+
+				//App.debug.point( pos,1 );
+			}
+			return this;
+		}
+
+	/////////////////////////////////////////////////////////////////////
+	//
+	/////////////////////////////////////////////////////////////////////	
+		update( bind, pose, dt ){
+			/*
+			let pt			= new Transform(),
+				ct			= new Transform(),
+				tail_pos	= new Vec3(),
+				ray_a		= new Vec3(),
+				ray_b		= new Vec3(),
+				rot			= new Quat(),
+				bone, i, s_pos;
+
+			// Set the Starting Parent World Transform
+			bone = pose.bones[ this.nodes[0].idx ];
+			pt.copy( pose.bones[ bone.p_idx ].world );
+
+			for( i of this.nodes ){
+				bone = bind.bones[ i.idx ];		// Get Bone
+
+				ct.from_add( pt, bone.local );	// Calc is World Space Transform
+				
+				tail_pos.set( 0, bone.len, 0 );	// Calc the Bone Tail BIND World Transform, this is our target point
+				ct.transform_vec( tail_pos );
+
+				// Pass updated target to spring and update
+				s_pos = i.spring.set_target( tail_pos ).update( dt );
+				
+
+				ray_a.from_sub( tail_pos, ct.pos ).norm();		// Create Ray to spring position
+				ray_b.from_sub( s_pos, ct.pos ).norm();			// And to Target
+
+				rot .from_unit_vecs( ray_a, ray_b )				// Create Rotation based on Rays
+					.mul( ct.rot )								// Apply it to WS Bind Transfrom
+					.pmul_invert( pt.rot );						// Convert it to local Space
+
+				pose.set_bone( bone.idx, rot );					// Save Results
+				pt.add( rot, bone.local.pos, bone.local.scl );	// Use new rotation to build the next parent ws transform for next bone
+			}
+
+			pose.apply();
+			*/
+		}
+}
+
+</script><page-layout></page-layout>

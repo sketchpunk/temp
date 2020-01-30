@@ -109,7 +109,7 @@ class Transform{
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// ROTATION - parent.rotation * child.rotation
-			this.rot.pmul( pr ); // Must Rotate from Parent->Child, no PMUL needs to be used.
+			this.rot.pmul( pr ); // Must Rotate from Parent->Child, need PMUL
 
 			return this
 		}

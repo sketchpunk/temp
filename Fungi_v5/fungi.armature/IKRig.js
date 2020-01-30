@@ -110,7 +110,7 @@ class IKRig{
 	}
 	// #endregion ////////////////////////////////////////////////
 
-} App.Components.reg( IKRig ); //This will not work well for 3JS, need to Reg Comp Differently.
+} App.Components.reg( IKRig ); //TODO This will not work well for 3JS, need to Reg Comp Differently.
 
 //#########################################################
 
