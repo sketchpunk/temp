@@ -27,10 +27,17 @@ import OrbitCamera 			from "./engine/com/OrbitCamera.js";
 /*++++++++++++++++++++++++++++++++++++++++++++++++
 SYSTEMS LAYOUT
 001 	- OrbitCamera
+
 800		- NodeSys
 801		- CameraSys
+801 	- BoneSys ( Updates Bone Offset Matrices )
+802		- ArmatureSys ( Updates Float Buffers with offsets )
+810		- BoneViewSys ( Updates Bone Preview Instances )
+
 950 	- DrawSys
+
 1000	- NodeCleanupSys
+1000	- ArmatureCleanupSys
 ++++++++++++++++++++++++++++++++++++++++++++++++*/
 
 

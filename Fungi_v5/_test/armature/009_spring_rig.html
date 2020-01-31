@@ -5,13 +5,15 @@ import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
 import GltfUtil	        from "../../fungi/lib/GltfUtil.js";
 import IKRig			from "../../fungi.armature/IKRig.js";
 
+import Motion			from "../../fungi.test/Motion.js";
+
 //#####################################################
 
 App.builder( true, true )
 	.use_armature()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 0, 10, 3, -0.2, 0.7, 0 )
+	.set_camera( 135, 25, 3, -0.2, 0.7, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse()
@@ -19,8 +21,15 @@ App.builder( true, true )
 
 //#####################################################
 
-let gModel;
+let gModel, gMotion;
 function on_draw( dt, ss ){
+	gMotion( dt );
+	// TODO may need to revamp armature systems, Merge Bone+Armature,
+	// then if Node.updated && !Armature.updated, make Arm Updated to not 
+	// need to do this.
+	gModel.Armature.updated = true;
+
+	RigSpringSys( App.ecs );
 }
 
 async function init(){
@@ -30,6 +39,17 @@ async function init(){
 		.then();
 
 	if( dl.rex ) load_mesh( dl.rex.json, dl.rex.bin );
+
+	/*
+	RigSpringSys( App.ecs );
+
+	App.delta_time = 0.001;
+	gModel.Node.set_pos( -0.5, 0, 0 );
+
+	RigSpringSys( App.ecs );
+	*/
+
+	gMotion = Motion.sin( gModel, 1.0, [1,0.2,0] );
 
 	return true;
 }
@@ -57,9 +77,9 @@ function load_mesh( json, bin ){
 	;
 	
 	let rs	= e.add_com( "RigSpring" );
-	rs.add_chain_semi( "tail", 0.1, 0.1 );
+	rs.use_chain_semi( "tail", 0.9, -0.1, 0.9 );
     
-	//e.Node.set_pos( -1.0, 0, 0 );
+	//e.Node.set_pos( -1.0, 0.5, 0 );
 	gModel = e;
 }
 
@@ -69,16 +89,16 @@ import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
 import Axis from "../../fungi/maths/Axis.js";
 
 class RigSpring{
-	constuctor(){
+	constructor(){
 		this.chains 	= new Array();
 		this.points 	= new Array();
 		this.do_reset 	= true; // If true, reset All targets, positions with current pose, clear vel
 	}
 
-	use_chain_semi( ch_name, damp=0.5, damp_inc=0.1, osc=1, osc_inc=0.2 ){
+	use_chain_semi( ch_name, damp=0.5, damp_inc=0.1, osc=1, osc_inc=0 ){
         let o = { items: new Array() };
-        //let rig = App.get_e( this.entity_id ).IKRig;
-        //let ch = rig.chains[ ch_name ];
+        let rig = App.get_e( this.entity_id ).IKRig;
+        let ch = rig.chains[ ch_name ];
 
         for( let i = 0; i < ch.cnt; i++ ){
             o.items.push({ 
@@ -87,18 +107,148 @@ class RigSpring{
             });
         }
 
-		// Loop Threw
-		// damp=0.5, damp_inc=0.1, osc=1, osc_inc=0.2 
-
-		//let i;
-		//for( i=0; i < this.nodes.length; i++ ){
-		//	this.nodes[ i ].spring.use_euler(  osc + osc_inc*i, damp + damp_inc * i );
-		//}
-		
 		this.chains.push( o );
 		return this;
 	}
+
+	reset_all(){
+		let rig	= App.get_e( this.entity_id ).IKRig,
+			pt	= new Transform(),
+			pos = new Vec3(),
+			i, j, b, ch;
+
+		for( i=0; i < this.chains.length; i++ ){
+			ch 	= this.chains[ i ];					// Get Chain
+			b 	= rig.arm.bones[ ch.items[0].idx ];	// Root Bone
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Compute Parent's World Space Transform
+			if( b.ref.Node.parent )
+				b.ref.Node.parent.Node.get_world_transform( pt );
+			else pt.clear();
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			for( j=0; j < ch.items.length; j++ ){
+				b = rig.arm.bones[ ch.items[ j ].idx ]; // Get Bone
+				
+				// Use Bones local to compute ws, then again
+				// to compute tail position
+				pos.set( 0, b.len, 0 );
+				pt.add( b.local ).transform_vec( pos );
+
+				// Save resting position to spring
+				//ch.items[ j ].spring.reset( ct.pos );
+				ch.items[ j ].spring.reset( pos );
+				//App.Debug.pnt( ch.items[ j ].spring.pos, "red" );
+			}
+		}
+
+		this.do_reset = false; // Reset complete
+		return this;
+	}
+
+	update( dt ){
+		let rig		= App.get_e( this.entity_id ).IKRig,
+			pt		= new Transform(),
+			ct		= new Transform(),
+			tail	= new Vec3(),
+			ray_a 	= new Vec3(),
+			ray_b 	= new Vec3(),
+			rot 	= new Quat(),
+			i, j, b, ch, itm, s_pos;
+
+		for( i=0; i < this.chains.length; i++ ){
+			ch 	= this.chains[ i ];					// Get Chain
+			b 	= rig.arm.bones[ ch.items[0].idx ];	// Root Bone Node
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Compute Parent's World Space Transform
+			if( b.ref.Node.parent )
+				b.ref.Node.parent.Node.get_world_transform( pt );
+			else pt.clear();
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			for( j=0; j < ch.items.length; j++ ){
+				itm 	= ch.items[ j ];			// Get our bone spring
+				b		= rig.arm.bones[ itm.idx ]; // Get Bone Object ( use .ref for entity )
+				
+				//---------------------------
+				// Use Bones local to compute ws, then again
+				// to compute tail position
+				tail.set( 0, b.len, 0 );
+				ct.from_add( pt, b.local ).transform_vec( tail );
+
+				///App.Debug.pnt( tail, "green" );
+
+				//---------------------------
+				s_pos = itm.spring.update( dt, tail );			// Pass updated target to spring and update
+
+				ray_a.from_sub( tail, ct.pos ).norm();			// Ray to Resting position
+				ray_b.from_sub( s_pos, ct.pos ).norm();			// and to spring pos
+
+				rot .from_unit_vecs( ray_a, ray_b )				// Create Rotation based on Rays
+					.mul( ct.rot )								// Apply it to WS Bind Transfrom
+					.pmul_invert( pt.rot );						// Convert it to local Space
+
+				//---------------------------
+				b.ref.Node.set_rot( rot );							// Save Results
+				//pose.set_bone( bone.idx, rot );					
+				pt.add( rot, b.local.pos, b.local.scl );		// Use new rotation to build the next parent ws transform for next bone
+			}
+		}
+
+		return this;
+
+		/*
+			let pt			= new Transform(),
+				ct			= new Transform(),
+				tail_pos	= new Vec3(),
+				ray_a		= new Vec3(),
+				ray_b		= new Vec3(),
+				rot			= new Quat(),
+				bone, i, s_pos;
+
+			// Set the Starting Parent World Transform
+			bone = pose.bones[ this.nodes[0].idx ];
+			pt.copy( pose.bones[ bone.p_idx ].world );
+
+			for( i of this.nodes ){
+				bone = bind.bones[ i.idx ];		// Get Bone
+
+				ct.from_add( pt, bone.local );	// Calc is World Space Transform
+				
+				tail_pos.set( 0, bone.len, 0 );	// Calc the Bone Tail BIND World Transform, this is our target point
+				ct.transform_vec( tail_pos );
+
+				// Pass updated target to spring and update
+				s_pos = i.spring.set_target( tail_pos ).update( dt );
+				
+
+				ray_a.from_sub( tail_pos, ct.pos ).norm();		// Create Ray to spring position
+				ray_b.from_sub( s_pos, ct.pos ).norm();			// And to Target
+
+				rot .from_unit_vecs( ray_a, ray_b )				// Create Rotation based on Rays
+					.mul( ct.rot )								// Apply it to WS Bind Transfrom
+					.pmul_invert( pt.rot );						// Convert it to local Space
+
+				pose.set_bone( bone.idx, rot );					// Save Results
+				pt.add( rot, bone.local.pos, bone.local.scl );	// Use new rotation to build the next parent ws transform for next bone
+			}
+
+			pose.apply();
+			*/
+
+	}
 } App.Components.reg( RigSpring );
+
+function RigSpringSys( ecs ){
+	let n, ary = ecs.query_comp( "RigSpring" );
+	for( n of ary ){
+		if( n.do_reset )	n.reset_all();
+		else 				n.update( App.delta_time );
+	}
+}
+
 
 class SemiImplicitEuler{
 	constructor( osc=1, damp=1, damp_time=0 ){
@@ -114,10 +264,25 @@ class SemiImplicitEuler{
 		else 			this.damping = damp;
 	}
 
+	reset( pos=null, tar=null, vel=null ){
+		if( pos ) 	this.pos.copy( pos );
+		else 		this.pos.set( 0,0,0 );
+
+		if( tar ) 	this.tar.copy( tar );
+		else 		this.tar.set( 0,0,0 );
+
+		if( vel )	this.vel.copy( vel );
+		else		this.vel.set( 0,0,0 );
+
+		return this;
+	}
+
 	set_target( p ){ this.tar.copy( p ); return this; }
-	update( dt ){
+	update( dt, target_pos=null ){
 		let a = -2.0 * dt * this.damping * this.osc_ps,
 			b = dt * this.osc_ps * this.osc_ps;
+
+		if( target_pos ) this.tar.copy( target_pos );
 
 		// Compute Acceleration, Add it to Velocity
 		this.vel[0] += ( a * this.vel[0] + b * ( this.tar[0] - this.pos[0] ) ); // * this.mass_inv;
