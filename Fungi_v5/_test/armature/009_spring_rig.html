@@ -127,6 +127,17 @@ class RigSpring{
 		return this;
 	}
 
+	use_point_tension( pnt_name, tension=2.0, damp=1.2 ){
+        let rig = App.get_e( this.entity_id ).IKRig;
+		let pnt = rig.points[ pnt_name ];
+		
+		this.points.push({ 
+		    idx		: pnt.idx,
+			spring	: new TensionSpring( tension, damp ),
+        });
+		return this;
+	}
+
 
 	reset_all(){
 		console.log( "reset all" );
@@ -171,9 +182,11 @@ class RigSpring{
 			ch.spring.reset( pos );
 		}
 
+
 		this.do_reset = false; // Reset complete
 		return this;
 	}
+
 
 	update( dt ){
 		let rig		= App.get_e( this.entity_id ).IKRig,
@@ -320,6 +333,12 @@ class SemiImplicitEuler{
 		else 			this.damping = damp;
 	}
 
+	static from_config( c, inc=null ){
+		return ( inc != null )?
+			new SemiImplicitEuler( c.osc + c.osc_inc * inc, c.damp + c.damp_inc * inc ) :
+			new SemiImplicitEuler( c.osc , c.damp );
+	}
+
 	reset( pos=null, tar=null, vel=null ){
 		if( pos ) 	this.pos.copy( pos );
 		else 		this.pos.set( 0,0,0 );
@@ -352,6 +371,165 @@ class SemiImplicitEuler{
 		return this.pos;
 	}
 }
+
+class TensionSpring{
+	constructor( t=2.0, d=1.2 ){
+		this.vel = new Vec3();
+		this.pos = new Vec3();
+		this.tar = new Vec3();
+
+		this.tension = t;
+		this.damping = d;
+		//this.mass		= 1;
+		//this.mass_inv	= 1 / this.mass;	// a = f / m OR a = f * m_inv
+	}
+
+	reset( pos=null, tar=null, vel=null ){
+		if( pos ) 	this.pos.copy( pos );
+		else 		this.pos.set( 0,0,0 );
+
+		if( tar ) 	this.tar.copy( tar );
+		else 		this.tar.set( 0,0,0 );
+
+		if( vel )	this.vel.copy( vel );
+		else		this.vel.set( 0,0,0 );
+
+		return this;
+	}
+
+	set_target( p ){ this.tar.copy( p ); return this; }
+	update( dt, target_pos=null ){
+		if( target_pos ) this.tar.copy( target_pos );
+
+		// Compute Acceleration, Add it to Velocity
+		let ax	= -this.tension * ( this.pos[0] - this.tar[0] ),// * this.mass_inv,
+			ay	= -this.tension * ( this.pos[1] - this.tar[1] ),// * this.mass_inv,
+			az	= -this.tension * ( this.pos[2] - this.tar[2] );// * this.mass_inv;
+
+		this.vel[0] += ( ax - this.damping * this.vel[0] ) * dt;
+		this.vel[1] += ( ay - this.damping * this.vel[1] ) * dt;
+		this.vel[2] += ( ay - this.damping * this.vel[2] ) * dt;
+
+		// Add Velocity to Position
+		this.pos[0] += this.vel[0] * dt;
+		this.pos[1] += this.vel[1] * dt;
+		this.pos[2] += this.vel[2] * dt;
+		return this.pos;
+	}
+}
+
+
+class SpringRig{
+	constructor(){
+		this.sets		= new Array();
+		this.dot_reset	= true;
+	}
+
+	// { type:"semi", damp:0.5, damp_inc:0.1, osc:1, osc_inc:0 }
+	// { type:"tension", tension:2.0, damp:1.2 }
+	add( idx_ary, s_config ){
+		let i, b, o = { bones : new Array() };
+
+		for( i=0; i < idx_ary.length; i++ ){
+			b = { idx: idx_ary[ i ], spring: null };
+
+			switch( s_config.type ){
+				case "semi":	b.spring = SemiImplicitEuler.from_config( s_config, i ); break;
+				case "tension":	b.spring = TensionSpring.from_config( s_config, i ); break;
+			}
+
+			o.bones.push( b );
+		}
+
+		this.sets.push( o );
+		return this;
+	}
+
+	reset_all(){
+		console.log( "reset all" );
+		let rig	= App.get_e( this.entity_id ).IKRig,
+			pt	= new Transform(),
+			pos = new Vec3(),
+			i, sb, b, s;
+
+		for( i=0; i < this.sets.length; i++ ){
+			s 	= this.sets[ i ];					// Get Bone Set
+			b 	= rig.arm.bones[ s.bones[0].idx ];	// Root Bone
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Compute Parent's World Space Transform
+			if( b.ref.Node.parent )
+				b.ref.Node.parent.Node.get_world_transform( pt );
+			else pt.clear();
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			for( sb of s.bones.length ){
+				b = rig.arm.bones[ sb.idx ]; // Get Bone
+				
+				pt.add( b.local )
+					.transform_vec( pos.set( 0, b.len, 0 ) );	// Use Bones local to compute, Then transform Tail Position
+				
+				sb.spring.reset( pos );	// Save resting position to spring
+				//App.Debug.pnt( sb.spring.pos, "red" );
+			}
+		}
+
+		return this;
+	}
+
+	update( dt ){
+		let rig		= App.get_e( this.entity_id ).IKRig,
+			pt		= new Transform(),
+			ct		= new Transform(),
+			tail	= new Vec3(),
+			ray_a 	= new Vec3(),
+			ray_b 	= new Vec3(),
+			rot 	= new Quat(),
+			i, b, s, sb, s_pos;
+
+		for( i=0; i < this.sets.length; i++ ){
+			s 	= this.sets[ i ];					// Get Bone Set
+			b 	= rig.arm.bones[ s.bones[0].idx ];	// Root Bone Node
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Compute Parent's World Space Transform
+			if( b.ref.Node.parent )
+				b.ref.Node.parent.Node.get_world_transform( pt );
+			else pt.clear();
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			for( sb of s.bones ){
+				b = rig.arm.bones[ sb.idx ]; 		// Get Bone Object ( use .ref for entity )
+				
+				//---------------------------
+				// Compute ws for the bone, then using it to get ws tail position
+				tail.set( 0, b.len, 0 )
+				ct.from_add( pt, b.local ).transform_vec( tail );
+
+				///App.Debug.pnt( tail, "green" );
+
+				//---------------------------
+				s_pos = sb.spring.update( dt, tail );			// Pass updated target to spring and update
+
+				ray_a.from_sub( tail, ct.pos ).norm();			// Ray to Resting position
+				ray_b.from_sub( s_pos, ct.pos ).norm();			// and to spring pos
+
+				rot .from_unit_vecs( ray_a, ray_b )				// Create Rotation based on Rays
+					.mul( ct.rot )								// Apply it to WS Bind Transfrom
+					.pmul_invert( pt.rot );						// Convert it to local Space
+
+				//---------------------------
+				b.ref.Node.set_rot( rot );						// Save Results
+				//pose.set_bone( bone.idx, rot );					
+				pt.add( rot, b.local.pos, b.local.scl );		// Use new rotation to build the next parent ws transform for next bone
+			}
+		}
+
+		return this;
+	}
+}
+
+// #region trash
 
 class Vec3Spring{
 	constructor( pos=null ){
@@ -523,4 +701,6 @@ class ChainSpring{
 		}
 }
 
+
+// #endregion
 </script><page-layout></page-layout>
