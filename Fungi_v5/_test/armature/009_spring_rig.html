@@ -40,9 +40,9 @@ async function init(){
 
 	if( dl.rex ) load_mesh( dl.rex.json, dl.rex.bin );
 
+	
+	//RigSpringSys( App.ecs );
 	/*
-	RigSpringSys( App.ecs );
-
 	App.delta_time = 0.001;
 	gModel.Node.set_pos( -0.5, 0, 0 );
 
@@ -64,6 +64,9 @@ function load_mesh( json, bin ){
 		.add_com( "IKRig" )
 		.init( null, false, 0 )
 
+		.add_point( "wing_l", "left_wing" )
+		.add_point( "wing_r", "right_wing" )
+
 		//.add_point( "hip", "hip" )
 		//.add_point( "head", "face_joint" )
 		//.add_point( "foot_l", "LeftFoot" )
@@ -78,7 +81,9 @@ function load_mesh( json, bin ){
 	
 	let rs	= e.add_com( "RigSpring" );
 	rs.use_chain_semi( "tail", 0.9, -0.1, 0.9 );
-    
+	rs.use_point_semi( "wing_l", 0.1, 0.1 );
+	rs.use_point_semi( "wing_r", 0.1, 0.1 );
+
 	//e.Node.set_pos( -1.0, 0.5, 0 );
 	gModel = e;
 }
@@ -111,7 +116,20 @@ class RigSpring{
 		return this;
 	}
 
+	use_point_semi( pnt_name, damp=0.5, osc=1 ){
+        let rig = App.get_e( this.entity_id ).IKRig;
+		let pnt = rig.points[ pnt_name ];
+		
+		this.points.push({ 
+		    idx		: pnt.idx,
+			spring	: new SemiImplicitEuler( osc, damp ),
+        });
+		return this;
+	}
+
+
 	reset_all(){
+		console.log( "reset all" );
 		let rig	= App.get_e( this.entity_id ).IKRig,
 			pt	= new Transform(),
 			pos = new Vec3(),
@@ -141,6 +159,16 @@ class RigSpring{
 				ch.items[ j ].spring.reset( pos );
 				//App.Debug.pnt( ch.items[ j ].spring.pos, "red" );
 			}
+		}
+
+		for( i=0; i < this.points.length; i++ ){
+			ch	= this.points[ i ];
+			b	= rig.arm.bones[ ch.idx ];
+			b.ref.Node.get_world_transform( pt );
+			pos.set( 0, b.len, 0 );
+			pt.transform_vec( pos );
+
+			ch.spring.reset( pos );
 		}
 
 		this.do_reset = false; // Reset complete
@@ -195,6 +223,34 @@ class RigSpring{
 				//pose.set_bone( bone.idx, rot );					
 				pt.add( rot, b.local.pos, b.local.scl );		// Use new rotation to build the next parent ws transform for next bone
 			}
+		}
+
+		for( i=0; i < this.points.length; i++ ){
+			ch	= this.points[ i ];
+			b	= rig.arm.bones[ ch.idx ];
+
+			if( b.ref.Node.parent )
+				b.ref.Node.parent.Node.get_world_transform( pt );
+			else pt.clear();
+
+			//---------------------------
+			// Use Bones local to compute ws, then again
+			// to compute tail position
+			tail.set( 0, b.len, 0 );
+			ct.from_add( pt, b.local ).transform_vec( tail );
+
+			//---------------------------
+			s_pos = ch.spring.update( dt, tail );			// Pass updated target to spring and update
+
+			ray_a.from_sub( tail, ct.pos ).norm();			// Ray to Resting position
+			ray_b.from_sub( s_pos, ct.pos ).norm();			// and to spring pos
+
+			rot .from_unit_vecs( ray_a, ray_b )				// Create Rotation based on Rays
+				.mul( ct.rot )								// Apply it to WS Bind Transfrom
+				.pmul_invert( pt.rot );						// Convert it to local Space
+
+			//---------------------------
+			b.ref.Node.set_rot( rot );	
 		}
 
 		return this;
