@@ -95,6 +95,16 @@ class IKRig{
 		let idx = this.chains[ ch_name ].bones[ 0 ].idx;
 		return this.pose.bones[ idx ];
 	}
+
+	get_chain_indices( ch_name ){
+		let ch = this.chains[ ch_name ];
+		if( !ch ) return null;
+
+		let b, ary = new Array();
+		for( b of ch.bones ) ary.push( b.idx );
+
+		return ary;
+	}
 	// #endregion ////////////////////////////////////////////////
 
 	// #region SPECIAL METHODS

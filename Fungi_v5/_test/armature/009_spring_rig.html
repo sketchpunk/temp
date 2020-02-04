@@ -29,7 +29,8 @@ function on_draw( dt, ss ){
 	// need to do this.
 	gModel.Armature.updated = true;
 
-	RigSpringSys( App.ecs );
+	//RigSpringSys( App.ecs );
+	SpringRigSys( App.ecs );
 }
 
 async function init(){
@@ -47,6 +48,13 @@ async function init(){
 	gModel.Node.set_pos( -0.5, 0, 0 );
 
 	RigSpringSys( App.ecs );
+	*/
+
+	/*
+	SpringRigSys( App.ecs );
+	App.delta_time = 0.001;
+	gModel.Node.set_pos( -0.5, 0, 0 );
+	SpringRigSys( App.ecs );
 	*/
 
 	gMotion = Motion.sin( gModel, 1.0, [1,0.2,0] );
@@ -79,10 +87,19 @@ function load_mesh( json, bin ){
 		//.set_leg_lmt( null, -0.1 )
 	;
 	
-	let rs	= e.add_com( "RigSpring" );
-	rs.use_chain_semi( "tail", 0.9, -0.1, 0.9 );
-	rs.use_point_semi( "wing_l", 0.1, 0.1 );
-	rs.use_point_semi( "wing_r", 0.1, 0.1 );
+	//let rs	= e.add_com( "RigSpring" );
+	//rs.use_chain_semi( "tail", 0.9, -0.1, 0.9 );
+	//rs.use_point_semi( "wing_l", 0.1, 0.1 );
+	//rs.use_point_semi( "wing_r", 0.1, 0.1 );
+
+	
+	let rs	= e.add_com( "SpringRig" );
+	rs.add( rig.get_chain_indices( "tail" ), { type:"semi", damp:0.9, damp_inc:-0.1, osc:0.9, osc_inc:0 } );
+	rs.add( rig.points.wing_l.idx, { type:"semi", damp:0.1, osc:0.01 } );
+	rs.add( rig.points.wing_r.idx, { type:"semi", damp:1, osc:7 } );
+	//rs.add( rig.points.wing_r.idx, { type:"tension", tension:2, damp:5 } );
+
+	console.log( rs );
 
 	//e.Node.set_pos( -1.0, 0.5, 0 );
 	gModel = e;
@@ -335,7 +352,7 @@ class SemiImplicitEuler{
 
 	static from_config( c, inc=null ){
 		return ( inc != null )?
-			new SemiImplicitEuler( c.osc + c.osc_inc * inc, c.damp + c.damp_inc * inc ) :
+			new SemiImplicitEuler( c.osc + (c.osc_inc || 0) * inc, c.damp + (c.damp_inc || 0) * inc ) :
 			new SemiImplicitEuler( c.osc , c.damp );
 	}
 
@@ -396,15 +413,23 @@ class TensionSpring{
 
 		return this;
 	}
+	
+	//{ type:"tension", tension:2.0, damp:1.2, tension_inc:0, damp_inc:0 }
+	static from_config( c, inc=null ){
+		return ( inc != null )?
+			new TensionSpring( c.tension + (c.tension_inc || 0) * inc, c.damp + (c.damp_inc || 0) * inc ) :
+			new TensionSpring( c.tension , c.damp );
+	}
+
 
 	set_target( p ){ this.tar.copy( p ); return this; }
 	update( dt, target_pos=null ){
 		if( target_pos ) this.tar.copy( target_pos );
 
 		// Compute Acceleration, Add it to Velocity
-		let ax	= -this.tension * ( this.pos[0] - this.tar[0] ),// * this.mass_inv,
-			ay	= -this.tension * ( this.pos[1] - this.tar[1] ),// * this.mass_inv,
-			az	= -this.tension * ( this.pos[2] - this.tar[2] );// * this.mass_inv;
+		let ax	= -this.tension * ( this.pos[0] - this.tar[0] ), // * this.mass_inv,
+			ay	= -this.tension * ( this.pos[1] - this.tar[1] ), // * this.mass_inv,
+			az	= -this.tension * ( this.pos[2] - this.tar[2] ); // * this.mass_inv;
 
 		this.vel[0] += ( ax - this.damping * this.vel[0] ) * dt;
 		this.vel[1] += ( ay - this.damping * this.vel[1] ) * dt;
@@ -422,13 +447,15 @@ class TensionSpring{
 class SpringRig{
 	constructor(){
 		this.sets		= new Array();
-		this.dot_reset	= true;
+		this.do_reset	= true;
 	}
 
 	// { type:"semi", damp:0.5, damp_inc:0.1, osc:1, osc_inc:0 }
-	// { type:"tension", tension:2.0, damp:1.2 }
+	// { type:"tension", tension:2.0, damp:1.2, tension_inc:0, damp_inc:0 }
 	add( idx_ary, s_config ){
 		let i, b, o = { bones : new Array() };
+
+		if( !Array.isArray( idx_ary ) ) idx_ary = [ idx_ary ];
 
 		for( i=0; i < idx_ary.length; i++ ){
 			b = { idx: idx_ary[ i ], spring: null };
@@ -446,7 +473,7 @@ class SpringRig{
 	}
 
 	reset_all(){
-		console.log( "reset all" );
+		//console.log( "reset all" );
 		let rig	= App.get_e( this.entity_id ).IKRig,
 			pt	= new Transform(),
 			pos = new Vec3(),
@@ -463,7 +490,7 @@ class SpringRig{
 			else pt.clear();
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			for( sb of s.bones.length ){
+			for( sb of s.bones ){
 				b = rig.arm.bones[ sb.idx ]; // Get Bone
 				
 				pt.add( b.local )
@@ -474,6 +501,7 @@ class SpringRig{
 			}
 		}
 
+		this.do_reset = false;
 		return this;
 	}
 
@@ -527,7 +555,17 @@ class SpringRig{
 
 		return this;
 	}
+} App.Components.reg( SpringRig );
+
+
+function SpringRigSys( ecs ){
+	let n, ary = ecs.query_comp( "SpringRig" );
+	for( n of ary ){
+		if( n.do_reset )	n.reset_all();
+		else 				n.update( App.delta_time );
+	}
 }
+
 
 // #region trash
 
