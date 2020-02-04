@@ -57,7 +57,7 @@ async function init(){
 	SpringRigSys( App.ecs );
 	*/
 
-	gMotion = Motion.sin( gModel, 1.0, [1,0.2,0] );
+	gMotion = Motion.sin( gModel, 1.0, [1,0.0,0] );
 
 	return true;
 }
@@ -95,8 +95,9 @@ function load_mesh( json, bin ){
 	
 	let rs	= e.add_com( "SpringRig" );
 	rs.add( rig.get_chain_indices( "tail" ), { type:"semi", damp:0.9, damp_inc:-0.1, osc:0.9, osc_inc:0 } );
-	rs.add( rig.points.wing_l.idx, { type:"semi", damp:0.1, osc:0.01 } );
-	rs.add( rig.points.wing_r.idx, { type:"semi", damp:1, osc:7 } );
+	rs.add( rig.points.wing_l.idx, { type:"semi", damp:0.2, osc:1.0 } );
+	rs.add( rig.points.wing_r.idx, { type:"semi", damp:0.2, osc:1.0 } );
+
 	//rs.add( rig.points.wing_r.idx, { type:"tension", tension:2, damp:5 } );
 
 	console.log( rs );
