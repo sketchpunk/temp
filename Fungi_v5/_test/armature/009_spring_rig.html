@@ -94,13 +94,13 @@ function load_mesh( json, bin ){
 
 	
 	let rs	= e.add_com( "SpringRig" );
-	rs.add( rig.get_chain_indices( "tail" ), { type:"semi", damp:0.9, damp_inc:-0.1, osc:0.9, osc_inc:0 } );
-	rs.add( rig.points.wing_l.idx, { type:"semi", damp:0.2, osc:1.0 } );
-	rs.add( rig.points.wing_r.idx, { type:"semi", damp:0.2, osc:1.0 } );
+	rs.add( rig.get_chain_indices( "tail" ), 0.9, 0.9, -0.1 );
+	rs.add( rig.points.wing_l.idx, 1.0, 0.2 );
+	rs.add( rig.points.wing_r.idx, 1.0, 0.2 );
 
 	//rs.add( rig.points.wing_r.idx, { type:"tension", tension:2, damp:5 } );
 
-	console.log( rs );
+	//console.log( rs );
 
 	//e.Node.set_pos( -1.0, 0.5, 0 );
 	gModel = e;
@@ -451,22 +451,17 @@ class SpringRig{
 		this.do_reset	= true;
 	}
 
-	// { type:"semi", damp:0.5, damp_inc:0.1, osc:1, osc_inc:0 }
-	// { type:"tension", tension:2.0, damp:1.2, tension_inc:0, damp_inc:0 }
-	add( idx_ary, s_config ){
-		let i, b, o = { bones : new Array() };
+	add( idx_ary, osc=1.0, damp=0.9, damp_inc=0, osc_inc=0){
+		let i, o = { bones : new Array() };
 
+		// If only passing in a single bone index, turn it into an array.
 		if( !Array.isArray( idx_ary ) ) idx_ary = [ idx_ary ];
 
 		for( i=0; i < idx_ary.length; i++ ){
-			b = { idx: idx_ary[ i ], spring: null };
-
-			switch( s_config.type ){
-				case "semi":	b.spring = SemiImplicitEuler.from_config( s_config, i ); break;
-				case "tension":	b.spring = TensionSpring.from_config( s_config, i ); break;
-			}
-
-			o.bones.push( b );
+			o.bones.push( { 
+				idx		: idx_ary[ i ], 
+				spring	: new SemiImplicitEuler( osc + osc_inc * i, damp + damp_inc * i ), 
+			});
 		}
 
 		this.sets.push( o );
