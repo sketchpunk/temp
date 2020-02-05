@@ -16,7 +16,7 @@ import RenderLoop			from "./engine/RenderLoop.js"
 
 import InputTracker 		from "./lib/InputTracker.js";
 
-import Maths, { Quat, Vec3, Transform }	from "./maths/Maths.js";
+import Maths, { Quat, Vec3, Transform, Mat4 }	from "./maths/Maths.js";
 
 import Node 				from "./engine/com/Node.js";
 import Draw 				from "./engine/com/Draw.js";
@@ -27,6 +27,8 @@ import OrbitCamera 			from "./engine/com/OrbitCamera.js";
 /*++++++++++++++++++++++++++++++++++++++++++++++++
 SYSTEMS LAYOUT
 001 	- OrbitCamera
+
+700 	- BoneSpring ( Update movement of specific bones )
 
 800		- NodeSys
 801		- CameraSys
@@ -292,3 +294,6 @@ let App = {
 
 window.App = App;	// Put App in the Global Scope.
 export default App;
+export { 
+	Maths, Quat, Vec3, Mat4, Transform
+};

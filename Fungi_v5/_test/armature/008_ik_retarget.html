@@ -13,6 +13,7 @@ import IKRig			from "../../fungi.armature/IKRig.js";
 
 App.builder( true, true )
 	.use_armature()
+	.init_mod( "../fungi.armature/BoneSpring.js" )
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
 	.set_camera( 0, 10, 3, -0.2, 0.7, 0 )
@@ -38,7 +39,7 @@ async function init(){
 		.then();
 
 	if( dl.src ) gAnimate = load_src( dl.src.json, dl.src.bin );
-	//if( dl.veg ) load_mesh_a( dl.veg.json, dl.veg.bin );
+	if( dl.veg ) load_mesh_a( dl.veg.json, dl.veg.bin );
 	if( dl.rex ) load_mesh_b( dl.rex.json, dl.rex.bin );
 
 	gIKPose = new IKPose();
@@ -117,14 +118,24 @@ function load_mesh_b( json, bin ){
 		.add_point( "foot_l", "LeftFoot" )
 		.add_point( "foot_r", "RightFoot" )
 
+		.add_point( "wing_l", "left_wing" )
+		.add_point( "wing_r", "right_wing" )
+
 		.add_chain( "leg_r", [ "RightUpLeg", "RightKnee", "RightShin" ], "z", "RightFoot", "three_bone" )
 		.add_chain( "leg_l", [ "LeftUpLeg", "LeftKnee", "LeftShin" ], "z", "LeftFoot", "three_bone" )
 		.add_chain( "spine", [ "Spine", "Spine1" ] )
-		//.add_chain( "tail", ["tail_1","tail_2","tail_3","tail_4","tail_5","tail_6","tail_7"] )
+		.add_chain( "tail", ["tail_1","tail_2","tail_3","tail_4","tail_5","tail_6","tail_7"] )
 		.set_leg_lmt( null, -0.1 )
 	;
 
 	tpose.apply();
+
+	// Add some Spring Movement to specific bones
+	e.add_com( "BoneSpring" )
+		.add( rig.get_chain_indices( "tail" ), 2.9, 0.9, -0.1 )
+		.add( rig.points.wing_l.idx, 5.0, 0.9 )
+		.add( rig.points.wing_r.idx, 5.0, 0.9 );
+
 	e.Node.set_pos( -1.0, 0, 0 );
 	gModelB = e;
 }

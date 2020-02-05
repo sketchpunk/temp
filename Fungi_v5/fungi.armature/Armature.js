@@ -37,8 +37,7 @@ class Armature{
 	static init( priority = 801 ){
 		App.Components.reg( Armature ).reg( Bone );
 		App.ecs
-			.sys_add( BoneSys, priority )			// Update the Bone Offsets
-			.sys_add( ArmatureSys, priority+1 )		// Update the Float Buffers with all the Bone Data
+			.sys_add( ArmatureSys, priority )
 			.sys_add( ArmatureCleanupSys, 1000 );	// Final Cleanup at the end of a frame
 	}
 
@@ -130,6 +129,8 @@ class Armature{
 	
 		get_e( b_name ){ return this.bones[ this.name_map[ b_name ] ].ref; }
 
+		* bone_entity_iter(){ let b; for( b of this.bones ) yield b.ref; }
+
 	/////////////////////////////////////////////////
 	// BUFFERS
 	/////////////////////////////////////////////////
@@ -205,28 +206,23 @@ class Armature{
 
 //#################################################################
 /* After TransformSystem, BoneSystem can then turn all the World Transform into world Dual Quaternions. */
-function BoneSys( ecs ){
-	let ary	= ecs.query_comp( "Bone" );
-	if( ary == null ) return; // No Bones Loaded
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let b, n;
-	for( b of ary ){
-		n = ecs.entities[ b.entity_id ].Node;
-		if( n.updated ){
-			b.offset.from_mul( n.model_matrix, b.bind_pose );
-
-			//b.offset
-			//	.set( n.world.rot, n.world.pos )	// Current World Space as a DQ
-			//	.mul( b.bind_pose );				// Subtract from Bind_pose	
-		}
-	}
-}
-
-/** System handles flattening all the DualQuat bone data */
 function ArmatureSys( ecs ){
-	let a, ary = ecs.query_comp( "Armature" );
-	if( ary == null ) return; // No Bones Loaded, Exit Early
-	for( a of ary ) if( a.updated ) a.update_buffer();
+	let i, e, a, ary = ecs.query_comp( "Armature" );
+	if( !ary ) return; // No armatures, skip.
+
+	for( a of ary ){
+		e = ecs.entities[ a.entity_id ];
+		if( e.Node.updated ) a.updated = true;	// If the entiry transform has changed, Need to recalc all bones even if bones haven't changed themselves.
+		if( !a.updated ) continue;
+
+		// Update All Bone Offset Matrices
+		for( e of a.bone_entity_iter() ){
+			if( e.Node.updated ) e.Bone.offset.from_mul( e.Node.model_matrix, e.Bone.bind_pose );
+		}
+
+		// Save all the Bone Offset Matrices into Buffer for GPU
+		a.update_buffer();
+	}
 }
 
 /** System to handle cleanup like setting updated to false */

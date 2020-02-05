@@ -19,3 +19,7 @@ https://twitter.com/i/events/1122251136239570947
 
 Googles WebGL simple renderer
 https://github.com/GoogleWebComponents/model-viewer
+
+
+All ES6 Features, Nice Sytax Sugar
+http://es6-features.org/#ObjectMatchingDeepMatching

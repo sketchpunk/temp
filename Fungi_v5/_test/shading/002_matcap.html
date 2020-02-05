@@ -1,0 +1,120 @@
+<!DOCTYPE html><script type="module">
+import App		from "../../fungi/App.js";
+import Torus	from "../../fungi/geo/Torus.js";
+import XhrQueue from "../../fungi/lib/XhrQueue.js";
+
+// https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
+
+//#####################################################
+
+App.builder( true, false )
+	.set_camera( 0, 30, 8, 0, 1.5, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+async function init( x ){
+	let dl = await XhrQueue.add( "../../_tmp/matcap_003.jpg" ).then();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader and Meshes
+	let e, mat, tex;
+	init_shader();
+
+	tex		= App.gl.load_texture( "tex", dl[0], false );
+	mat		= gShader.new_material( "mat_shape", { "matcap_tex":tex } );
+	e		= Torus.knot( "shape", mat );
+	e.Node.set_pos( 0, 1.8, 0 );
+
+	return true;
+}
+
+//#####################################################
+
+let gShader = null;
+function init_shader(){
+	gShader = App.Shader.from_src( "SH_TESTER", vert_src, frag_src )
+		.add_uniform_blocks( ["Global","Model"] ) //,"Light"
+		//.add_uniform( "base_color", "rgba", "#ff0000ff" )
+		.add_uniform( "matcap_tex", "sampler2D", null )
+	;
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	flat out vec3 frag_cam_pos;
+	out vec3 frag_pos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_pos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform vec4 base_color;
+    uniform sampler2D matcap_tex;
+
+	in vec3 frag_norm;
+	flat in vec3 frag_cam_pos;
+	in vec3 frag_pos;
+
+	//-------------------------
+
+	void main( void ){
+		// vec3 eye_dir	= normalize( frag_pos ); // Static Look
+		vec3 eye_dir	= normalize( frag_pos - frag_cam_pos ); // Light moves
+		vec3 norm		= normalize( frag_norm );
+
+		//vec3 ref_dir 	= eye_dir - 2.0 * dot(norm, eye_dir) * norm; // Reflect Equation
+		vec3 ref_dir 	= reflect( eye_dir, norm );	// Can use built in function for same results
+
+		//float m			= 2.0 * sqrt( pow( ref_dir.x, 2.0 ) + pow( ref_dir.y, 2.0 ) + pow( ref_dir.z + 1.0, 2.0 ) );
+		//float m			= 2.0 * sqrt( ref_dir.x*ref_dir.x + ref_dir.y*ref_dir.y + (ref_dir.z+1.0)*(ref_dir.z+1.0) );
+		float m 		= 2.8284271247461903 * sqrt( ref_dir.z + 1.0 );
+		vec2 uv			= ref_dir.xy / m + 0.5; 
+		//vec2 uv 		= norm.xy * 0.5 + vec2( 0.5 ); // Different look, skip ref_dir & m
+		
+		out_color		= texture( matcap_tex, uv ); //* base_color;
+	}`;
+
+	/* NOTES
+		Using Reflection vector is like an example of Enviroment Mapping.
+		Using just the normal value, skipping ref_dir & m, gives you basic lighting.
+
+		Can tweak values to get different looks or uses of the values.
+
+		When playing around with eye-dir, when using camera position, it makes the light move a bit
+		but makes like the light sources in in reverse, like the light source is below instead of above.
+	*/
+</script><page-layout></page-layout>

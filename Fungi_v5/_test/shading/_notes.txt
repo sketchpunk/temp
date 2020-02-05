@@ -1,0 +1,4 @@
+https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading
+https://www.scratchapixel.com/lessons/3d-basic-rendering/phong-shader-BRDF
+
+https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
