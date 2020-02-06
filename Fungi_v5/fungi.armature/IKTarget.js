@@ -99,9 +99,13 @@ class IKTarget{
 				case "x": align_dir = l_dir; break;
 				case "z": align_dir = f_dir; break;
 			}
+			
+			//console.log("epp", Vec3.dot( align_dir, this.axis.y ) );
 
 			// Shortest Twisting Direction
-			if( Vec3.dot( align_dir, this.axis.y ) < 0 ) align_dir.invert();
+			let vdot = Vec3.dot( align_dir, this.axis.y );
+			if( vdot < 0 ) align_dir.invert();
+			
 
 			// Create and apply twist rotation.
 			rot.from_unit_vecs( align_dir, this.axis.y );
@@ -110,6 +114,7 @@ class IKTarget{
 		}
 
 		aim( chain, tpose, pose, p_wt ){
+			console.log("AIM");
 			let rot = new Quat();
 			this._aim_bone( chain, tpose, p_wt, rot );
 			rot.pmul_invert( p_wt.rot ); // Convert to Bone's Local Space by mul invert of parent bone rotation

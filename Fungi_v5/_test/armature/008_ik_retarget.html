@@ -18,8 +18,8 @@ App.builder( true, true )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
 	.set_camera( 0, 10, 3, -0.2, 0.7, 0 )
 	.add( init )
-	.render_loop( on_draw )
-	//.render_on_mouse()
+	//.render_loop( on_draw )
+	.render_on_mouse()
 	.build();
 
 //#####################################################
@@ -32,8 +32,9 @@ function on_draw( dt, ss ){
 async function init(){
 	let dl = await XhrQueue
 		.url( "../../_tmp/" )
-		.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
-		.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
+		//.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
+		.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
+		//.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
 		.url( "../../files/models/" )
 		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
 		.then();
@@ -45,7 +46,7 @@ async function init(){
 	gIKPose = new IKPose();
 
 	//gAnimate( 0.70 );
-	gAnimate( 0.5 );
+	gAnimate( 0.6 );
 
 	return true;
 }
@@ -73,6 +74,8 @@ function load_src( json, bin ){
 
 		compute_ik_pose( gEntitySrc, gIKPose );
 
+		//console.log( pm.clock );
+
 		//complete_ik_pose( gEntitySrc, gIKPose );
 		//complete_ik_pose_cp( gEntitySrc, gIKPose );
 		//compute_limb( gEntitySrc, gIKPose );
@@ -99,7 +102,7 @@ function load_mesh_a( json, bin ){
 	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
 	tpose.apply();
 
-	e.Node.set_pos( 1.0, 0, 0 );
+	//e.Node.set_pos( 1.0, 0, 0 );
 	//e.Node.set_pos( 0, .2, 0 );
 	gModelA = e;
 }
@@ -257,9 +260,15 @@ class IKPose{
 			this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );	// Setup IK Target
 			
 			//this.floor_ik_limit( 0.02 );
-
+			console.log( chain );
 			let solver = chain.ik_solver || "limb";
 			this.target[ solver ]( chain, rig.tpose, rig.pose, pt );
+
+			//this.target.debug( App.Debug );
+
+			//let b = rig.pose.bones[ chain.first() ];
+			//b.local.rot.negate();
+			//console.log( b.local.rot );
 
 			//this.target.limb( chain, rig.tpose, rig.pose, pt );				// Apply IK Solver to Chain.
 			//this.target.three_bone( chain, rig.tpose, rig.pose, pt );
@@ -352,7 +361,7 @@ class IKPose{
 				//App.Debug.ln( ct.pos, Vec3.scale( sw_up, 0.25 ).add( ct.pos ), "yellow" );
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				App.Debug.ln( ct.pos, Vec3.scale( dir, 0.5 ).add(ct.pos), "yellow" );
+				//App.Debug.ln( ct.pos, Vec3.scale( dir, 0.5 ).add(ct.pos), "yellow" );
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				// Swing & Twist
@@ -403,7 +412,7 @@ function compute_ik_pose( e, ik_pose ){
 	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
 	compute_limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
 
-	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, true );
+	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
 }
 
 function compute_hip_QUAT( rig, ik_pose ){
