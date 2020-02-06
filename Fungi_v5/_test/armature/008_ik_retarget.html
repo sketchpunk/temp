@@ -16,10 +16,10 @@ App.builder( true, true )
 	.init_mod( "../fungi.armature/BoneSpring.js" )
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 0, 10, 3, -0.2, 0.7, 0 )
+	.set_camera( 40, 10, 2, -0.2, 0.9, 0 )
 	.add( init )
-	//.render_loop( on_draw )
-	.render_on_mouse()
+	.render_loop( on_draw )
+	//.render_on_mouse()
 	.build();
 
 //#####################################################
@@ -36,7 +36,7 @@ async function init(){
 		.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
 		//.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
 		.url( "../../files/models/" )
-		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
+		//.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
 		.then();
 
 	if( dl.src ) gAnimate = load_src( dl.src.json, dl.src.bin );
@@ -64,6 +64,11 @@ function load_src( json, bin ){
 	let rig 	= e.add_com( "IKRig" )
 		.init( null, true, IKRig.ARM_MIXAMO )
 		.recompute_from_tpose(); // Mesh requires a few bits to be recomputed because of Mixamo Scaling
+
+	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.arm_r.set_alt( Vec3.RIGHT, Vec3.BACK, rig.tpose );
+	rig.chains.arm_l.set_alt( Vec3.LEFT, Vec3.BACK, rig.tpose );
 
 	gEntitySrc  = e;
 	//e.info.active = false;
@@ -148,6 +153,12 @@ function load_mesh_b( json, bin ){
 import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
 import Axis from "../../fungi/maths/Axis.js";
 
+/*
+NOTES:
+Looks like Aim IK is broken. Need to try to implement Swing-Twist for Aim.
+Each Chain should have its inverted FWD and UP defined
+*/
+
 class IKPose{
 	constructor(){
 		this.target = new IKTarget();
@@ -202,6 +213,7 @@ class IKPose{
 
 			if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
 			if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
+			
 			/*
 			this.apply_look_twist( rig, rig.points.neck.idx, this.head );
 			*/
@@ -260,11 +272,14 @@ class IKPose{
 			this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );	// Setup IK Target
 			
 			//this.floor_ik_limit( 0.02 );
-			console.log( chain );
+			//console.log( chain );
+			//this.target.debug( App.Debug );
+
+
 			let solver = chain.ik_solver || "limb";
 			this.target[ solver ]( chain, rig.tpose, rig.pose, pt );
 
-			//this.target.debug( App.Debug );
+			
 
 			//let b = rig.pose.bones[ chain.first() ];
 			//b.local.rot.negate();
@@ -412,7 +427,9 @@ function compute_ik_pose( e, ik_pose ){
 	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
 	compute_limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
 
-	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
+	//compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
+
+	visualize( rig, ik_pose );
 }
 
 function compute_hip_QUAT( rig, ik_pose ){
@@ -466,14 +483,17 @@ function compute_limb( pose, chain, ik_limb ){
 	let b0		= pose.bones[ chain.first() ],				// First Bone
 		b1		= pose.bones[ chain.end_idx ],				// END Bone, which is not part of the chain (Hand,Foot)
 		dir		= Vec3.sub( b1.world.pos, b0.world.pos ),
-		len 	= dir.len();	// Direction from start of chain, toward end bone, which is te Effector
+		len 	= dir.len();	// Direction from start of chain, toward end bone, which is end Effector
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Using the First bone rotation to determine it's joint direction seems to produce the smoothest animation
-	ik_limb.joint_dir.copy( Vec3.transform_quat( chain.alt_dir, b0.world.rot ) ); 
+	ik_limb.joint_dir.copy( Vec3.transform_quat( chain.alt_up, b0.world.rot ) ); 
 
 	ik_limb.len_scale = len / chain.len;	// Normalize the length to the End Effector using the Chain Length as Max.
 	ik_limb.dir.copy( dir.norm() );			// Save Direction to end Effector
+
+	dir.from_cross( ik_limb.joint_dir, ik_limb.dir ); 			// Calc Left
+	ik_limb.joint_dir.from_cross( ik_limb.dir, dir ).norm(); 	// Recalc Up
 
 	//console.log( ik_limb, chain.len, len );
 	/*
@@ -613,6 +633,30 @@ function compute_spine( rig, chain, ik_pose ){
 		ik_pose.spine[ j ].dir.copy( p_fwd );
 		ik_pose.spine[ j ].twist = twist;
 		j++;
+	}
+}
+
+function visualize( rig, ik ){
+	let pb, i, a = new Vec3(), b = new Vec3();
+
+	//----------------------------
+	// HIP
+	pb = rig.pose.bones[ rig.points.hip.idx ].world;
+	App.Debug
+		.pnt( pb.pos, "orange", 0.07, 2 )
+		.ln( pb.pos, a.from_scale( ik.hip.dir, 0.20 ).add( pb.pos ), "cyan", null, true );
+
+	//----------------------------
+	// LEGS
+	for( i of [ "leg_l","leg_r" ] ){
+		pb = rig.pose.bones[ rig.chains[i].first() ].world;
+		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
+		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
+		App.Debug
+			.pnt( pb.pos, "yellow", 0.05, 1 )
+			.pnt( a, "red", 0.05, 1 )
+			.ln( pb.pos, a, "yellow", "red", true )
+			.ln( pb.pos, b, "cyan", null, true );
 	}
 }
 

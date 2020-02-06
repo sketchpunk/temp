@@ -23,3 +23,10 @@ https://github.com/GoogleWebComponents/model-viewer
 
 All ES6 Features, Nice Sytax Sugar
 http://es6-features.org/#ObjectMatchingDeepMatching
+
+
+
+https://en.wikipedia.org/wiki/Binary_space_partitioning
+https://en.wikipedia.org/wiki/Radix_tree // Binary Tries
+http://en.wikipedia.org/wiki/Heap_(data_structure)
+https://en.wikipedia.org/wiki/T-tree

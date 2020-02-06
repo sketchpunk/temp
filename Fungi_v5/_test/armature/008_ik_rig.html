@@ -1,0 +1,91 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Transform }	from "../../fungi/App.js";
+import IKTarget 		from "../../fungi.armature/IKTarget.js";
+
+import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, {Gltf}	from "../../fungi/lib/GltfUtil.js";
+import IKRig			from "../../fungi.armature/IKRig.js";
+
+//#####################################################
+
+App.builder( true, true )
+	.use_armature()
+	.load_shaders( "../fungi.armature/LowPolySkin.js" )
+	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
+	.set_camera( 0, 10, 2, -0.2, 0.9, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+function on_draw( dt, ss ){}
+
+async function init(){
+    let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" ).then();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mat		= App.new_mat( "LowPolySkin", { color:"#ffffff" } );
+	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
+	//let e		= GltfUtil.get_bone_view( "target_a", json, bin );
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
+	let rig 	= e.add_com( "IKRig" ).init( tpose, false, 0 );
+    tpose.apply();
+
+	//e.Node.set_pos( 1.0, 0, 0 );
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    rig
+		.add_point( "hip", "Hips" )
+		.add_point( "head", "Head" )
+		.add_point( "neck", "Neck" )
+		.add_point( "chest", "Spine2" )
+		.add_point( "foot_l", "LeftFoot" )
+		.add_point( "foot_r", "RightFoot" )
+
+		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ], "x", "RightHand" )
+		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "x", "LeftHand" )
+
+		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "z", "RightFoot" )
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "z", "LeftFoot" )
+
+		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ], "y" )
+	;
+
+	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.arm_r.set_alt( Vec3.RIGHT, Vec3.BACK, rig.tpose );
+	rig.chains.arm_l.set_alt( Vec3.LEFT, Vec3.BACK, rig.tpose );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	ik( rig, "arm_l", [ 0.32, 0.95 ,-0.1 ], [0,0,-1] );
+	ik( rig, "arm_r", [ -0.35, 0.9 ,0.1 ], [0,0,-1] );
+
+	ik( rig, "leg_l", [ 0.1, 0.5 ,0.1 ], [0.15,0,0.85] );
+	ik( rig, "leg_r", [ -0.1, 0.15 ,0.0 ], [0,0,1] );
+
+    rig.apply_pose();
+
+	return true;
+}
+
+//#####################################################
+
+// Apply IK to a Chain of an IKRig
+function ik( rig, ch_name, pos, dir ){
+	let b		= rig.first_bone( ch_name );			// Get First Pose Bone of Chain
+	let c_wt 	= new Transform();						// Compute First Bone plus its parent World Transform
+	let p_wt	= new Transform();
+	rig.tpose.get_parent_world( b.idx, p_wt, c_wt );	// Use TPose for World Transforms
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let tar = new IKTarget();							// Setup IK Target Data based on Start+End Positions
+	tar.from_pos( c_wt.pos, pos, dir );					
+	tar.debug( App.Debug, 0.6 );						// Visualize Data
+	
+	let ch = rig.chains[ ch_name ];
+    //tar.aim2( ch, rig.tpose, rig.pose, p_wt );		// Run Solver on Chain
+    tar.limb( ch, rig.tpose, rig.pose, p_wt );			// Run Solver on Chain
+}
+
+</script><page-layout></page-layout>

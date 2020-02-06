@@ -261,7 +261,7 @@ class gl{
 
 			// push image to specific spot in the cube map.
 			for( let i=0; i < 6; i++){
-				this.texImage2D( gl.ctx.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.ctx.RGBA, gl.ctx.RGBA, gl.ctx.UNSIGNED_BYTE, img_ary[ i ] );
+				gl.ctx.texImage2D( gl.ctx.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.ctx.RGBA, gl.ctx.RGBA, gl.ctx.UNSIGNED_BYTE, img_ary[ i ] );
 			}
 
 			gl.ctx.texParameteri( gl.ctx.TEXTURE_CUBE_MAP, gl.ctx.TEXTURE_MAG_FILTER, gl.ctx.LINEAR );		// Setup up scaling

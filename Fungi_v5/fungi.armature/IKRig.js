@@ -139,6 +139,10 @@ class Chain{
 		this.end_idx 	= null;			// Joint that Marks the true end of the chain
 
 		this.alt_dir 	= Vec3.FORWARD.clone();
+
+		this.alt_fwd 	= Vec3.FORWARD.clone();
+		this.alt_up		= Vec3.UP.clone();
+
 		this.ik_solver 	= null;
 	}
 
@@ -156,14 +160,30 @@ class Chain{
 	idx( i ){ return this.bones[ i ].idx; }
 
 	set_alt_dir( dir, tpose=null, idx=0 ){
-		if( tpose ){
-			let b = tpose.bones[ this.bones[ idx ].idx ],
-				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
-			this.alt_dir.from_quat( q, dir );	// Use invert to get direction that will Recreate the real direction
-		}else this.alt_dir.copy( v );
+		//if( tpose ){
+		//	let b = tpose.bones[ this.bones[ idx ].idx ],
+		//		q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
+		//	this.alt_dir.from_quat( q, dir );	// Use invert to get direction that will Recreate the real direction
+		//}else this.alt_dir.copy( v );
 
 		return this;
 	}
+
+	set_alt( fwd, up, tpose=null ){
+		if( tpose ){
+			let b = tpose.bones[ this.bones[ 0 ].idx ],
+				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
+
+			this.alt_fwd.from_quat( q, fwd );	// Use invert to get direction that will Recreate the real direction
+			this.alt_up.from_quat( q, up );	
+		}else{
+			this.alt_fwd.copy( fwd );
+			this.alt_up.copy( up );
+		}
+
+		return this;
+	}
+
 	// #endregion ////////////////////////////////////////////////
 	
 	// #region Special Methods
@@ -233,6 +253,11 @@ function init_mixamo_rig( arm, rig ){
 	rig.chains.leg_r.set_alt_dir( Vec3.FORWARD, rig.tpose );
 	rig.chains.arm_r.set_alt_dir( Vec3.BACK, rig.tpose );
 	rig.chains.arm_l.set_alt_dir( Vec3.BACK, rig.tpose );
+
+	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.arm_r.set_alt( Vec3.RIGHT, Vec3.BACK, rig.tpose );
+	rig.chains.arm_l.set_alt( Vec3.LEFT, Vec3.BACK, rig.tpose );
 }
 
 //#########################################################

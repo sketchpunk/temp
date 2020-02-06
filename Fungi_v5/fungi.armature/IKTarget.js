@@ -2,6 +2,8 @@ import Maths, { Quat, Vec3 }	from "../fungi/maths/Maths.js";
 import Transform				from "../fungi/maths/Transform.js";
 import Axis						from "../fungi/maths/Axis.js";
 
+import App from "../fungi/App.js";
+
 class IKTarget{
 	constructor(){
 		this.start_pos		= new Vec3();	// World Position start of an IK Chain
@@ -61,7 +63,7 @@ class IKTarget{
 	///////////////////////////////////////////////////////////////////
 	// Single Bone Solvers
 	///////////////////////////////////////////////////////////////////
-		
+
 		_aim_bone( chain, pose, p_wt, out ){
 			/*
 			The idea is to Aim the root bone in the direction of the target. Originally used a lookAt rotation 
@@ -101,6 +103,14 @@ class IKTarget{
 			}
 			
 			//console.log("epp", Vec3.dot( align_dir, this.axis.y ) );
+			//####################################################
+			let b = pose.bones[ chain.first() ];
+			let t = new Transform();
+			t.from_add( p_wt, b.local );
+			console.log(  chain.align_axis  );
+			App.Debug.ln( t.pos, Vec3.add( t.pos, align_dir ), "orange" );
+			App.Debug.ln( t.pos, Vec3.add( t.pos, this.axis.y ), "white" );
+			//####################################################
 
 			// Shortest Twisting Direction
 			let vdot = Vec3.dot( align_dir, this.axis.y );
@@ -110,21 +120,91 @@ class IKTarget{
 			// Create and apply twist rotation.
 			rot.from_unit_vecs( align_dir, this.axis.y );
 			out.pmul( rot );
+
+
 			return out;
 		}
 
 		aim( chain, tpose, pose, p_wt ){
-			console.log("AIM");
 			let rot = new Quat();
 			this._aim_bone( chain, tpose, p_wt, rot );
 			rot.pmul_invert( p_wt.rot ); // Convert to Bone's Local Space by mul invert of parent bone rotation
 			pose.set_bone( chain.bones[ 0 ].idx, rot );
 		}
 
+		aim2( chain, tpose, pose, p_wt ){
+			let rot = new Quat();
+			this._aim_bone2( chain, tpose, p_wt, rot );
+
+			rot.pmul_invert( p_wt.rot ); // Convert to Bone's Local Space by mul invert of parent bone rotation
+			pose.set_bone( chain.bones[ 0 ].idx, rot );
+		}
+
+		_aim_bone2( chain, tpose, p_wt, out ){
+			let rot	= Quat.mul( p_wt.rot, tpose.get_local_rot( chain.first() ) ),	// Get World Space Rotation for Bone
+				dir	= Vec3.transform_quat( chain.alt_fwd, rot );					// Get Bone's WS Forward Dir
+
+			//let ct = new Transform();
+			//let b = tpose.bones[ chain.first() ];
+			//ct.from_add( p_wt, b.local );
+			//App.Debug.pnt( ct.pos, "white", 0.03 );
+			//App.Debug.ln( ct.pos, Vec3.add( ct.pos, f_dir), "orange" );
+
+			//Swing
+			let q = Quat.unit_vecs( dir, this.axis.z );
+			out.from_mul( q, rot );
+
+			// Twist 
+			//let u_dir	= Vec3.transform_quat( chain.alt_up, out );
+			//let twist 	= Vec3.angle( u_dir, this.axis.y );
+			//App.Debug.ln( ct.pos, Vec3.add( ct.pos, u_dir), "white" );
+
+			dir.from_quat( out, chain.alt_up );				// After Swing, Whats the UP Direction
+			let twist 	= Vec3.angle( dir, this.axis.y );	// Get difference between Swing Up and Target Up
+
+			if( twist <= 0.00017453292 ) twist = 0;
+			else{
+				//let l_dir  	= Vec3.cross( dir, this.axis.z );
+				dir.from_cross( dir, this.axis.z );	// Get Swing LEFT, used to test if twist is on the negative side.
+				//App.Debug.ln( ct.pos, Vec3.add( ct.pos, l_dir), "black" );
+
+				if( Vec3.dot( dir, this.axis.y ) >= 0 ) twist = -twist; 
+			}
+	
+			out.pmul_axis_angle( this.axis.z, twist );	// Apply Twist
+
+			//if( Quat.dot( out, rot ) < 0 ) out.negate();	
+
+			//console.log( Quat.dot( rot, out ) );
+		
+/*
+
+	q.from_unit_vecs( Vec3.FORWARD, p_fwd )			// Rotation Difference From True FWD and Pose FWD, Swing Rotation
+		.mul( tb.world.rot );						// Apply Swing to TPose WS Rotation, gives Swing in WS
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let s_up	= Vec3.transform_quat( t_up, q ),	// Get UP Direction of the Swing Rotation
+		twist	= Vec3.angle( s_up, p_up );			// Swing+Pose have same Fwd, Use Angle between both UPs for twist
+
+	if( twist <= (0.01 * Math.PI / 180) ){
+		twist = 0; // If Less the .01 Degree, dont bother twisting.
+	}else{
+		// Swing FWD and Pose FWD Should be the same in ws, So no need to calc it,
+		// So using Pose Fwd and Swing up to get Swing left
+		// Is the Angle going to be Negative?, use Swing Left to determine if 
+		// its in the left or right side of UP
+		let s_lft = Vec3.cross( s_up, p_fwd ).norm();
+		if( Vec3.dot( s_lft, p_up ) >= 0 )	twist = -twist; 
+	}
+
+*/
+			
+		}
+
 	///////////////////////////////////////////////////////////////////
 	// Multi Bone Solvers
 	///////////////////////////////////////////////////////////////////
-
+		
 		limb( chain, tpose, pose, p_wt ){
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Using law of cos SSS, so need the length of all sides of the triangle
@@ -140,8 +220,8 @@ class IKTarget{
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// FIRST BONE - Aim then rotate by the angle.
-			this._aim_bone( chain, tpose, p_wt, rot );				// Aim the first bone toward the target oriented with the bend direction.
-			
+			this._aim_bone2( chain, tpose, p_wt, rot );				// Aim the first bone toward the target oriented with the bend direction.
+
 			rad	= Maths.lawcos_sss( aLen, cLen, bLen );				// Get the Angle between First Bone and Target.
 			
 			rot	.pmul_axis_angle( this.axis.x, -rad )				// Use the Target's X axis for rotation along with the angle from SSS

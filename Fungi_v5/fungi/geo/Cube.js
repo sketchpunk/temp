@@ -3,7 +3,7 @@ import App	from "../App.js";
 let MESH = null;
 
 function Cube( name = "Cube", mat ){
-    if( !MESH ){ build_mesh(); console.log("create mesh"); }
+    if( !MESH ){ build_mesh(); console.log("create meshx"); }
 	return App.$Draw( name, MESH, mat, App.Mesh.TRI );
 }
 
@@ -55,8 +55,14 @@ Cube.geo = function( ww=1, hh=1, dd=1 ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//Build UV data for each vertex
-	let uv = [];
-	for( i=0; i < 6; i++) uv.push( 0,0,	0,1, 1,1, 1,0 );
+	let uv = [
+		0,0, 0,1, 1,1, 1,0, // Front
+		0,0, 0,1, 1,1, 1,0,	// Back
+		0,0, 0,1, 1,1, 1,0,	// Right
+		0,0, 0,1, 1,1, 1,0,	// Bottom
+		0,0, 0,1, 1,1, 1,0, // Left
+		0,0, 0,1, 1,1, 1,0, // Top
+	];
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//Build Normal data for each vertex
@@ -75,8 +81,8 @@ Cube.geo = function( ww=1, hh=1, dd=1 ){
 }
 
 function build_mesh(){
-	let d	= FacedCube.geo(),
-		m 	= new App.Mesh( "FacedCube" ),
+	let d	= Cube.geo(),
+		m 	= new App.Mesh( "Cube" ),
 		vao = new App.Vao().bind();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -96,10 +102,8 @@ function build_mesh(){
 	App.Vao.unbind();
 	App.Buf.unbind_array();
 	App.Buf.unbind_element();
-
-	m.elm_cnt	= d.idx.length;
-	m.vao		= vao;
-	MESH 		= m;
+	
+	MESH = m.set( vao, d.idx.length );
 }
 
 export default Cube;

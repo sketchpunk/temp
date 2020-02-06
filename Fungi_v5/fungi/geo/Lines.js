@@ -3,7 +3,7 @@ import Colour	from "../core/Colour.js";
 import InterleavedFloatArray from "../data/InterleavedFloatArray.js";
 
 const	INITAL_CNT	= 10;
-const	DASH_SEG	= 1 / 0.1;
+const	DASH_SEG	= 1 / 0.07;
 const	DASH_DIV 	= 0.4;
 let 	SHADER		= null, 
 		MATERIAL	= null;

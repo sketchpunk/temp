@@ -253,7 +253,11 @@ class XhrQueue{
 	// #endregion /////////////////////////////////////////////////////
 
 	// #region Static Starters
-	static url( txt ){ return new XhrQueue().url( txt ); }
+	static url( txt, ...list ){ 
+		let o = new XhrQueue().url( txt );
+		if( list.length > 0 ) o.push( ...list );
+		return o;
+	}
 	static size( cnt ){ return new XhrQueue( cnt ); }
 	static add( url, type=null, grp_name=null, itm_name=null ){ return new XhrQueue().add( url, type, grp_name, itm_name ); }
 	static grp(){
