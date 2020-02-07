@@ -36,7 +36,7 @@ async function init(){
 		.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
 		//.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
 		.url( "../../files/models/" )
-		//.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
+		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
 		.then();
 
 	if( dl.src ) gAnimate = load_src( dl.src.json, dl.src.bin );
@@ -54,11 +54,12 @@ async function init(){
 //#####################################################
 
 function load_src( json, bin ){
-	/*
+	
 	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
 	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
-	*/
+	/*
 	let e		= GltfUtil.get_bone_view( "src", json, bin );
+	*/
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
 	let pm		= new PoseAnimator();
 	let rig 	= e.add_com( "IKRig" )
@@ -107,7 +108,7 @@ function load_mesh_a( json, bin ){
 	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
 	tpose.apply();
 
-	//e.Node.set_pos( 1.0, 0, 0 );
+	e.Node.set_pos( 1.0, 0, 0 );
 	//e.Node.set_pos( 0, .2, 0 );
 	gModelA = e;
 }
@@ -171,8 +172,8 @@ class IKPose{
 		};
 
 		this.spine	= [
-			{ dir: new Vec3(), twist:0 },
-			{ dir: new Vec3(), twist:0 },
+			{ dir: new Vec3(), twist:0, dir_f: new Vec3() },
+			{ dir: new Vec3(), twist:0, dir_f: new Vec3() },
 		];
 
 		this.foot_l	= { dir:new Vec3(), twist:0 };
@@ -209,16 +210,18 @@ class IKPose{
 			this.apply_look_twist( rig, rig.points.foot_l.idx, this.foot_l );
 			this.apply_look_twist( rig, rig.points.foot_r.idx, this.foot_r );
 			
-			this.apply_look_twist_ends( rig, rig.chains.spine, this.spine );
+			//this.apply_look_twist_ends( rig, rig.chains.spine, this.spine );
+			this.apply_spine( rig, rig.chains.spine, this.spine, 0, 0 );
+			this.apply_spine( rig, rig.chains.spine, this.spine, 1, 2 );
 
 			if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
 			if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
 			
-			/*
+			
 			this.apply_look_twist( rig, rig.points.neck.idx, this.head );
-			*/
-
-			this.apply_look_twist( rig, rig.points.head.idx, this.head );
+			
+/*
+			this.apply_look_twist( rig, rig.points.head.idx, this.head );*/
 		}
 
 		apply_hip( rig ){
@@ -382,7 +385,7 @@ class IKPose{
 				// Swing & Twist
 				//console.log( Vec3.angle( fwd_ws, ik.dir ) * 180 / Math.PI );
 
-				q.from_unit_vecs( sw_fwd, dir )				// Compute Swing Rotation
+				q.from_unit_vecs( sw_fwd, dir );			// Compute Swing Rotation
 				q.mul( ct.rot );							// Add World Space Rotation
 
 				//App.Debug.ln( ct.pos, v.from_quat( q, alt_fwd ).scale( 0.25 ).add( ct.pos ), "black" );
@@ -404,6 +407,53 @@ class IKPose{
 				pt.add( q, tb.local.pos, tb.local.scl );
 			}
 		}
+
+		apply_spine( rig, chain, ik, i, ii ){
+			//console.log( "spine" );
+			//let i = 0;
+
+			let alt_fwd = new Vec3();
+			let alt_up = new Vec3();
+			let sw_fwd = new Vec3();
+			let sw_up = new Vec3();
+
+			let idx		= chain.bones[ ii ].idx,
+				tb		= rig.tpose.bones[ idx ],
+				pb		= rig.pose.bones[ idx ],
+				q = new Quat();
+
+			let pt	= new Transform(),
+				ct	= new Transform();
+			rig.pose.get_parent_world( chain.first(), pt );	// Get Parent Bone's World Space Transform
+
+			ct.from_add( pt, tb.local );				// Add Local to get WS in pose
+			q.from_invert( tb.world.rot );				// Invert of TPose World
+				
+			//alt_fwd.from_quat( q, Vec3.FORWARD );		// Alternative Fwd
+			alt_up.from_quat( q, Vec3.UP );				// Alternative Fwd
+
+			//sw_fwd.from_quat( ct.rot, alt_fwd );		// See true WS Forward
+			sw_up.from_quat( ct.rot, alt_up );			// See true WS Forward
+
+			App.Debug.pnt( ct.pos, "orange" );
+			App.Debug.ln( ct.pos, Vec3.scale( sw_up, 0.5 ).add( ct.pos ), "orange" );
+			//App.Debug.ln( ct.pos, Vec3.scale( sw_fwd, 0.5 ).add( ct.pos ), "orange" );
+
+			App.Debug.ln( ct.pos, Vec3.scale( ik[i].dir, 0.3 ).add( ct.pos ), "yellow" );
+
+			q.from_unit_vecs( sw_up, ik[i].dir )				// Compute Swing Rotation
+				.mul( ct.rot );									// Add World Space Rotation
+			q.pmul_axis_angle( ik[i].dir, ik[i].twist );
+			
+				sw_up.from_quat( q, alt_up );
+			App.Debug.ln( ct.pos, Vec3.scale( sw_up, 0.2 ).add( ct.pos ), "red" );
+
+			q.pmul_invert( pt.rot );					// To Local Space
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			rig.pose.set_bone( idx, q );
+
+		}
 }
 
 
@@ -422,12 +472,13 @@ function compute_ik_pose( e, ik_pose ){
 	compute_look_twist( rig, rig.points.foot_l.idx, ik_pose.foot_l );
 	compute_look_twist( rig, rig.points.foot_r.idx, ik_pose.foot_r );
 
-	compute_spine( rig, rig.chains.spine, ik_pose );
+	//compute_spine( rig, rig.chains.spine, ik_pose );
+	compute_spine2( rig, rig.chains.spine, ik_pose );
 
 	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
 	compute_limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
 
-	//compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
+	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
 
 	visualize( rig, ik_pose );
 }
@@ -636,8 +687,81 @@ function compute_spine( rig, chain, ik_pose ){
 	}
 }
 
+function compute_spine2( rig, chain, ik_pose ){
+	//let idx = chain.first();
+	//let tb = rig.tpose.bones[ idx ];
+	//let pb = rig.pose.bones[ idx ];
+
+	let i_ary 	= [ chain.first(), chain.last() ],
+		alt_fwd	= new Vec3(),
+		alt_up	= new Vec3(),
+		p_fwd	= new Vec3(),
+		p_up	= new Vec3(),
+		s_fwd	= new Vec3(),
+		s_lft	= new Vec3(),
+		q 		= new Quat(),
+		pb, tb, twist, j = 0;
+
+	for( let i of i_ary ){
+		// Get The Bone Transforms
+		tb = rig.tpose.bones[ i ];
+		pb = rig.pose.bones[ i ];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get the Resting ALT Directions from TPOSE
+		q.from_invert( tb.world.rot );
+		alt_fwd.from_quat( q, Vec3.FORWARD );
+		alt_up.from_quat( q, Vec3.UP );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get the Pose Directions based of ALTs
+		p_fwd.from_quat( pb.world.rot, alt_fwd );
+		p_up.from_quat( pb.world.rot, alt_up );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+		// get swing rotation between up and the pose up
+		// then apply to bind pose
+		q.from_unit_vecs( Vec3.UP, p_up )	// Calc swing rotation
+			.mul( tb.world.rot );			// Apply it to the WS T Pose
+
+		s_fwd.from_quat( q, alt_fwd );		// whats the fwd when applying swing
+		twist = Vec3.angle( s_fwd, p_fwd );	// get angle between swing fwd and pose fwd
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if twist is negative
+		if( twist <= (0.01 * Math.PI / 180) ){
+			twist = 0; // If Less the .01 Degree, dont bother twisting.
+		}else{
+			// Swing UP and Pose UP Should be the same in ws, So no need to calc it,
+			// So using Pose UP and Swing FWD to get Swing left
+			// Is the Angle going to be Negative?, use Swing Left to determine if 
+			// its in the left or right side of SWING FWD
+			s_lft.from_cross( p_up, s_fwd ).norm();
+			if( Vec3.dot( s_lft, p_fwd ) < 0 )	twist = -twist;
+			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.3 ).add( pb.world.pos ), "yellow" );
+			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.4 ).add( pb.world.pos ), "red" );
+		}
+
+		ik_pose.spine[ j ].dir.copy( p_up );
+		ik_pose.spine[ j ].dir_f.copy( p_fwd );
+		ik_pose.spine[ j ].twist = twist;
+		j++;
+	}
+
+	//App.Debug.ln( pb.world.pos, Vec3.scale( p_fwd, 0.5 ).add( pb.world.pos ), "orange" );
+	//App.Debug.ln( pb.world.pos, Vec3.scale( p_up, 0.5 ).add( pb.world.pos ), "orange" );
+
+	//let s_up = Vec3.transform_quat( alt_up, q );
+	//App.Debug.ln( pb.world.pos, Vec3.scale( s_fwd, 0.3 ).add( pb.world.pos ), "yellow" );
+	//App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3 ).add( pb.world.pos ), "yellow" );
+
+	//q.pmul_axis_angle( p_up, twist );
+	//s_up.from_quat( q, alt_fwd );
+	//App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3 ).add( pb.world.pos ), "yellow" );
+}
+
 function visualize( rig, ik ){
-	let pb, i, a = new Vec3(), b = new Vec3();
+	let pb, i, a = new Vec3(), b = new Vec3(), q = new Quat();
 
 	//----------------------------
 	// HIP
@@ -648,7 +772,7 @@ function visualize( rig, ik ){
 
 	//----------------------------
 	// LEGS
-	for( i of [ "leg_l","leg_r" ] ){
+	for( i of [ "leg_l", "leg_r" ] ){
 		pb = rig.pose.bones[ rig.chains[i].first() ].world;
 		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
 		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
@@ -658,6 +782,26 @@ function visualize( rig, ik ){
 			.ln( pb.pos, a, "yellow", "red", true )
 			.ln( pb.pos, b, "cyan", null, true );
 	}
+
+	//----------------------------
+	// SPINE
+	pb = rig.pose.bones[ rig.chains.spine.first() ].world;
+	//q.from_axis_angle( Vec3.UP, ik.spine[0].twist );
+	//b.from_quat( q );
+	App.Debug
+		.pnt( pb.pos, "yellow", 0.04, 1 )
+		.ln( pb.pos, a.from_scale( ik.spine[0].dir, 0.20 ).add( pb.pos ), "cyan", null, true )
+		.ln( pb.pos, a.from_scale( ik.spine[0].dir_f, 0.20 ).add( pb.pos ), "cyan", null, true )
+		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
+
+	pb = rig.pose.bones[ rig.chains.spine.last() ].world;
+	//q.from_axis_angle( Vec3.UP, ik.spine[1].twist );
+	//b.from_quat( q );
+	App.Debug
+		.pnt( pb.pos, "yellow", 0.04, 1 )
+		.ln( pb.pos, a.from_scale( ik.spine[1].dir, 0.20 ).add( pb.pos ), "cyan", null, true )
+		.ln( pb.pos, a.from_scale( ik.spine[1].dir_f, 0.20 ).add( pb.pos ), "cyan", null, true )
+		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
 }
 
 // #region junk

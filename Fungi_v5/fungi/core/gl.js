@@ -245,7 +245,8 @@ class gl{
 		}
 
 		// imgAry must be 6 elements long and images placed in the right order
-		// RIGHT,LEFT,TOP,BOTTOM,BACK,FRONT
+		// RIGHT +X, LEFT -X,TOP +Y, BOTTOM -Z, BACK +Z, FRONT -Z
+		// pos_x.jpg, neg_x.jpg, pos_y.jpg, neg_y.jpg, pos_z.jpg, neg_z.jpg
 		static load_cube_texture( name, img_ary, use_mips=false ){
 			if( img_ary.length != 6 ) return null;
 

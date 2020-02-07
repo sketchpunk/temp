@@ -18,7 +18,8 @@ async function init(){
 	let dl = await XhrQueue
 		.url( "../../_tmp/" )
 		// RIGHT,LEFT,TOP,BOTTOM,BACK,FRONT
-		.push( "neg-x.jpg", "pos-x.jpg", "pos-y.jpg", "neg-y.jpg", "neg-z.jpg", "pos-z.jpg" )
+		//.push( "neg-x.jpg", "pos-x.jpg", "pos-y.jpg", "neg-y.jpg", "neg-z.jpg", "pos-z.jpg" )
+		.push( "posx.jpg", "negx.jpg", "posy.jpg", "negy.jpg", "posz.jpg", "negz.jpg" )
 		.then();
 
 	load_shader();
@@ -26,7 +27,7 @@ async function init(){
 	let tex = App.gl.load_cube_texture( "cube_map", dl, true );
 	//let mat 	= App.new_mat( "LowPoly" );
 	let mat 	= SHADER.new_material( "cube_map", { cube_tex:tex } );
-	mat.options.cullFace = false;
+	//mat.options.cullFace = false;
 	
 	//c.frontFace(	c.CCW );			// Dont really need to set it, its ccw by default.
 	// TODO, would be nice to have FrontFace Swop to CW, Then set CullFace = true.
