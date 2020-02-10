@@ -16,10 +16,10 @@ App.builder( true, true )
 	.init_mod( "../fungi.armature/BoneSpring.js" )
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 40, 10, 2, -0.2, 0.9, 0 )
+	.set_camera( 10, 10, 2.3, 0.5, 0.9, 0 )
 	.add( init )
-	.render_loop( on_draw )
-	//.render_on_mouse()
+	//.render_loop( on_draw )
+	.render_on_mouse()
 	.build();
 
 //#####################################################
@@ -154,11 +154,6 @@ function load_mesh_b( json, bin ){
 import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
 import Axis from "../../fungi/maths/Axis.js";
 
-/*
-NOTES:
-Looks like Aim IK is broken. Need to try to implement Swing-Twist for Aim.
-Each Chain should have its inverted FWD and UP defined
-*/
 
 class IKPose{
 	constructor(){
@@ -211,14 +206,15 @@ class IKPose{
 			this.apply_look_twist( rig, rig.points.foot_r.idx, this.foot_r );
 			
 			//this.apply_look_twist_ends( rig, rig.chains.spine, this.spine );
-			this.apply_spine( rig, rig.chains.spine, this.spine, 0, 0 );
-			this.apply_spine( rig, rig.chains.spine, this.spine, 1, 2 );
-
-			if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
-			if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
+			//this.apply_spine( rig, rig.chains.spine, this.spine, 0, 0 );
+			//this.apply_spine( rig, rig.chains.spine, this.spine, 1, 2 );
+			this.apply_spine2( rig, rig.chains.spine, this.spine );
+			
+			//if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
+			//if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
 			
 			
-			this.apply_look_twist( rig, rig.points.neck.idx, this.head );
+			//this.apply_look_twist( rig, rig.points.neck.idx, this.head );
 			
 /*
 			this.apply_look_twist( rig, rig.points.head.idx, this.head );*/
@@ -422,37 +418,61 @@ class IKPose{
 				pb		= rig.pose.bones[ idx ],
 				q = new Quat();
 
+	
 			let pt	= new Transform(),
 				ct	= new Transform();
-			rig.pose.get_parent_world( chain.first(), pt );	// Get Parent Bone's World Space Transform
+			rig.pose.get_parent_world( idx, pt );	// Get Parent Bone's World Space Transform
 
+			
 			ct.from_add( pt, tb.local );				// Add Local to get WS in pose
 			q.from_invert( tb.world.rot );				// Invert of TPose World
 				
-			//alt_fwd.from_quat( q, Vec3.FORWARD );		// Alternative Fwd
+			let tpos = new Vec3(1,0,0).add( ct.pos );
+
+			alt_fwd.from_quat( q, Vec3.FORWARD );		// Alternative Fwd
 			alt_up.from_quat( q, Vec3.UP );				// Alternative Fwd
 
 			//sw_fwd.from_quat( ct.rot, alt_fwd );		// See true WS Forward
 			sw_up.from_quat( ct.rot, alt_up );			// See true WS Forward
 
-			App.Debug.pnt( ct.pos, "orange" );
-			App.Debug.ln( ct.pos, Vec3.scale( sw_up, 0.5 ).add( ct.pos ), "orange" );
+			App.Debug.pnt( tpos, "orange" );
+			//App.Debug.ln( tpos, Vec3.scale( sw_up, 0.5 ).add( tpos ), "orange" );
 			//App.Debug.ln( ct.pos, Vec3.scale( sw_fwd, 0.5 ).add( ct.pos ), "orange" );
 
-			App.Debug.ln( ct.pos, Vec3.scale( ik[i].dir, 0.3 ).add( ct.pos ), "yellow" );
+			//App.Debug.ln( tpos, Vec3.scale( ik[i].dir, 0.3 ).add( tpos ), "yellow" );
 
 			q.from_unit_vecs( sw_up, ik[i].dir )				// Compute Swing Rotation
 				.mul( ct.rot );									// Add World Space Rotation
 			q.pmul_axis_angle( ik[i].dir, ik[i].twist );
 			
-				sw_up.from_quat( q, alt_up );
-			App.Debug.ln( ct.pos, Vec3.scale( sw_up, 0.2 ).add( ct.pos ), "red" );
+			//sw_up.from_quat( q, alt_up );
+			//App.Debug.ln( tpos, Vec3.scale( sw_up, 0.2 ).add( tpos ), "red" );
+
+
+			sw_fwd.from_quat( q, alt_fwd );
+			sw_up.from_quat( q, alt_up );
+			App.Debug.ln( tpos, Vec3.scale( sw_fwd, 0.5 ).add( tpos ), "blue" );
+			App.Debug.ln( tpos, Vec3.scale( sw_up, 0.2 ).add( tpos ), "blue" );
+			App.Debug.ln( tpos, Vec3.scale( ik[i].dir_f, 0.5 ).add( tpos ), "cyan" );
+			App.Debug.ln( tpos, Vec3.scale( ik[i].dir, 0.1 ).add( tpos ), "cyan" );
 
 			q.pmul_invert( pt.rot );					// To Local Space
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			rig.pose.set_bone( idx, q );
 
+		}
+
+		apply_spine2( rig, chain, ik ){
+			console.log( ik );
+
+			let cnt = chain.cnt - 1;
+			let d_fwd = new Vec3();
+
+			for( let i=0; i <= cnt; i++ ){
+				console.log( chain.bones[i] );
+
+			}
 		}
 }
 
