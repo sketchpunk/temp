@@ -468,10 +468,35 @@ class IKPose{
 
 			let cnt = chain.cnt - 1;
 			let d_fwd = new Vec3();
+			let d_up = new Vec3();
+			let t, idx, tb, pb;
+
+			//this.spine	= [
+			//{ dir: new Vec3(), twist:0, dir_f: new Vec3() },
+			//{ dir: new Vec3(), twist:0, dir_f: new Vec3() },
+			//];
+
+			let pt	= new Transform(),
+				ct	= new Transform();
+			rig.pose.get_parent_world( chain.first(), pt );	// Get Parent Bone's World Space Transform
 
 			for( let i=0; i <= cnt; i++ ){
-				console.log( chain.bones[i] );
+				idx		= chain.bones[ i ].idx;
+				tb		= rig.tpose.bones[ idx ];
+				pb		= rig.pose.bones[ idx ];
+				t		= i / cnt ;
 
+				//twist	= App.Maths.lerp( ik[0].twist, ik[1].twist, t );
+				d_fwd.from_lerp( ik[0].dir_f, ik[1].dir_f, t );
+				console.log( i, t, d_fwd );
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				ct.from_add( pt, tb.local );				// Add Local to get WS in pose
+
+				App.Debug.ln( ct.pos, Vec3.add( ct.pos, d_fwd).add([1,0,0]), "orange" );
+
+				pt.add( tb.local );
+				//pt.add( q, tb.local.pos, tb.local.scl );
 			}
 		}
 }
