@@ -16,7 +16,7 @@ App.builder( true, true )
 	.init_mod( "../fungi.armature/BoneSpring.js" )
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 10, 10, 2.3, 0.5, 0.9, 0 )
+	.set_camera( 0, 10, 3.0, 0.0, 0.9, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse()
@@ -34,7 +34,7 @@ async function init(){
 		.url( "../../_tmp/" )
 		//.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
 		.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
-		//.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
+		.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
 		.url( "../../files/models/" )
 		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
 		.then();
@@ -55,12 +55,12 @@ async function init(){
 //#####################################################
 
 function load_src( json, bin ){
-	
+	/*
 	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
 	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
-	/*
-	let e		= GltfUtil.get_bone_view( "src", json, bin );
 	*/
+	let e		= GltfUtil.get_bone_view( "src", json, bin );
+	
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
 	let pm		= new PoseAnimator();
 	let rig 	= e.add_com( "IKRig" )
@@ -109,6 +109,7 @@ function load_mesh_a( json, bin ){
 	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
 	tpose.apply();
 
+	rig.points.head.idx = rig.points.neck.idx; // Lil hack cause Head Isn't Skinned Well.
 	e.Node.set_pos( 1.0, 0, 0 );
 	//e.Node.set_pos( 0, .2, 0 );
 	gModelA = e;
@@ -214,11 +215,8 @@ class IKPose{
 			if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
 			if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
 			
-			
-			this.apply_look_twist( rig, rig.points.neck.idx, this.head );
-			
-/*
-			this.apply_look_twist( rig, rig.points.head.idx, this.head );*/
+			//this.apply_look_twist( rig, rig.points.neck.idx, this.head );
+			this.apply_look_twist( rig, rig.points.head.idx, this.head );
 		}
 
 		apply_hip( rig ){
@@ -436,7 +434,7 @@ class IKPose{
 			//sw_fwd.from_quat( ct.rot, alt_fwd );		// See true WS Forward
 			sw_up.from_quat( ct.rot, alt_up );			// See true WS Forward
 
-			App.Debug.pnt( tpos, "orange" );
+			//App.Debug.pnt( tpos, "orange" );
 			//App.Debug.ln( tpos, Vec3.scale( sw_up, 0.5 ).add( tpos ), "orange" );
 			//App.Debug.ln( ct.pos, Vec3.scale( sw_fwd, 0.5 ).add( ct.pos ), "orange" );
 
@@ -515,7 +513,7 @@ class IKPose{
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				dpos.from_add( ct.pos, [1,0.0,0] );
-				App.Debug.ln( dpos, Vec3.add( dpos, d_up ), "orange" );
+				//App.Debug.ln( dpos, Vec3.add( dpos, d_up ), "orange" );
 				//App.Debug.ln( dpos, Vec3.add( dpos, sw_up ), "yellow" );
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -542,15 +540,15 @@ class IKPose{
 					// its in the left or right side of UP
 					sw_lft.from_cross( sw_up, sw_fwd ).norm();
 
-					App.Debug.ln( dpos, Vec3.scale( sw_lft,0.5 ).add( dpos ), "yellow" );
+					//App.Debug.ln( dpos, Vec3.scale( sw_lft,0.5 ).add( dpos ), "yellow" );
 
 					if( Vec3.dot( sw_lft, d_fwd ) < 0 ) twist = -twist;
 					//console.log( "dot", Vec3.dot( sw_lft, d_fwd ) );
 					q.pmul_axis_angle( d_up, twist );
 				}
 
-				App.Debug.ln( dpos, Vec3.transform_quat( alt_up, q ).scale(0.5).add(dpos), "cyan" );
-				App.Debug.ln( dpos, Vec3.transform_quat( alt_fwd, q ).scale(0.3).add(dpos), "cyan" );
+				//App.Debug.ln( dpos, Vec3.transform_quat( alt_up, q ).scale(0.5).add(dpos), "cyan" );
+				//App.Debug.ln( dpos, Vec3.transform_quat( alt_fwd, q ).scale(0.3).add(dpos), "cyan" );
 
 
 				q.pmul_invert( pt.rot );					// To Local Space
@@ -911,6 +909,26 @@ function visualize( rig, ik ){
 		.ln( pb.pos, a.from_scale( ik.spine[1].dir, 0.20 ).add( pb.pos ), "cyan", null, true )
 		.ln( pb.pos, a.from_scale( ik.spine[1].dir_f, 0.20 ).add( pb.pos ), "cyan", null, true )
 		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
+
+	//----------------------------
+	// ARMS
+	for( i of [ "arm_l", "arm_r" ] ){
+		pb = rig.pose.bones[ rig.chains[i].first() ].world;
+		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
+		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
+		App.Debug
+			.pnt( pb.pos, "yellow", 0.05, 1 )
+			.pnt( a, "red", 0.05, 1 )
+			.ln( pb.pos, a, "yellow", "red", true )
+			.ln( pb.pos, b, "cyan", null, true );
+	}
+
+	//----------------------------
+	// HIP
+	pb = rig.pose.bones[ rig.points.head.idx ].world;
+	App.Debug
+		.pnt( pb.pos, "orange", 0.07, 2 )
+		.ln( pb.pos, a.from_scale( ik.head.dir, 0.20 ).add( pb.pos ), "cyan", null, true );
 }
 
 // #region junk

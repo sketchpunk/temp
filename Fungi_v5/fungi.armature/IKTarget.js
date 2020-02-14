@@ -107,9 +107,9 @@ class IKTarget{
 			let b = pose.bones[ chain.first() ];
 			let t = new Transform();
 			t.from_add( p_wt, b.local );
-			console.log(  chain.align_axis  );
-			App.Debug.ln( t.pos, Vec3.add( t.pos, align_dir ), "orange" );
-			App.Debug.ln( t.pos, Vec3.add( t.pos, this.axis.y ), "white" );
+			//console.log(  chain.align_axis  );
+			//App.Debug.ln( t.pos, Vec3.add( t.pos, align_dir ), "orange" );
+			//App.Debug.ln( t.pos, Vec3.add( t.pos, this.axis.y ), "white" );
 			//####################################################
 
 			// Shortest Twisting Direction
