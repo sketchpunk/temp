@@ -1,0 +1,35 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE} from "../../fungi.3js/App.js";
+import Points from "../../fungi.3js/lib/Points.js";
+import Lines from "../../fungi.3js/lib/Lines.js";
+
+//#####################################################
+App.builder( true )
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_loop() //.render_on_mouse()
+	.build();
+
+//#####################################################
+
+function init(){
+	App.Debug
+		.pnt_raw( -1, 0.1, 0, 0xff0000, 0 )
+		.ln_raw( 0,0,0, 1,1,1, 0xff0000, 0x00ff00, true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let e = Points.$();
+	let p = e.Points;
+
+	p.add_raw( 1, 0.1, 0, 0xff0000, 0 );
+	p.add_raw( 1, 0.3, 0, 0x00ff00, 1 );
+	p.add_raw( 1, 0.5, 0, 0x00ff00, 2 );
+	p.add_raw( 1, 0.7, 0, 0x00ff00, 3 );
+
+	e = Lines.$();
+	let l = e.Lines;
+	l.add_raw( 0,0,0, 0,1,0, 0xff0000, 0x00ff00, true );
+
+	return true;
+}
+</script><page-layout></page-layout>

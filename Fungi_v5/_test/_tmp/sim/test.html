@@ -1,0 +1,222 @@
+<html>
+<body style="background-color:#25282F;">
+<style>
+	html, body{ padding:0px; margin:0px; }
+</style>
+<canvas id="canvas" style="border:0px solid red;"></canvas>
+
+<script src="Canvas.js"></script>
+<script src="FrameLoop.js"></script>
+<script src="HermiteSpline.js"></script>
+<script src="HermiteFrames.js"></script>
+<script src="Vec2.js"></script>
+<script>
+
+////////////////////////////////////////////////////////////////////
+// DATA
+////////////////////////////////////////////////////////////////////
+
+	let gSimMgt, $ = new Canvas("canvas" ).center().font_size( 18 ).fill("#808080");
+
+	//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// TIME_IN_SECONDS, NOTIFICATION_TEXT
+	const NOTIFICATIONS = [ 
+		2,	"Nofify at 2s", 
+		5,	"Notify at 5s", 
+		6,	"STOP, WATCH OUT !",
+		8,	"Get Moving!",
+		13,	"Sim is complete, Go Away", 
+		25,	"STILL HERE?",
+	];
+
+	//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	// COORD( [X,Y] || NULL ), TIME_LENGTH( INT || NULL )
+	const PATHS = [
+		[ // -----------------------PATH 0
+			[-200,0]	, 0,
+			[-100,50]	, null,
+			[0,-100]	, 3,
+			[100,0]		, 3,
+			null		, 1,	// pause
+			[200,-30] 	, null,
+			[300,0]		, 6,
+		],
+
+		[ // -----------------------PATH 1
+			[-250,-100]	, 0,
+			[50,-140]	, null,
+			[130,0]		, 6.1,
+			[300,100]	, 3,
+			[400,-100]	, 3.9,
+		],
+	];
+
+////////////////////////////////////////////////////////////////////
+// INIT
+////////////////////////////////////////////////////////////////////
+	window.addEventListener( "load", function(){
+		gSimMgt = new SimulationManager()
+			.add_sim( Clear_Canvas )
+			.add_sim( new VehicleSim( PATHS ) )
+			.add_sim( ClockSim )
+			.add_sim( NotificationSim( NOTIFICATIONS ) )
+			;
+
+		gSimMgt.start();
+	});
+	
+
+////////////////////////////////////////////////////////////////////
+// MANAGER
+////////////////////////////////////////////////////////////////////
+
+	class Sim_Interface{ update( sim_mgt, dt, ss ){} }
+
+	class SimulationManager{
+		constructor(){
+			this.list 	= new Array();
+			this.loop 	= new FrameLoop( this.tick.bind(this) );
+		}
+
+		//####################################################
+			start(){ this.loop.start(); return this; }
+
+			add_sim( s ){
+				let i = { enabled : true, fn: null, cls: null };
+
+				if( s instanceof Sim_Interface ){
+					i.cls	= s;
+					i.fn 	= s.update.bind( s );
+				}else i.fn	= s;
+
+				this.list.push( i );
+				return this;
+			}
+
+		//####################################################
+			tick( dt, ss ){
+				let i;
+				for( i of this.list ) if( i.enabled ) i.fn( this, dt, ss );
+			}
+	}
+
+
+////////////////////////////////////////////////////////////////////
+// VARIOUS EXAMPLES OF GOVERNING SYSTEMS
+////////////////////////////////////////////////////////////////////
+
+	// JUST CLEARS OUT THE CANVAS FOR DRAWING
+	function Clear_Canvas(){ $.clear(); }
+
+
+	// DISPLAY THE SYSTEM CLOCK
+	function ClockSim( sim_mgt, dt, ss ){
+		let clock = Math.round( ss * 100 ) / 100;
+		$.fill("#ffff00").text( "Sim Clock : " + clock + "s", -500, -130 );
+	}
+
+
+	// DISPLAY NOTIFICATIONS AT SPECIFIC TIMES
+	function NotificationSim( d ){
+		let data = d;
+
+		return ( sim_mgt, dt, ss )=>{
+			let i, s = Math.round( ss );
+
+			$.fill("#00ffff");
+
+			for( i=0; i < data.length; i+=2 ){
+				if( data[i] <= s ) $.text( data[i+1], -500, 20 * i * 0.5 - 90 );
+				else break;
+			}
+		};
+	}
+
+
+	// HANDLE MOVEMENT OF ENTITIES ON A HERMITE PATH
+	class VehicleSim extends Sim_Interface{
+		constructor( data ){ super();
+			this.paths = new Array();
+			this.load_data( data );
+		}
+
+		//####################################################
+			load_data( data ){
+				let i, d, hf, coord, time;
+				for( d of data ){
+					hf = new HermiteFrames();
+
+					for( i=0; i < d.length; i+= 2 ){
+						coord	= d[ i ];
+						time	= d[ i+1 ];
+
+						if( !coord && time != null ) 	hf.add_pause( time );
+						else if( coord )				hf.add_pos( coord, time );
+					}
+
+					hf.build();
+					this.paths.push( hf );
+				}
+			}
+
+		//####################################################
+			update( sim_mgt, dt, ss ){
+				let p;
+				for( p of this.paths ){
+					this.draw_path( p );
+					this.draw_points( p );
+					this.draw_entity( p, ( ss >= p.time_max )? 0 : dt );
+				}
+			}
+
+		//####################################################
+			draw_path( o ){
+				let i;
+				let samp = 40;
+				let aa = new Vec2();
+				let bb = new Vec2();
+
+				$.both( "#404040").line_width( 2 );	
+				o.spline.at( 0, bb );
+
+				for( i=1; i <= samp; i++ ){
+					o.spline.at( i / samp, aa );
+					$.line_vec( bb, aa );
+					bb.copy( aa );
+				}			
+			}
+
+			draw_points( o ){
+				$.both( "#909090");
+
+				let i, p, f, pnts = o.spline.points;
+				for( i=0; i < pnts.length; i++ ){
+					p = pnts[ i ].pos;
+					$.circle_vec( p, 4 );
+
+					for( f of o.frames ){
+						if( f.start_idx == i ){
+							if( f.interp == "pause")	$.text( "PAUSE " + f.t, p[0], p[1]+50 );
+							else 						$.text( f.t, p[0], p[1]+30 );
+						}
+					}
+				}
+			}
+
+			draw_entity( o, dt ){
+				$.both( "#00ff00");
+
+				let pos = new Vec2(), dir = new Vec2();
+				o.update( dt, pos, dir );
+				
+				let clock = Math.round( o.clock * 100 ) / 100;
+				$.circle_vec( pos, 7 )
+					.line_vec( pos, dir.norm().scale(20).add(pos) )
+					.text( clock, pos[0]-11, pos[1]-25 );
+			}
+	}
+
+</script>
+
+</body>
+</html>

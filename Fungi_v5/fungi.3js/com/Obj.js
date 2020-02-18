@@ -1,4 +1,4 @@
-import { Components } from "../App.js";
+import App, { Components } from "../App.js";
 
 class Obj{
 	constructor(){
@@ -22,6 +22,12 @@ class Obj{
 			rot: [ q.x, q.y, q.z, q.w ],
 			scl: [ s.x, s.y, s.z ],
 		};
+	}
+
+	set_ref( o ){
+		this.ref = o; 
+		App.scene.add( o );
+		return this;
 	}
 
 } Components.reg( Obj );

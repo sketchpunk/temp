@@ -40,17 +40,22 @@ let App = {
 
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	$	: function( o ){
-		let e = App.ecs.entity( name, ["Obj"] );
-		e.Obj.ref = o;
-		App.scene.add( o );
+	$ : function( o=null ){
+		let e;
+		if( typeof o == "string"){
+			e = App.ecs.entity( o, ["Obj"] );
+		}else{
+			e = App.ecs.entity( o.name, ["Obj"] );
+			if( o ) e.Obj.set_ref( o );
+		}
 		return e;
 	},
+
 
 	get_e : ( idx )=>{ return App.ecs.entities[ idx ]; },
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	builder	: function( ){ return new Builder( ); },
+	builder	: function( use_debug=false, use_scene=true ){ return new Builder( use_debug, use_scene ); },
 
 	render 	: ( dt, ss )=>{
 		if( App.on_render ) App.on_render( dt, ss );	// Run a hook into render pipeline
@@ -65,15 +70,17 @@ let App = {
 //
 //////////////////////////////////////////////////////////////////
 	class Builder{
-		constructor( ){
+		constructor( use_debug=false, use_scene=true){
 			this.task_queue = new Array();
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			this
 				.add( new Promise( (r, e)=>window.addEventListener("load", _=>r(true)) ) )
 				.add( init_3js )
-				.add( init_ecs )
-				.add( init_scene );
+				.add( init_ecs );
+
+			if( use_scene ) this.add( init_scene );
+			if( use_debug ) this.add( init_debug );
 		}
 
 		///////////////////////////////////////////////////////
@@ -207,6 +214,11 @@ let App = {
 		return true;
 	}
 
+	async function init_debug(){
+		let mod 	= await import("./lib/Debug.js");
+		App.Debug	= mod.default.init();
+		return true;
+	}
 
 //##################################################################################
 

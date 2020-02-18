@@ -7,6 +7,11 @@ class GltfUtil{
 	// GETTERS
 	//////////////////////////////////////////////////////////////
 
+		// Get Geometry only
+		static get_geo( json, bin, m_names=null ){
+			return this.load_geo( json, bin, m_names );
+		}
+
 		// Loads in Mesh Only
 		static get_mesh( m_name, json, bin, mat, m_names=null ){
 			let m = this.load_mesh( json, bin, mat, m_names, false );
@@ -102,6 +107,32 @@ class GltfUtil{
 			return rtn;
 		}
 
+		static load_geo( json, bin, mesh_names=null ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Load all meshes in file
+			if( !mesh_names ){
+				mesh_names = new Array();
+				for( let i=0; i < json.meshes.length; i++ ) mesh_names.push( json.meshes[i].name );
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Mesh can be made up of sub-meshes, So need to loop through em.
+			let n, g, geo_ary, list = [];
+			
+			for( n of mesh_names ){
+				geo_ary = Gltf.get_mesh( n, json, bin, false ); // Load Type Arrays
+
+				if( geo_ary.length == 1 )
+					list.push( this.mk_geo( geo_ary[0] ) );
+				else						
+					for( g of geo_ary ) 
+						list.push( this.mk_geo( g ) );
+				
+			}
+
+			return list;
+		}
+
 		static load_bones_into( e, json, bin, arm_name=null, def_len=0.1 ){
 			let n_info	= {}, // Node Info
 				arm 	= e.Armature,
@@ -153,6 +184,25 @@ class GltfUtil{
 	//////////////////////////////////////////////////////////////
 	// HELPERS
 	//////////////////////////////////////////////////////////////
+		// Create a Geo Buffer and Mesh from data from bin file.
+		static mk_geo( g ){
+			let geo = new THREE.BufferGeometry();
+			geo.addAttribute( "position", new THREE.BufferAttribute( g.vertices.data, g.vertices.comp_len ) );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			if( g.indices )
+				geo.setIndex( new THREE.BufferAttribute( g.indices.data, 1 ) );
+
+			if( g.normal )
+				geo.addAttribute( "normal", new THREE.BufferAttribute( g.normal.data, g.normal.comp_len ) );
+
+			if( g.uv )
+				geo.addAttribute( "uv", new THREE.BufferAttribute( g.uv.data, g.uv.comp_len ) );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			geo.name = g.name;
+			return geo;
+		}
 
 		// Create a Geo Buffer and Mesh from data from bin file.
 		static mk_geo_mesh( g, mat, is_skinned=false ){

@@ -1,0 +1,1320 @@
+<html>
+<body style="background-color:#25282F;">
+<style>
+	html, body{ padding:0px; margin:0px; }
+</style>
+<canvas id="canvas" style="border:0px solid red;"></canvas>
+
+<script>
+class Canvas{
+	constructor( elmName, w = null, h = null ){
+		this.canvas		= document.getElementById(elmName);
+		this.ctx		= this.canvas.getContext("2d");
+		this.offsetX	= 0;
+		this.offsetY	= 0;
+		this.clearX		= 0;
+		this.clearY		= 0;
+
+		this._font_family	= "sans-serif";
+		this._font_size		= 20;
+		this._font_style 	= "";	// normal | italic | oblique | 
+		this._font_variant 	= "";	// normal | small-caps
+		this._font_weight	= ""; 	// normal | bold | bolder | lighter | 100 to 900
+
+		if( w && h ) 	this.size( w, h );
+		else 			this.size( window.innerWidth, window.innerHeight );
+	}
+
+
+	//////////////////////////////////////////////////////////////////
+	// Mouse
+	//////////////////////////////////////////////////////////////////
+		/*
+		let x = e.clientX - gNC.mouseOffsetX + window.pageXOffset,
+			y = e.clientY - gNC.mouseOffsetY + window.pageYOffset,
+		*/
+		mouse_on( onDown=null, onMove=null, onUp=null ){
+			if(onDown){
+				this.canvas.addEventListener("mousedown", (e)=>{
+					e.preventDefault(); e.stopPropagation();
+					onDown(e, e.clientX - this.offsetX, e.clientY - this.offsetY);
+				});
+			}
+			if(onMove){
+				this.canvas.addEventListener("mousemove", (e)=>{
+					e.preventDefault(); e.stopPropagation();
+					onMove(e, e.clientX - this.offsetX, e.clientY - this.offsetY);
+				});
+			}
+			
+			if(onUp){
+				this.canvas.addEventListener("mouseup", (e)=>{
+					e.preventDefault(); e.stopPropagation();
+					onUp(e, e.clientX - this.offsetX, e.clientY - this.offsetY);
+				});
+			}
+			return this;
+		}
+
+
+	//////////////////////////////////////////////////////////////////
+	// Coord System
+	//////////////////////////////////////////////////////////////////
+		center(){
+			this.ctx.translate(this.width * 0.5, this.height * 0.5);
+			this.clearX = -this.width * 0.5;
+			this.clearY = -this.height * 0.5;
+			return this;
+		}
+
+		flip_y(){ this.ctx.scale(1,-1); return this; }
+
+		bottom_left(){
+			this.ctx.translate( 0, this.height );
+			this.ctx.scale( 1, -1 );
+			this.clearX = 0;
+			this.clearY = 0;
+			return this;
+		}
+
+
+	//////////////////////////////////////////////////////////////////
+	// Style
+	//////////////////////////////////////////////////////////////////
+		
+		fill(v){ this.ctx.fillStyle = v; return this; }
+		stroke(v){ this.ctx.strokeStyle = v; return this; }
+		both(v){ this.ctx.strokeStyle = v; this.ctx.fillStyle = v; return this; }
+
+		style( cFill = "#ffffff", cStroke = "#505050", lWidth = 3 ){
+			if(cFill != null) 	this.ctx.fillStyle		= cFill;
+			if(cStroke != null) this.ctx.strokeStyle	= cStroke;
+			if(lWidth != null) 	this.ctx.lineWidth		= lWidth;
+			return this;
+		}
+
+
+		//++++++++++++++++++++++++++++++
+	
+		font(font = "12px verdana", textAlign="left"){
+			if(font)		this.ctx.font		= font;
+			if(textAlign)	this.ctx.textAlign	= textAlign;
+			return this;
+		}
+
+		font_align( align=null, base=null ){ 
+			if( align )	this.ctx.textAlign		= align;
+			if( base ) 	this.ctx.textBaseLine	= base;
+			return this;
+		}
+		font_family( v ){ this._font_family = v; return this.font_apply(); }
+		font_size( v ){ this._font_size = v; return this.font_apply(); }
+		font_weight( v ){ this._font_weight = v; return this.font_apply(); }
+		font_apply(){
+			this.ctx.font = 
+				this._font_style + " " + 
+				this._font_variant + " " +
+				this._font_weight + " " + 
+				this._font_size + "px " +
+				this._font_family;
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		shadow( color=null, size=null, offset_x=null, offset_y=null ){
+			if( size )	this.ctx.shadowBlur		= size;
+			if( color )	this.ctx.shadowColor 	= color;
+			
+			if( offset_x != null ) this.ctx.shadowOffsetX = offset_x;
+			if( offset_y != null ) this.ctx.shadowOffsetY = offset_y;
+			return this;
+		}
+
+		unshadow(){
+			this.ctx.shadowBlur	= 0;
+			this.ctx.shadowColor = "transparent";
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		dash(){ this.ctx.setLineDash( [4,5] ); return this; }
+		undash(){ this.ctx.setLineDash( [0] ); return this; }
+
+		line_width(v){ this.ctx.lineWidth = v; return this; }
+
+		line_dash( ary = null, lineWidth = null ){ 
+			if(!ary) ary = [0];
+			this.ctx.setLineDash(ary);
+
+			if(lineWidth != null) this.ctx.lineWidth = lineWidth;
+			return this;
+		}
+
+		join_round(){	this.ctx.lineJoin	= "round"; return this; }
+		join_bevel(){	this.ctx.lineJoin 	= "bevel"; return this; }
+		join_miter(){	this.ctx.lineJoin	= "miter"; return this; } //default
+		cap_butt(){		this.ctx.lineCap	= "butt"; return this; }
+		cap_round(){	this.ctx.lineCap	= "round"; return this; }
+		cap_square(){	this.ctx.lineCap	= "square"; return this; }
+
+		//++++++++++++++++++++++++++++++
+
+		/*
+		https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/createLinearGradient
+		https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/createRadialGradient
+		createRadialGradient()
+		gradient=context.createLinearGradient(0,padding,0,padding+height);
+		gradient.addColorStop(0, "transparent");
+		gradient.addColorStop(0.5, "transparent");
+		gradient.addColorStop(0.5, tertiaryColor);
+		gradient.addColorStop(1, secondaryColor);
+		 */
+
+
+	//////////////////////////////////////////////////////////////////
+	// Misc
+	//////////////////////////////////////////////////////////////////
+		fill_color(c){ return this.fill(c).rect( this.clearX, this.clearY, this.width, this.height, 1 ); }
+		clear(){ this.ctx.clearRect(this.clearX, this.clearY, this.width, this.height); return this; }
+
+		restore_transform(){ this.ctx.restore(); return this; }
+		save_transform( vpos = null, ang = null, vscale = null ){
+			this.ctx.save();
+			if(vpos)		this.ctx.translate( vpos[0], vpos[1] );
+			if(ang != null)	this.ctx.rotate( ang );
+			if(vscale)		this.ctx.scale( vscale[0], vscale[1] );
+			return this;
+		}
+
+		/** Test text width */
+		get_text_width( txt ){ 
+			/* CHROME SUPPORTS THIS ONLY BEHIND A FLAG, FIREFOX WILL SUPPORT IT AT SOME POINT
+			let metrics = ctx.measureText(text);
+			let fontHeight = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
+			let actualHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent; */
+			return this.ctx.measureText( txt ).width;
+		}
+
+		//Set the size of the canvas html element and the rendering view port
+		size( w = 500, h = 500 ){
+			var box				= this.canvas.getBoundingClientRect();
+			this.offsetX		= box.left;	//Help get X,Y in relation to the canvas position.
+			this.offsetY		= box.top;
+			//TODO, might need to replace offset with mouseOffset
+			this.mouseOffsetX	= this.canvas.scrollLeft + this.canvas.offsetLeft; 	//box.left;	// Help get X,Y in relation to the canvas position.
+			this.mouseOffsetY	= this.canvas.scrollTop + this.canvas.offsetTop; 	//box.top;
+
+			//set the size of the canvas, on chrome we need to set it 3 ways to make it work perfectly.
+			this.canvas.style.width		= w + "px";
+			this.canvas.style.height	= h + "px";
+			this.canvas.width			= w;
+			this.canvas.height			= h;
+			this.width 					= w;
+			this.height 				= h;
+
+			return this;
+		}
+
+
+	//////////////////////////////////////////////////////////////////
+	// Drawing
+	//////////////////////////////////////////////////////////////////
+		draw( d ){
+			if( (d & 1) != 0 ) this.ctx.fill();
+			if( (d & 2) != 0 ) this.ctx.stroke();
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		text( txt, x=0, y=0, draw=1 ){ 
+			//this.ctx.font = "Bold 30px Arial";
+			if( (draw & 1) != 0 ) this.ctx.fillText( txt, x, y );
+			if( (draw & 2) != 0 ) this.ctx.strokeText( txt, x, y );
+			return this;
+		}
+
+		text_center( txt, yOffset=0, draw=1 ){
+			let tw = this.ctx.measureText( txt ).width,
+				th = this.ctx.measureText( "M" ).width, //this.fontSize,
+				cw = this.ctx.canvas.width,
+				ch = this.ctx.canvas.height;
+
+			this.text( txt, (cw - tw) * 0.5, th + yOffset, draw );
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		circle(x, y, radius = 10, draw = 1 ){
+			const p2 = Math.PI * 2;
+			this.ctx.beginPath();
+			this.ctx.arc(x, y, radius ,0, p2, false );
+			this.draw( draw );
+			return this;
+		}
+
+		circle_vec( v, radius = 10, draw = 1 ){
+			const p2 = Math.PI * 2;
+			this.ctx.beginPath();
+			this.ctx.arc( v[0], v[1], radius ,0, p2, false );
+			this.draw( draw );
+			return this;
+		}
+
+		circle_vec_ary( draw, radius, v ){
+			const p2 = Math.PI * 2;
+			for(var i=1; i < arguments.length; i++){
+				this.ctx.beginPath();
+				this.ctx.arc( arguments[i][0], arguments[i][1], radius ,0, p2, false );
+				this.draw( draw );
+			}
+
+			return this;
+		}
+
+		ellipse_vec( v, xRadius = 5, yRadius = 10, draw = 2 ){
+			const p2 = Math.PI * 2;
+			this.ctx.beginPath();
+			this.ctx.ellipse(v[0], v[1], xRadius, yRadius , 0, p2, false);
+			this.draw( draw );
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		rect( x=0, y=0, w=0, h=0, draw = 2 ){
+			if(!w) w = this.width;
+			if(!h) h = this.height;
+
+			this.ctx.beginPath();
+			this.ctx.rect(x, y, w, h);
+			this.draw( draw );
+			return this;
+		}
+
+		rect_round( x, y, w, h, r=0, draw = 1 ){
+			this.ctx.beginPath();
+
+		    this.ctx.moveTo( x+r, y );
+		    this.ctx.lineTo( x+w-r, y );
+		    this.ctx.quadraticCurveTo( x+w, y, x+w, y+r );
+
+		    this.ctx.lineTo( x+w, y+h-r );
+		    this.ctx.quadraticCurveTo( x+w, y+h, x+w-r, y+h );
+
+		    this.ctx.lineTo( x+r, y+h );
+		    this.ctx.quadraticCurveTo( x, y+h, x, y+h-r );
+
+		    this.ctx.lineTo( x, y+r );
+		    this.ctx.quadraticCurveTo( x, y, x+r, y );
+
+		    this.ctx.closePath();
+		    
+		   	this.draw( draw );
+			return this;
+		}
+
+		rect_border( pad, r, draw = 1 ){
+			let x = pad,
+				y = pad,
+				w = this.ctx.canvas.width - pad * 2,
+				h = this.ctx.canvas.height - pad * 2;
+			this.rect_round( x, y, w, h, r, draw );
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		line( x0, y0, x1, y1 ){
+			this.ctx.beginPath();
+			this.ctx.moveTo( x0, y0 );
+			this.ctx.lineTo( x1, y1 );
+			this.ctx.stroke();
+			return this;
+		}
+
+		line_vec( p0, p1 ){
+			this.ctx.beginPath();
+			this.ctx.moveTo( p0[0], p0[1] );
+			this.ctx.lineTo( p1[0], p1[1] );
+			this.ctx.stroke();
+			return this;
+		}
+
+		line_vec_ary( draw, p0, p1 ){
+			this.ctx.beginPath();
+			this.ctx.moveTo( p0[0], p0[1] );
+
+			for(var i=2; i < arguments.length; i++)
+				this.ctx.lineTo( arguments[i][0], arguments[i][1] );
+
+			this.draw( draw );
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+
+		tri_vec( wh, hh, offsetX = 0, offsetY = 0, draw=1 ){
+			this.ctx.beginPath();
+			this.ctx.moveTo(offsetX,		offsetY + hh );
+			this.ctx.lineTo(offsetX - wh,	offsetY - hh );
+			this.ctx.lineTo(offsetX + wh,	offsetY - hh );
+			this.draw( draw );
+			return this;
+		}
+
+		//++++++++++++++++++++++++++++++
+		arrow( from, to, head_len=10 ){
+			let dx		= to[0] - from[0],
+				dy		= to[1] - from[1],
+				angle	= Math.atan2(dy, dx),
+				inc 	= Math.PI / 6;
+
+			this.ctx.beginPath();
+			this.ctx.moveTo( from[0], from[1] );
+			this.ctx.lineTo( to[0], to[1]);
+			this.ctx.lineTo( 
+				to[0] - head_len * Math.cos( angle - inc ), 
+				to[1] - head_len * Math.sin( angle - inc )
+			);
+			this.ctx.moveTo( to[0], to[1]);
+			this.ctx.lineTo( 
+				to[0] - head_len * Math.cos( angle + inc ), 
+				to[1] - head_len * Math.sin( angle + inc )
+			);
+			this.ctx.stroke();
+		}
+
+
+
+	//////////////////////////////////////////////////////////////////
+	// Pixel Drawing
+	//////////////////////////////////////////////////////////////////
+
+		prepare_px_drawing(){
+			this.imageData	= this.ctx.getImageData( 0, 0, this.width, this.height );	// Get Image Data object
+			this.aryRGBA	= this.imageData.data;										// Then its raw RGBA Array
+			return this;
+		}
+
+		update_px(){ this.ctx.putImageData( this.imageData, 0, 0 ); return this; }
+
+		set_px( x, y, r, g, b, a=255 ){
+			var idx = ( y * this.width + x ) * 4; // RowStart Plus Col Times RGBA component count
+			this.aryRGBA[idx]	= r;
+			this.aryRGBA[idx+1]	= g;
+			this.aryRGBA[idx+2]	= b;
+			this.aryRGBA[idx+3]	= a;
+			return this;
+		}
+
+		set_px_clr( x, y, hex ){
+			var bigint	= parseInt( hex, 16 ),
+    			r 		= (bigint >> 16) & 255,
+				g		= (bigint >> 8) & 255,
+				b		= bigint & 255;
+
+			var idx = ( y * this.width + x ) * 4; // RowStart Plus Col Times RGBA component count
+			this.aryRGBA[idx]	= r;
+			this.aryRGBA[idx+1]	= g;
+			this.aryRGBA[idx+2]	= b;
+			this.aryRGBA[idx+3]	= 255;
+			return this;
+		}
+
+		// http://iquilezles.org/www/articles/palettes/palettes.htm
+		// vec3 palette( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d ){
+    	// return a + b*cos( 6.28318*(c*t+d) );
+		set_palette( x, y, t, a, b, c, d ){
+			var idx = (y*this.width + x) * 4; //RowStart Plus Col Times RGBA component count
+			this.aryRGBA[ idx ]		= ( a[0] + b[0] * Math.cos( 6.28318 * ( c[0] * t + d[0]) ) ) * 255;
+			this.aryRGBA[ idx+1 ]	= ( a[1] + b[1] * Math.cos( 6.28318 * ( c[1] * t + d[1]) ) ) * 255;
+			this.aryRGBA[ idx+2 ]	= ( a[2] + b[2] * Math.cos( 6.28318 * ( c[2] * t + d[2]) ) ) * 255;
+			this.aryRGBA[ idx+3 ]	= 255;
+		}
+
+		get_px( x, y ){
+			var idx = ( y * this.width + x ) * 4;
+			return [
+				this.aryRGBA[ idx ],
+				this.aryRGBA[ idx+1 ],
+				this.aryRGBA[ idx+2 ],
+				this.aryRGBA[ idx+3 ]
+			];
+		}
+
+		download(){
+			//Force it to download, instead of view by changing the mime time.
+			var uri = this.canvas.toDataURL().replace("image/png","image/octet-stream");
+			//window.location.href = uri;
+			console.log(uri);
+    		return this;
+		}
+}
+</script>
+
+<script>
+	let $ = new Canvas("canvas" ).center().font_size( 18 ).fill("#808080");
+	let gObj, gLoop;
+
+	window.addEventListener( "load", function(){
+		gObj = new HermiteFrames();
+
+		gObj
+			.add_pos( [-200,0], 0 )
+			.add_pos( [-100,50],  )
+			.add_pos( [0,-100], 3 )
+			.add_pos( [100,0], 3 )
+			.add_pause( 2 )
+			.add_pos( [200,-30], )
+			.add_pos( [300,0], 6 )
+			/*
+			.add_pos( [-200,0], 0 )
+			.add_pos( [-100,50] )
+			.add_pos( [0,-100] )
+			.add_pos( [100,0] )
+			.add_pos( [200,-30] )
+			.add_pos( [300,0], 6 )
+			*/
+			.build();
+
+		gLoop = new FrameLoop( draw ).start();
+
+		/*
+		console.log( window.location );
+		let xhr = new XMLHttpRequest();
+		xhr.addEventListener("load", (e)=>{ console.log(e); } ,false);
+		xhr.open( "GET", "file:///C:/Users/psousa/Desktop/", true );
+		xhr.responseType = "text";
+		xhr.send();
+		*/
+	});
+	
+	function draw( dt=0.001, st=0.001 ){
+		$.clear();
+		let i;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		$.both( "#404040").line_width( 2 );	
+		let samp = 40;
+		let aa = new Vec2();
+		let bb = new Vec2();
+
+		gObj.spline.at( 0, bb );
+
+		for( i=1; i <= samp; i++ ){
+			gObj.spline.at( i / samp, aa );
+			$.line_vec( bb, aa );
+			bb.copy( aa );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		$.both( "#909090");
+		let p, f, pnts = gObj.spline.points;
+		for( i=0; i < pnts.length; i++ ){
+			p = pnts[ i ].pos;
+			$.circle_vec( p, 4 );
+
+			for( f of gObj.frames ){
+				if( f.start_idx == i ){
+					if( f.interp == "pause")	$.text( "PAUSE " + f.t, p[0], p[1]+50 );
+					else 						$.text( f.t, p[0], p[1]+30 );
+				}
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		$.both( "#00ff00");
+
+		let pos = new Vec2(), dir = new Vec2();
+		gObj.update( dt, pos, dir );
+
+		let clock = Math.round( gObj.clock * 100 ) / 100;
+		$.circle_vec( pos, 7 )
+			.line_vec( pos, dir.norm().scale(20).add(pos) )
+			.text( clock, pos[0]-11, pos[1]-25 );
+	}
+
+	class FrameLoop{
+		constructor( cb ){
+			this.is_active		= false;
+
+			this._callback 		= cb;
+			this._start_time	= 0;
+			this._last_frame	= 0;
+			this._tick_bind 	= this.tick.bind( this );
+		}
+
+		stop(){ this.is_active = false; return this; };
+		start(){
+			this.is_active = true;
+			this._start_time = this._last_frame = performance.now();
+			window.requestAnimationFrame( this._tick_bind );
+			return this;
+		}
+
+		tick(){
+			let curr_time 	= performance.now(),
+				delta_time 	= (curr_time - this._last_frame) * 0.001,	// Time is Millisconds, convert to seconds.
+				since_start = (curr_time - this._start_time) * 0.001;
+
+			this._last_frame = curr_time;
+			this._callback( delta_time, since_start );
+			if(this.is_active)	window.requestAnimationFrame( this._tick_bind );
+		}
+	}
+
+
+	class HermiteSpline{
+		constructor( is_loop=false ){
+			this.points 	= new Array();
+			this.curve_cnt 	= 0;
+			this.point_cnt	= 0;
+			this.is_loop	= is_loop;
+
+			// Private PreComputed Values for each sample of the curve
+			this.time		= 0;
+			this.tension	= 0;
+			this.bias 		= 0;
+			this.ten_bias_p = 0;
+			this.ten_bias_n = 0;
+		}
+
+		/////////////////////////////////////////////////////////////////////////////
+		// 
+		/////////////////////////////////////////////////////////////////////////////
+			add( pnt, tension=0, bias=0 ){
+				this.points.push( { pos:pnt, tension, bias } );
+				this.point_cnt = this.points.length;
+				this.curve_cnt = this.point_cnt - 3;
+				return this;
+			}
+
+		/////////////////////////////////////////////////////////////////////////////
+		// 
+		/////////////////////////////////////////////////////////////////////////////
+			at( t=0, out=null, dx_out=null ){
+				let i = this._calc_index( t ),
+				 	a = this.points[ i[0] ].pos,
+					b = this.points[ i[1] ].pos,
+					c = this.points[ i[2] ].pos,
+					d = this.points[ i[3] ].pos;
+
+				if( out )		this._curve_pos( a, b, c, d, this.time, out );
+				if( dx_out )	this._curve_pos_dxdy( a, b, c, d, this.time, dx_out );
+
+				return out || dx_out;
+			}
+
+			at_idx( t, ia, ib, out=null, dx_out=null  ){
+				let i = this._calc_from_range( t, ia, ib ),
+				 	a = this.points[ i[0] ].pos,
+					b = this.points[ i[1] ].pos,
+					c = this.points[ i[2] ].pos,
+					d = this.points[ i[3] ].pos;
+
+				if( out ) 		this._curve_pos( a, b, c, d, this.time, out );
+				if( dx_out )	this._curve_pos_dxdy( a, b, c, d, this.time, dx_out );
+
+				return out || dx_out;
+			}
+
+
+		/////////////////////////////////////////////////////////////////////////////
+		// 
+		/////////////////////////////////////////////////////////////////////////////
+			_calc_index( t ){
+				let i, tt, ai, bi, ci, di;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Figure out the starting index of the curve and the time on the curve.
+				if( t > 1 ) 		t = 1;
+				else if( t < 0 )	t = 0;
+
+				if( this.is_loop ){
+					if( t != 1 ){
+						tt = t * this.point_cnt;
+						i  = tt | 0;
+						tt -= i;	
+					}else{
+						i	= this.point_cnt - 1;
+						tt	= 1;
+					}	
+
+					ai = this.mod( i-1, this.point_cnt );
+					bi = i;
+					ci = this.mod( i+1, this.point_cnt );
+					di = this.mod( i+2, this.point_cnt );
+				}else{ 											// Determine which curve is being accessed
+					if( t != 1 ){
+						tt	= t * this.curve_cnt;
+						i 	= tt | 0;	// Curve index by stripping out the decimal, BitwiseOR 0 same op as Floor
+						tt	-= i;		// Strip out the whole number to get the decimal norm to be used for the curve ( FRACT )
+					}else{
+						i	= this.point_cnt - 4;
+						tt	= 1;
+					}
+
+					ai 	= i;
+					bi 	= i + 1;
+					ci	= i + 2;
+					di	= i + 3;
+				}
+
+				this._calc_params( tt, bi, ci );
+				return [ai, bi, ci, di];
+			}
+
+			_calc_from_range( t, ia, ib ){
+				let curve_cnt = (ib - ia),
+					tt, i, ai, bi, ci, di;
+				
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Figure out the starting index of the curve and the time on the curve.
+				if( t > 1 ) 		t = 1;
+				else if( t < 0 )	t = 0;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				if( t < 1 ){
+					tt	= curve_cnt * t;
+					i 	= tt | 0;
+					tt	-= i;
+					i	+= ia;
+				}else{
+					i	= ib - 1;
+					tt	= 1;
+				}
+
+				ai = this.mod( i-1, this.point_cnt );
+				bi = this.mod( i  , this.point_cnt );
+				ci = this.mod( i+1, this.point_cnt );
+				di = this.mod( i+2, this.point_cnt );
+				
+				this._calc_params( tt, bi, ci );
+				return [ ai, bi, ci, di ];
+			}
+
+			_calc_params( t, bi, ci ){
+				// Pre-caluate Paramters for Curve & Derivative Equations
+				let ti 			= 1 - t;
+				this.time 		= t;
+				this.tension	= ti * this.points[ bi ].tension	+ t * this.points[ ci ].tension;
+				this.bias 		= ti * this.points[ bi ].bias		+ t * this.points[ ci ].bias;
+
+				this.ten_bias_n	= ( 1 - this.bias) * ( 1 - this.tension ) * 0.5;
+				this.ten_bias_p	= ( 1 + this.bias) * ( 1 - this.tension ) * 0.5;
+			}
+
+
+		/////////////////////////////////////////////////////////////////////////////
+		// 
+		/////////////////////////////////////////////////////////////////////////////
+			_curve_pos( a, b, c, d, t, out ){
+				let t2	= t * t,
+					t3	= t2 * t,
+					a0	= 2*t3 - 3*t2 + 1,
+					a1	= t3 - 2*t2 + t,
+					a2	= t3 - t2,
+					a3	= -2*t3 + 3*t2;
+
+				out[0] = a0*b[0] + a1 * ( (b[0]-a[0]) * this.ten_bias_p + (c[0]-b[0]) * this.ten_bias_n ) + a2 * ( (c[0]-b[0]) * this.ten_bias_p + (d[0]-c[0]) * this.ten_bias_n ) + a3*c[0];
+				out[1] = a0*b[1] + a1 * ( (b[1]-a[1]) * this.ten_bias_p + (c[1]-b[1]) * this.ten_bias_n ) + a2 * ( (c[1]-b[1]) * this.ten_bias_p + (d[1]-c[1]) * this.ten_bias_n ) + a3*c[1];
+				out[2] = a0*b[2] + a1 * ( (b[2]-a[2]) * this.ten_bias_p + (c[2]-b[2]) * this.ten_bias_n ) + a2 * ( (c[2]-b[2]) * this.ten_bias_p + (d[2]-c[2]) * this.ten_bias_n ) + a3*c[2];
+				return out;
+			}
+
+			_curve_pos_dxdy( a, b, c, d, t, out ){
+			   	let tt  = t * t,
+					tt6 = 6 * tt,
+					tt3 = 3 * tt,
+					a0  = tt6 - 6*t,
+					a1  = tt3 - 4*t + 1,
+					a2  = tt3 - 2*t,
+					a3  = 6*t - tt6;
+
+				 out[0] = a0 * b[0] + a1 * ( (b[0]-a[0]) * this.ten_bias_p  + (c[0]-b[0]) * this.ten_bias_n ) + a2 * ( (c[0]-b[0]) * this.ten_bias_p  + (d[0]-c[0]) * this.ten_bias_n ) + a3 * c[0];
+				 out[1] = a0 * b[1] + a1 * ( (b[1]-a[1]) * this.ten_bias_p  + (c[1]-b[1]) * this.ten_bias_n ) + a2 * ( (c[1]-b[1]) * this.ten_bias_p  + (d[1]-c[1]) * this.ten_bias_n ) + a3 * c[1];
+				 out[2] = a0 * b[2] + a1 * ( (b[2]-a[2]) * this.ten_bias_p  + (c[2]-b[2]) * this.ten_bias_n ) + a2 * ( (c[2]-b[2]) * this.ten_bias_p  + (d[2]-c[2]) * this.ten_bias_n ) + a3 * c[2];
+				 return out;
+			}
+
+		/////////////////////////////////////////////////////////////////////////////
+		// 
+		/////////////////////////////////////////////////////////////////////////////
+			mod( a, b ){ let v = a % b; return ( v < 0 )? b+v : v; } // Modulas that handles Negatives, so (-1, 5) = 4
+		
+			get_samples( s_cnt ){
+				let max 	= s_cnt-1,
+					max_inv	= 1 / max,
+					out 	= new Array( s_cnt ),
+					i, t;
+				for( i=0; i <= max; i++ ){
+					let p = [0,0,0];
+					t = i * max_inv;
+					out[ i ] = this.at( t, p );
+				}
+				return out;
+			}
+	}
+
+	class HermiteFrames{
+		constructor( is_loop=false ){
+			this.spline 	= new HermiteSpline();	
+			this.config		= new Array();			// Raw data entered by user
+			this.frames 	= new Array();			// Key Frame Animation Data, Generated
+
+			this.time_max	= 0;					// Total Time of Animation
+			this.clock		= 0;					// Current Animation Clock
+		}
+
+		//////////////////////////////////////////////////////////
+		// public methods
+		//////////////////////////////////////////////////////////
+			
+			add_pos( pos, sec=null, interp="lerp"){ this.config.push({ sec, interp, pos }); return this; }
+			add_pause( sec ){ this.config.push({ sec, interp:"pause", pos:null }); return this; }
+
+			build(){
+				let i, itm;
+
+				// Reset the Data if not the first time running build
+				if( this.frames.length ){
+					this.time_max		= 0;
+					this.frames.length	= 0;
+					this.points.length	= 0;
+				}
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Calculate the First Tangent if not a Loop
+				this.new_point( new Vec2()
+					.from_sub( this.config[0].pos, this.config[1].pos )	// Get Direction from Point B to Point A
+					.norm()												// Normalize & Scale & Add to Point A
+					.scale( 30 )										
+					.add( this.config[0].pos )
+				);
+
+				this.new_frame( 0, this.spline.point_cnt );				// Save as First point of spline
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Create Frames and Points
+				for( i=0; i < this.config.length; i++ ){
+					itm = this.config[ i ];
+
+					//-----------------------------------------
+					// Is the point set with a time stamp?
+					if( itm.sec ){
+						this.time_max += itm.sec;	// Add to total animation time
+
+						if( itm.interp != "pause" ){
+							this.new_frame( this.time_max, this.spline.point_cnt, itm.interp );
+						}else{
+							// Pause Frame, Point to the most recent point created as the
+							// position to pause movement for the time allotted.
+							this.new_frame( this.time_max, this.spline.point_cnt-1, itm.interp );
+							continue;
+						}
+					}
+
+					//-----------------------------------------
+					// Point Found, Add it to the master spline
+					if( itm.pos ) this.new_point( new Vec2( itm.pos ) );
+				}
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Calculate the Final Tangent
+				let l = this.spline.points.length - 1;
+				this.new_point( new Vec2()
+					.from_sub( this.spline.points[ l ].pos, this.spline.points[ l-1 ].pos )
+					.norm()
+					.scale( 30 )
+					.add( this.spline.points[ l ].pos )
+				 );
+
+				console.log( "Frames", this.frames );
+				console.log( "Points", this.spline.points );
+			}
+
+
+		//////////////////////////////////////////////////////////
+		// Private Methods
+		//////////////////////////////////////////////////////////
+
+			new_frame( t, start_idx, interp="lerp" ){ this.frames.push( { t, start_idx, interp } ); return this; }
+			new_point( pos ){ this.spline.add( pos ); return this; }
+
+
+		//////////////////////////////////////////////////////////
+		// Process
+		//////////////////////////////////////////////////////////
+
+			update( dt, out=null, dir=null ){
+				if( !dt ) return out;
+
+				let f	= this.next( dt ),		// Get Frame Index Range and Normalized Time between frames
+					fa	= this.frames[ f[0] ],	// Frame A Info
+					fb	= this.frames[ f[1] ],	// Frame B Info
+					t;							// Interpolation Time
+
+				out = out || new Vec2();
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Frame has no interpolation, freeze at specific point for x amount of time
+				if( fb.interp == "pause" ) return out.copy( this.spline.points[ fb.start_idx ].pos );
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Interpolation
+				switch( fb.interp ){				
+					case "lerp":
+						//t = cubic_InOut( f[2] );
+						//t = quad_InOut( f[2] );
+						//t = sine_InOut( f[2] );
+						//t = elastic_InOut( f[2] );
+						//t = bounce_Out( f[2] );
+						//t = sine_Out( f[2] );
+						t = f[2];
+						break;
+				}
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				this.spline.at_idx( t, fa.start_idx, fb.start_idx, out, dir );
+				return out;
+			}
+
+			next( dt ){
+				// Step the Clock forward, Cycle to start if over the time limit.
+				this.clock = (this.clock + dt) % this.time_max;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Finw which frame currently in for animation.
+				let i 	= this.frames.length - 2,
+					t, ia, ib, fa, fb;
+
+				for( i; i > 0; i-- ) if( this.frames[ i ].t < this.clock ) break;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				ia	= i;										// Frame A Index
+				ib	= i + 1;									// Frame B Index
+				fa	= this.frames[ ia ];						// Frame A Info
+				fb	= this.frames[ ib ];						// Frame B Info
+				t	= ( this.clock - fa.t ) / ( fb.t - fa.t );	// Normalize Current time between KeyFrames.
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				return [ ia, ib, t ];
+			}
+	}
+
+
+
+	function cubic_InOut(k){
+		if((k *= 2) < 1) return 0.5 * k * k * k;
+		return 0.5 * ((k -= 2) * k * k + 2);
+	}
+
+	function quad_InOut(k) {
+		if ((k *= 2) < 1) return 0.5 * k * k;
+		return - 0.5 * (--k * (k - 2) - 1);
+	}
+
+	function sine_InOut(k){ return 0.5 * (1 - Math.cos(Math.PI * k)); }
+	function sine_Out(k){ return Math.sin(k * Math.PI / 2); }
+
+	function elastic_InOut(k) {
+		if (k === 0 || k === 1) return k;
+
+		k *= 2;
+		if (k < 1) return -0.5 * Math.pow(2, 10 * (k - 1)) * Math.sin((k - 1.1) * 5 * Math.PI);
+		return 0.5 * Math.pow(2, -10 * (k - 1)) * Math.sin((k - 1.1) * 5 * Math.PI) + 1;
+	}
+
+	function bounce_Out(k){
+		if(k < (1 / 2.75))			return 7.5625 * k * k;
+		else if(k < (2 / 2.75))		return 7.5625 * (k -= (1.5 / 2.75)) * k + 0.75;
+		else if(k < (2.5 / 2.75))	return 7.5625 * (k -= (2.25 / 2.75)) * k + 0.9375;
+		else						return 7.5625 * (k -= (2.625 / 2.75)) * k + 0.984375;
+	}
+
+
+class Vec2 extends Float32Array{
+	constructor( ini ){
+		super(2);
+
+		if(ini instanceof Vec2 || (ini && ini.length == 2)){
+			this[0] = ini[0]; this[1] = ini[1];
+		}else if(arguments.length == 2){
+			this[0] = arguments[0]; this[1] = arguments[1];
+		}else{
+			this[0] = this[1] = ini || 0;
+		}
+	}
+
+	////////////////////////////////////////////////////////////////////
+	// GETTER - SETTERS
+	////////////////////////////////////////////////////////////////////
+
+		get x(){ return this[0]; }	set x( v ){ this[0] = v; }
+		get y(){ return this[1]; }	set y( v ){ this[1] = v; }
+
+		set( x=null, y=null ){ 
+			if( x != null ) this[0] = x;
+			if( y != null ) this[1] = y; 
+			return this;
+		}
+
+		copy( v ){ this[0] = v[0]; this[1] = v[1]; return this; }
+		clone(){ return new Vec2( this ); }
+		
+		//-------------------------------------------
+
+		from_buf( ary, i ){ this[0] = ary[i]; this[1] = ary[i+1]; return this;}
+		to_buf( ary, i ){ ary[i] = this[0]; ary[i+1] = this[1]; return this; }
+
+		//-------------------------------------------
+
+		set_len( len ){ return this.norm().scale(len); }
+
+		len( v ){
+			//Only get the magnitude of this vector
+			if( !v ) return Math.sqrt( this[0]**2 + this[1]**2  );
+
+			//Get magnitude based on another vector
+			let x = this[0] - v[0],
+				y = this[1] - v[1];
+
+			return Math.sqrt( x*x + y*y );
+		}
+		
+		len_sqr( v ){
+			//Only get the squared magnitude of this vector
+			if(v === undefined) return this[0]**2 + this[1]**2;
+
+			//Get squared magnitude based on another vector
+			let x = this[0] - v[0],
+				y = this[1] - v[1];
+
+			return x*x + y*y;
+		}
+
+
+	////////////////////////////////////////////////////////////////////
+	// FROM SETTERS
+	////////////////////////////////////////////////////////////////////
+
+		from_add( a, b ){
+			this[0] = a[0] + b[0];
+			this[1] = a[1] + b[1];
+			return this;
+		}
+
+		from_sub( a, b ){
+			this[0] = a[0] - b[0];
+			this[1] = a[1] - b[1];
+			return this;
+		}
+
+		from_mul( a, b ){
+			this[0] = a[0] * b[0];
+			this[1] = a[1] * b[1];
+			return this;
+		}
+
+		from_div( a, b ){
+			this[0] = ( b[0] != 0 )? a[0] / b[0] : 0;
+			this[1] = ( b[1] != 0 )? a[1] / b[1] : 0;
+			return this;
+		}
+
+		from_scale( a, s ){
+			this[0] = a[0] * s;
+			this[1] = a[1] * s;
+			return this;
+		}
+
+		//-------------------------------------------
+
+		from_cross( a, b ){
+			let ax = a[0], ay = a[1],
+				bx = b[0], by = b[1];
+			this[0] = ay * bz - az * by;
+			this[1] = az * bx - ax * bz;
+			return this;
+		}
+
+		from_lerp( a, b, t ){
+			let ti = 1 - t; // Linear Interpolation : (1 - t) * v0 + t * v1;
+			this[0] = a[0] * ti + b[0] * t;
+			this[1] = a[1] * ti + b[1] * t;
+			return this;
+		}
+
+
+	////////////////////////////////////////////////////////////////////
+	// INSTANCE OPERATORS
+	////////////////////////////////////////////////////////////////////
+		
+		add( v, out=null ){
+			out = out || this;
+			out[0] = this[0] + v[0];
+			out[1] = this[1] + v[1];
+			return out;
+		}
+
+		sub( v, out=null ){
+			out = out || this;
+			out[0] = this[0] - v[0];
+			out[1] = this[1] - v[1];
+			return out;
+		}
+
+		mul( v, out=null ){
+			out = out || this;
+			out[0] = this[0] * v[0];
+			out[1] = this[1] * v[1];
+			return out;
+		}
+
+		div( v, out=null ){
+			out = out || this;
+			out[0] = (v[0] != 0)? this[0] / v[0] : 0;
+			out[1] = (v[1] != 0)? this[1] / v[1] : 0;
+			return out;
+		}
+
+		div_scale( v, out=null ){
+			out = out || this;
+			out[0] = this[0] / v;
+			out[1] = this[1] / v;
+			return out;
+		}
+
+		div_inv_scale( v=1, out=null ){
+			out = out || this;
+			out[0] = (this[0] != 0)? v / this[0] : 0;
+			out[1] = (this[1] != 0)? v / this[1] : 0;
+			return out;
+		}	
+
+		scale( v, out=null ){
+			out = out || this;
+			out[0] = this[0] * v;
+			out[1] = this[1] * v;
+			return out;
+		}
+
+		//-------------------------------------------
+
+		abs( out=null ){
+			out = out || this;
+			out[0] = Math.abs( this[0] );
+			out[1] = Math.abs( this[1] );
+			return out;
+		}
+
+		floor( out=null ){
+			out = out || this;
+			out[0] = Math.floor( this[0] );
+			out[1] = Math.floor( this[1] );
+			return out;
+		}
+
+		//When values are very small, like less then 0.000001, just make it zero.
+		near_zero( out=null ){
+			out = out || this;
+			if(Math.abs(out[0]) <= 1e-6) out[0] = 0;
+			if(Math.abs(out[1]) <= 1e-6) out[1] = 0;
+			return out;
+		}
+
+		invert( out=null ){
+			out = out || this;
+			out[0] = -this[0];
+			out[1] = -this[1];
+			return out;
+		}
+
+		norm( out=null ){
+			let mag = Math.sqrt( this[0]**2 + this[1]**2 );
+			if(mag == 0) return this;
+
+			mag = 1 / mag;
+			out = out || this;
+			out[0] = this[0] * mag;
+			out[1] = this[1] * mag;
+
+			return out;
+		}
+
+
+	////////////////////////////////////////////////////////////////////
+	// TRANSFORMATIONS
+	////////////////////////////////////////////////////////////////////
+		lerp( v, t, out ){
+			if(out == null) out = this;
+			let ti = 1 - t;
+
+			//Linear Interpolation : (1 - t) * v0 + t * v1;
+			out[0] = this[0] * ti + v[0] * t;
+			out[1] = this[1] * ti + v[1] * t;
+			return out;
+		}
+
+
+	////////////////////////////////////////////////////////////////////
+	// STATIC OPERATORS
+	////////////////////////////////////////////////////////////////////
+		
+		static add( a, b, out=null ){ 
+			out = out || new Vec2();
+			out[0] = a[0] + b[0];
+			out[1] = a[1] + b[1];
+			return out;
+		}
+
+		static sub( a, b, out=null){ 
+			out = out || new Vec2();
+			out[0] = a[0] - b[0];
+			out[1] = a[1] - b[1];
+			return out;
+		}
+
+		static mul( a, b, out=null ){
+			out = out || new Vec2();
+			out[0] = a[0] * b[0];
+			out[1] = a[1] * b[1];
+			return out;
+		}
+
+		static scale( v, s, out=null ){
+			out = out || new Vec2();
+			out[0] = v[0] * s;
+			out[1] = v[1] * s;
+			return out;
+		}
+
+		//-------------------------------------------
+
+		static dot( a, b ){ return a[0] * b[0] + a[1] * b[1]; }
+		
+		//-------------------------------------------
+
+		static len( a, b ){ return Math.sqrt( (a[0]-b[0]) ** 2 + (a[1]-b[1]) ** 2 ); }
+		static len_sqr( a, b ){ return (a[0]-b[0]) ** 2 + (a[1]-b[1]) ** 2; }
+
+		//-------------------------------------------
+
+
+	////////////////////////////////////////////////////////////////////
+	// INTERPOLATION
+	////////////////////////////////////////////////////////////////////
+
+		// B & C are the main points, A & D are the tangents
+		static cubic_spline( a, b, c, d, t, out ){
+			let t2 = t * t,
+				t3 = t * t2,
+				a0 = d[0] - c[0] - a[0] + b[0],
+				a1 = d[1] - c[1] - a[1] + b[1];
+			out[0] = a0*t3 + ( a[0] - b[0] - a0 )*t2 + ( c[0] - a[0] )*t + b[0];
+			out[1] = a1*t3 + ( a[1] - b[1] - a1 )*t2 + ( c[1] - a[1] )*t + b[1];
+			return out;
+		}
+}
+
+
+/*
+		build_test(){
+			//console.log( this.config );
+			this.time_max = 0;
+
+			let i, itm;
+			//let spline_idx = 0;
+			//let spline_cnt = 0;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Calculate the First Tangent
+			
+			let v = new Vec2()
+				.from_sub( this.config[0].pos, this.config[1].pos )
+				.norm()
+				.scale( 30 )
+				.add( this.config[0].pos );
+
+			this.points.push( { pos:v } );
+			$.circle_vec( v, 3 );
+			$.text( 0, v[0], v[1]+30 );
+
+
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			this.frames.push({ 
+				t			: 0, 
+				start_idx	: this.points.length, 
+				interp		: "lerp"
+			});
+
+			for( i=0; i < this.config.length; i++ ){
+
+				itm = this.config[ i ];
+				console.log( i, itm );
+
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				if( itm.sec ){
+					this.time_max += itm.sec;
+
+					if( itm.interp != "pause" ){
+						$.text( this.time_max, itm.pos[0], itm.pos[1]-10 );
+						this.frames.push({ 
+							t			: this.time_max,
+							start_idx	: this.points.length, 
+							interp		: itm.interp,
+						});
+
+					}else{
+
+						v.copy( this.points[ this.points.length-1 ].pos );
+						$.text( this.time_max + " PAUSE", v[0], v[1]-30 );
+
+						this.frames.push({ 
+							t			: this.time_max, 
+							start_idx	: this.points.length-1, 
+							interp		: itm.interp,
+						});
+
+						continue; // Make sure not to save position to points.
+					}
+				}
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				if( itm.pos ){
+					$.text( this.points.length, itm.pos[0], itm.pos[1]+30 );
+					this.points.push( { pos:new Vec2( itm.pos ) } );
+					$.circle_vec( itm.pos, 5 );
+
+				}
+			}
+
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Calculate the Final Tangent
+			let l = this.points.length - 1;
+			v = new Vec2()
+				.from_sub( this.points[ l ].pos, this.config[ l-1 ].pos )
+				.norm()
+				.scale( 30 )
+				.add( this.points[ l ].pos );
+
+			this.points.push( { pos:v } );
+			$.circle_vec( v, 3 );
+			$.text( this.points.length-1, v[0], v[1]+30 );
+
+			console.log( "Frames", this.frames );
+			console.log( "Points", this.points );
+		}
+
+ */
+
+</script>
+
+</body>
+</html>

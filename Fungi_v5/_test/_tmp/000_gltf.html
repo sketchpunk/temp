@@ -1,0 +1,133 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE}	from "../../fungi.3js/App.js";
+import GltfUtil		from "../../fungi.3js/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+
+// https://threejsfundamentals.org/threejs/lessons/threejs-materials.html
+
+//#####################################################
+App.builder()
+	.set_camera( 0, 20, 3.0, 0, 0.35, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+let gGeo = {};
+let gMat = new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
+
+async function init(){
+	let dl = await XhrQueue
+		.url( "./" )
+		.grp( "bits", "magazine_bits.gltf", "json", "magazine_bits.bin", "bin" )
+		//.grp( "tex", "grid_001.jpg", "img" )
+		.then();
+
+
+	
+/*
+	//let tex = new THREE.Texture( dl.tex.img );
+	let tex = new THREE.TextureLoader().load( './grid_002.jpg' );
+	tex.repeat.set( 20, 20 );
+	tex.wrapS = THREE.RepeatWrapping;
+	tex.wrapT = THREE.RepeatWrapping;
+	tex.flipY = false;
+	tex.generateMipmaps = true;
+	console.log( tex );
+
+	let plane_geo = new THREE.PlaneGeometry( 20, 20 );
+	var material = new THREE.MeshBasicMaterial( { alphaMap: tex, transparent: false, color: 0x363D4E, side: THREE.DoubleSide} );
+	var plane = new THREE.Mesh( plane_geo, material );
+	plane.rotation.x = Math.PI / 2;
+	plane.position.y = 0.01;
+	App.$( plane );
+
+	//return true;
+*/
+
+	let geos = GltfUtil.get_geo( dl.bits.json, dl.bits.bin, ["Pallet", "StackBox", "Barrel", "MilitaryBox"] );
+
+	gGeo.pallet		= { name : "pallet", geo : geos[0], wf_geo : new THREE.WireframeGeometry( geos[0] ) };
+	gGeo.stackbox 	= { name : "stackbox", geo : geos[1], wf_geo : new THREE.WireframeGeometry( geos[1] ) };
+	gGeo.barrel		= { name: "barrel", geo : geos[2], wf_geo : new THREE.WireframeGeometry( geos[2] ) };
+	gGeo.mbox		= { name : "mbox", geo : geos[3], wf_geo : new THREE.WireframeGeometry( geos[3] ) };
+
+	let m;
+	m = wireframe_mesh( gGeo.pallet, -1.20, 0, 0 );
+	m = wireframe_mesh( gGeo.pallet, -1.20, 0, -1.20 );
+	m = wireframe_mesh( gGeo.stackbox, -1.20, 0.22, -1.20 );
+	m = wireframe_mesh( gGeo.stackbox, -1.20, 0.553, -1.20 );
+	m = wireframe_mesh( gGeo.barrel, 0, 0, -1.5 );
+	m = wireframe_mesh( gGeo.mbox, 1.5, 0, -0.5, Math.PI * -0.25 );
+
+
+	//let mat			= new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
+	//let mesh 		= new THREE.Mesh( geos[0], mat );
+	//mesh.name = geos[0].name;
+	//App.$( mesh );
+
+
+	//let wireframe	= new THREE.WireframeGeometry( geos[0] );
+	//let line		= new THREE.LineSegments( wireframe );
+	//line.material.color.setHex( 0x80808 );
+	//App.$( line );
+
+	return true;
+}
+
+function wireframe_mesh( itm, x=0, y=0, z=0, ry=0 ){
+	let grp 	= new THREE.Group();
+	let mesh	= new THREE.Mesh( itm.geo, gMat );
+	let line 	= new THREE.LineSegments( itm.wf_geo );
+	line.material.color.setHex( 0x404040 );
+
+	grp.add( mesh );
+	grp.add( line );
+
+	grp.position.set( x, y, z );
+	grp.rotation.y = ry;
+
+	App.$( grp );
+	return grp;
+}
+
+/*
+    let geometry = new THREE.PlaneGeometry(250, 250, 10, 10);
+    let material = new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
+    let plane = new THREE.Mesh(geometry, material);
+
+    scene.add(plane);
+
+    let wireframe = new THREE.WireframeGeometry( geometry );
+
+    let line = new THREE.LineSegments( wireframe );
+
+    line.material.color.setHex(0x000000);
+
+	scene.add(line);
+
+function load_geo( json, bin ){
+	let dat	= Gltf.get_mesh( "Vegeta", json, bin )[ 0 ],
+		geo	= new THREE.BufferGeometry(),
+		o;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	geo.setIndex( new THREE.BufferAttribute( dat.indices.data, 1 ) );
+
+	o = dat.vertices;
+	geo.addAttribute( "position", new THREE.BufferAttribute( o.data, o.comp_len ) );
+
+	o = dat.normal;
+	geo.addAttribute( "normal", new THREE.BufferAttribute( o.data, o.comp_len ) );
+
+	//o = dat.uv;
+	//geo.addAttribute( "uv", new THREE.BufferAttribute( o.data, o.comp_len ) );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mat		= new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
+	let mesh	= new THREE.Mesh( geo, mat );
+	App.$( mesh );
+}
+*/
+</script><page-layout></page-layout>

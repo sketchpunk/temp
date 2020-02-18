@@ -31,7 +31,7 @@ class PageLayout extends HTMLElement{
 
 //######################################################################################
 PageLayout.Template = document.createElement("template");
-PageLayout.Template.innerHTML = `<html><head><title>Fungi</title></head><body><style>
+PageLayout.Template.innerHTML = `<html><head><title></title></head><body><style>
 	html,body{ margin:0px; padding:0px; width:100%; height:100%; }
 	body{ background-color:#404040; }
 	canvas{ border:0px solid green; }
