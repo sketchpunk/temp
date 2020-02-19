@@ -39,6 +39,13 @@ class InputTracker{
 		};
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Touch State
+		this.touch_cnt		= 0;
+		this.touch_state	= 0;
+		this.touch_ver		= 0;
+		this.touch_map		= new Map();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		var box			= this.elm.getBoundingClientRect();
 		this.offsetX	= box.left;	//Help get X,Y in relation to the canvas position.
 		this.offsetY	= box.top;
@@ -54,6 +61,69 @@ class InputTracker{
 
 		document.addEventListener("keydown",	this.onKeyDown.bind(this));
 		document.addEventListener("keyup",		this.onKeyUp.bind(this));
+
+		this.elm.addEventListener( "touchstart", this.onTouchStart.bind(this) );
+		this.elm.addEventListener( "touchmove", this.onTouchMove.bind(this) );
+		this.elm.addEventListener( "touchend", this.onTouchEnd.bind(this) );
+	}
+
+	//////////////////////////////////////////////////////////////////
+	// TOUCH
+	//////////////////////////////////////////////////////////////////
+	
+	onTouchStart( e ){ 
+		// e.touches, e.targetTouches, e.changedTouches
+		let itm, idx, t = e.changedTouches;
+		for( let i=0; i < t.length; i++ ){
+			itm = t[ i ];
+			idx = itm.identifier;
+
+			this.touch_map.set( idx,{
+				init	: [ itm.clientX, itm.clientY ],
+				current	: [ itm.clientX, itm.clientY ],
+				delta 	: [ 0, 0 ],
+			});
+		}
+
+		this.touch_cnt		= e.touches.length;
+		this.touch_state	= 1;
+		this.touch_ver++;
+
+		if( this.on_input ) this.on_input();
+	}
+
+	onTouchMove( e ){
+		e.preventDefault();
+		
+		let tt, itm, idx, t = e.changedTouches;
+		for( let i=0; i < t.length; i++ ){
+			itm = t[ i ];
+			idx = itm.identifier;
+			tt 	= this.touch_map.get( idx );
+
+			tt.current[ 0 ]	= itm.clientX;
+			tt.current[ 1 ]	= itm.clientY;
+			tt.delta[ 0 ]	= itm.clientX - tt.init[ 0 ];
+			tt.delta[ 1 ]	= itm.clientY - tt.init[ 1 ];
+		}
+
+		this.touch_state = 2;
+		this.touch_ver++;
+
+		if( this.on_input ) this.on_input();
+	}
+
+	onTouchEnd( e ){
+		let t = e.changedTouches;
+		for( let i=0; i < t.length; i++ ) this.touch_map.delete( t[ i ].identifier );
+		
+		this.touch_cnt = e.touches.length;
+		this.touch_ver++;
+
+		if( this.touch_cnt == 0 )	this.touch_state = 0;
+		else						this.touch_state = 1;
+
+		if( this.on_input ) this.on_input();
 	}
 
 	//////////////////////////////////////////////////////////////////

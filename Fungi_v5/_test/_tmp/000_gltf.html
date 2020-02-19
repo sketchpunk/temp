@@ -1,81 +1,119 @@
 <!DOCTYPE html><script type="module">
-import App, {THREE}	from "../../fungi.3js/App.js";
+import App, {THREE, Vec3, Quat }	from "../../fungi.3js/App.js";
 import GltfUtil		from "../../fungi.3js/lib/GltfUtil.js";
+import Points		from "../../fungi.3js/lib/Points.js";
 import XhrQueue		from "../../fungi/lib/XhrQueue.js";
-
-// https://threejsfundamentals.org/threejs/lessons/threejs-materials.html
+import Spline		from "../../fungi/maths/Spline.js";
+import Vec3Spring	from "../../fungi/maths/Vec3Spring.js";
 
 //#####################################################
-App.builder()
-	.set_camera( 0, 20, 3.0, 0, 0.35, 0 )
+App.builder( true )
+	.set_camera( 0, 90, 10.0, 0, 0.35, 0 )
 	.add( init )
-	.render_on_mouse()
+	.render_loop( on_draw )
+	//.render_on_mouse( on_draw )
 	.build();
 
+
+const FIG8_PATH = [ 
+	-4, 0.5, -1.8,
+	-1.8, 0.0, -3.8,
+	0.5, 0.5, 3,
+	4.5, 0.5, 3,
+	2.0, 0.5, -2,
+	-2.5, 0.5, 2.8
+];
+
+const CIRCLE_PATH = [
+	-4, 0.5, -1.8,
+	-1.0, 0.5, -2.8,
+	-0.3, 1.2, -2.8,
+	0.8, 1.2, -2.8,
+	1.8, 0.5, -2.6,
+	4.4, 0.5, 1,
+	0.5, 0.5, 3,
+	-2.5, 0.5, 2.8,
+];
+
 //#####################################################
 
-let gGeo = {};
-let gMat = new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
+let gGeo ={}, gMarker, gFollow, gTime = 0, gTimeMax = 20;
+let gPath, gPathList, gPathIdx=0, gPause = true, gScale = 1;
+
+function on_draw( dt, ss ){
+	if( !gPause ) gTime	+= dt * gScale;
+	let t = (gTime % gTimeMax) / gTimeMax;
+
+	if( gPath ){
+		gPath.at( t );
+		gMarker.Obj.set_pos( gPath.pos );
+		gFollow.move( dt, gPath.pos, gPath.dir );
+	}
+}
 
 async function init(){
-	let dl = await XhrQueue
-		.url( "./" )
+	let dl = await XhrQueue.url( "./" )
 		.grp( "bits", "magazine_bits.gltf", "json", "magazine_bits.bin", "bin" )
-		//.grp( "tex", "grid_001.jpg", "img" )
+		.grp( "gas", "ghastly_robo.gltf", "json", "ghastly_robo.bin", "bin" )
 		.then();
 
-
-	
-/*
-	//let tex = new THREE.Texture( dl.tex.img );
-	let tex = new THREE.TextureLoader().load( './grid_002.jpg' );
-	tex.repeat.set( 20, 20 );
-	tex.wrapS = THREE.RepeatWrapping;
-	tex.wrapT = THREE.RepeatWrapping;
-	tex.flipY = false;
-	tex.generateMipmaps = true;
-	console.log( tex );
-
-	let plane_geo = new THREE.PlaneGeometry( 20, 20 );
-	var material = new THREE.MeshBasicMaterial( { alphaMap: tex, transparent: false, color: 0x363D4E, side: THREE.DoubleSide} );
-	var plane = new THREE.Mesh( plane_geo, material );
-	plane.rotation.x = Math.PI / 2;
-	plane.position.y = 0.01;
-	App.$( plane );
-
-	//return true;
-*/
-
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let geos = GltfUtil.get_geo( dl.bits.json, dl.bits.bin, ["Pallet", "StackBox", "Barrel", "MilitaryBox"] );
+	let geo  = GltfUtil.get_geo( dl.gas.json, dl.gas.bin );
 
-	gGeo.pallet		= { name : "pallet", geo : geos[0], wf_geo : new THREE.WireframeGeometry( geos[0] ) };
-	gGeo.stackbox 	= { name : "stackbox", geo : geos[1], wf_geo : new THREE.WireframeGeometry( geos[1] ) };
-	gGeo.barrel		= { name: "barrel", geo : geos[2], wf_geo : new THREE.WireframeGeometry( geos[2] ) };
-	gGeo.mbox		= { name : "mbox", geo : geos[3], wf_geo : new THREE.WireframeGeometry( geos[3] ) };
+	gGeo.pallet		= { name : "pallet", 	geo : geos[0], wf_geo : new THREE.WireframeGeometry( geos[0] ) };
+	gGeo.stackbox 	= { name : "stackbox",	geo : geos[1], wf_geo : new THREE.WireframeGeometry( geos[1] ) };
+	gGeo.barrel		= { name : "barrel",	geo : geos[2], wf_geo : new THREE.WireframeGeometry( geos[2] ) };
+	gGeo.mbox		= { name : "mbox",		geo : geos[3], wf_geo : new THREE.WireframeGeometry( geos[3] ) };
+	gGeo.ghastly	= { name : "ghastly",	geo : geo[0], wf_geo : new THREE.WireframeGeometry( geo[0] ) };
 
 	let m;
-	m = wireframe_mesh( gGeo.pallet, -1.20, 0, 0 );
-	m = wireframe_mesh( gGeo.pallet, -1.20, 0, -1.20 );
-	m = wireframe_mesh( gGeo.stackbox, -1.20, 0.22, -1.20 );
-	m = wireframe_mesh( gGeo.stackbox, -1.20, 0.553, -1.20 );
-	m = wireframe_mesh( gGeo.barrel, 0, 0, -1.5 );
-	m = wireframe_mesh( gGeo.mbox, 1.5, 0, -0.5, Math.PI * -0.25 );
+	m = wireframe_mesh( gGeo.pallet, -2.50, 0, 0 );
+	m = wireframe_mesh( gGeo.pallet, -2.50, 0, -1.20 );
+	m = wireframe_mesh( gGeo.stackbox, -2.50, 0.22, -1.20 );
+	m = wireframe_mesh( gGeo.stackbox, -2.50, 0.553, -1.20 );
+	m = wireframe_mesh( gGeo.barrel, 0, 0, -2.8 );
+	m = wireframe_mesh( gGeo.mbox, 2.3, 0, 0.5, Math.PI * -0.25 );
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let e = wireframe_mesh2( gGeo.ghastly );
+	e.Obj.set_scl( 0.33 );
 
-	//let mat			= new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
-	//let mesh 		= new THREE.Mesh( geos[0], mat );
-	//mesh.name = geos[0].name;
-	//App.$( mesh );
+	gFollow = follower_object( e );
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gPathList = [
+		path_object( CIRCLE_PATH ),
+		path_object( FIG8_PATH ),
+	];
+	gPath = gPathList[ 0 ];
+	gPath.show();
 
-	//let wireframe	= new THREE.WireframeGeometry( geos[0] );
-	//let line		= new THREE.LineSegments( wireframe );
-	//line.material.color.setHex( 0x80808 );
-	//App.$( line );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gMarker = Points.$( "marker", 1 );
+	gMarker.Points.add_raw( 0,0,0, 0x00ff00, 1, 15 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	window.addEventListener( "keypress", function( e ){
+		// console.log( e.keyCode );
+		switch( e.keyCode ){
+			case 96:
+				gPathIdx	= (gPathIdx + 1) & 1;
+				gPath		= gPathList[ gPathIdx ].show();
+			break;
+
+			case 32: gPause = !gPause; break;
+			case 43: gScale += 0.5; break;
+			case 45: gScale -= 0.5;break;
+		}
+	});
 
 	return true;
 }
 
+//#####################################################
+
+const gMat = new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
 function wireframe_mesh( itm, x=0, y=0, z=0, ry=0 ){
 	let grp 	= new THREE.Group();
 	let mesh	= new THREE.Mesh( itm.geo, gMat );
@@ -92,6 +130,59 @@ function wireframe_mesh( itm, x=0, y=0, z=0, ry=0 ){
 	return grp;
 }
 
+function wireframe_mesh2( itm, x=0, y=0, z=0, ry=0 ){
+	let mat 	= new THREE.MeshPhongMaterial( { color: 0xa0a0a0, shininess: 1 } );
+	let mesh	= new THREE.Mesh( itm.geo, mat );
+	
+	mesh.position.set( x, y, z );
+	mesh.rotation.y = ry;
+	
+	return App.$( mesh );
+}
+
+function path_object( ary ){
+	let spline 	= Spline.from_hermite( true ).load_flat_array( ary );
+	let map 	= spline.gen_map( 30 );
+	return {
+		spline, map,
+		pos : new Vec3(),
+		dir : new Vec3(),
+		at 	: function( t ){
+			let tt = map.at( t );
+			spline.at( tt, this.pos );
+			spline.dxdy( tt, this.dir ).norm();
+			return this;
+		},
+		show : function(){
+			App.Debug.reset();
+			Spline.debug_points( App.Debug, spline )
+			Spline.debug_path( App.Debug, spline, 50 );
+			return this;
+		},
+	}
+}
+
+function follower_object( e, osc=0.4, damp=0.8, damp_time=0 ){
+	let v = new Vec3();
+	return {
+		spring_pos	: new Vec3Spring( osc, damp, damp_time ),
+		spring_dir 	: new Vec3Spring( 1.0, 0.6, 0 ),
+
+		move		: function( dt, target_pos, target_dir ){
+			this.spring_pos.update( dt, target_pos );
+
+			v.from_sub( target_pos, this.spring_pos.pos );
+			this.spring_dir.update( dt, v );
+
+			e.Obj
+				.set_pos( this.spring_pos.pos ) 
+				.look( this.spring_dir.pos )
+			;
+		},
+	}
+}
+
+// #region junk
 /*
     let geometry = new THREE.PlaneGeometry(250, 250, 10, 10);
     let material = new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
@@ -129,5 +220,36 @@ function load_geo( json, bin ){
 	let mesh	= new THREE.Mesh( geo, mat );
 	App.$( mesh );
 }
+
+	//let tex = new THREE.Texture( dl.tex.img );
+	let tex = new THREE.TextureLoader().load( './grid_002.jpg' );
+	tex.repeat.set( 20, 20 );
+	tex.wrapS = THREE.RepeatWrapping;
+	tex.wrapT = THREE.RepeatWrapping;
+	tex.flipY = false;
+	tex.generateMipmaps = true;
+	console.log( tex );
+
+	let plane_geo = new THREE.PlaneGeometry( 20, 20 );
+	var material = new THREE.MeshBasicMaterial( { alphaMap: tex, transparent: false, color: 0x363D4E, side: THREE.DoubleSide} );
+	var plane = new THREE.Mesh( plane_geo, material );
+	plane.rotation.x = Math.PI / 2;
+	plane.position.y = 0.01;
+	App.$( plane );
+
+	//return true;
+
+	//let mat			= new THREE.MeshBasicMaterial( { color: 0xd3d3d3} );
+	//let mesh 		= new THREE.Mesh( geos[0], mat );
+	//mesh.name = geos[0].name;
+	//App.$( mesh );
+
+	//let wireframe	= new THREE.WireframeGeometry( geos[0] );
+	//let line		= new THREE.LineSegments( wireframe );
+	//line.material.color.setHex( 0x80808 );
+	//App.$( line );
+
+
 */
+// #endregion
 </script><page-layout></page-layout>

@@ -1,0 +1,88 @@
+{
+    "asset" : {
+        "generator" : "Khronos glTF Blender I/O v1.1.45",
+        "version" : "2.0"
+    },
+    "scene" : 0,
+    "scenes" : [
+        {
+            "name" : "Scene",
+            "nodes" : [
+                0
+            ]
+        }
+    ],
+    "nodes" : [
+        {
+            "mesh" : 0,
+            "name" : "Ghastly"
+        }
+    ],
+    "meshes" : [
+        {
+            "name" : "Ghastly",
+            "primitives" : [
+                {
+                    "attributes" : {
+                        "POSITION" : 0,
+                        "NORMAL" : 1
+                    },
+                    "indices" : 2
+                }
+            ]
+        }
+    ],
+    "accessors" : [
+        {
+            "bufferView" : 0,
+            "componentType" : 5126,
+            "count" : 12551,
+            "max" : [
+                0.8539634346961975,
+                0.9337877035140991,
+                0.7921489477157593
+            ],
+            "min" : [
+                -0.847786009311676,
+                -0.7626627087593079,
+                -0.883873701095581
+            ],
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 1,
+            "componentType" : 5126,
+            "count" : 12551,
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 2,
+            "componentType" : 5123,
+            "count" : 48732,
+            "type" : "SCALAR"
+        }
+    ],
+    "bufferViews" : [
+        {
+            "buffer" : 0,
+            "byteLength" : 150612,
+            "byteOffset" : 0
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 150612,
+            "byteOffset" : 150612
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 97464,
+            "byteOffset" : 301224
+        }
+    ],
+    "buffers" : [
+        {
+            "byteLength" : 398688,
+            "uri" : "ghastly_robo.bin"
+        }
+    ]
+}

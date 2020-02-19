@@ -11,6 +11,8 @@ import InputTracker 		from "../fungi/lib/InputTracker.js";
 import OrbitCamera 			from "./sys/OrbitCamera.js";
 import Obj 					from "./com/Obj.js";
 
+import Maths, { Vec3, Quat }	from "../../fungi/maths/Maths.js";
+
 /*++++++++++++++++++++++++++++++++++++++++++++++++
 SYSTEMS LAYOUT
 0001 - Orbit Camera
@@ -225,4 +227,4 @@ let App = {
 window.App = App; // Make App Globally Scoped
 
 export default App;
-export { THREE, Components };
+export { THREE, Components, Maths, Vec3, Quat };

@@ -11,6 +11,11 @@ class Debug{
 		return this;
 	}
 
+	static reset(){
+		this.p.reset();
+		this.l.reset();
+	}
+
 	static pnt( p, hex=0xff0000, shape=null, size=null ){ this.p.add( p, hex, shape, size ); return this; }
 	static pnt_raw( x, y, z, hex=0xff0000, shape=null, size=null ){ this.p.add_raw( x, y, z, hex, shape, size ); return this; }
 

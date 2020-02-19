@@ -1,4 +1,5 @@
-import App, { Components } from "../App.js";
+import App, { Components, Quat } from "../App.js";
+import Vec3 from "../../fungi/maths/Vec3.js";
 
 class Obj{
 	constructor(){
@@ -10,6 +11,19 @@ class Obj{
 	set_pos( p ){
 		if( arguments.length == 3 ) this.ref.position.fromArray( arguments );
 		else if( p.length == 3 )	this.ref.position.fromArray( p );
+		return this;
+	}
+
+	set_scl( x, y, z ){
+		if( arguments.length == 1 ) this.ref.scale.set( x, x, x );
+		else 						this.ref.scale.set( x, y, z );
+		return this;
+	}
+
+	set_rot( q ){ this.ref.quaternion.fromArray( q ); return this; }
+	look( dir, up ){
+		let q = new Quat().from_look( dir, up || Vec3.UP );
+		this.ref.quaternion.fromArray( q );
 		return this;
 	}
 
