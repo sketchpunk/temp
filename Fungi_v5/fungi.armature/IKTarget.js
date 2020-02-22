@@ -63,8 +63,8 @@ class IKTarget{
 	///////////////////////////////////////////////////////////////////
 	// Single Bone Solvers
 	///////////////////////////////////////////////////////////////////
-
-		_aim_bone( chain, pose, p_wt, out ){
+		
+		_aim_bonexxx( chain, pose, p_wt, out ){
 			/*
 			The idea is to Aim the root bone in the direction of the target. Originally used a lookAt rotation 
 			then correcting it to take in account the bone's points up, not forward.
@@ -125,7 +125,7 @@ class IKTarget{
 			return out;
 		}
 
-		aim( chain, tpose, pose, p_wt ){
+		aimxxx( chain, tpose, pose, p_wt ){
 			let rot = new Quat();
 			this._aim_bone( chain, tpose, p_wt, rot );
 			rot.pmul_invert( p_wt.rot ); // Convert to Bone's Local Space by mul invert of parent bone rotation
@@ -280,7 +280,7 @@ class IKTarget{
 				
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Bone A 
-			this._aim_bone( chain, tpose, p_wt, rot );		// Aim the first bone toward the target oriented with the bend direction.
+			this._aim_bone2( chain, tpose, p_wt, rot );		// Aim the first bone toward the target oriented with the bend direction.
 
 			rad	= Maths.lawcos_sss( a_len, ta_len, bh_len );	// Get the Angle between First Bone and Target.
 			rot

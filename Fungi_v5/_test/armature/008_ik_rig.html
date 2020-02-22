@@ -43,13 +43,13 @@ async function init(){
 		.add_point( "foot_l", "LeftFoot" )
 		.add_point( "foot_r", "RightFoot" )
 
-		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ], "x", "RightHand" )
-		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "x", "LeftHand" )
+		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ], "RightHand" )
+		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "LeftHand" )
 
-		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "z", "RightFoot" )
-		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "z", "LeftFoot" )
+		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "RightFoot" )
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "LeftFoot" )
 
-		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ], "y" )
+		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ] )
 	;
 
 	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );

@@ -27,8 +27,11 @@ function on_draw( dt, ss ){ if( gPlay ) gPlay( dt ); }
 
 async function init(){
 	let dl = await XhrPromise.get( 
-		"../../_tmp/walking.gltf", "json", 
-		"../../_tmp/walking.bin", "arraybuffer",
+		//"../../_tmp/walking.gltf", "json", 
+		//"../../_tmp/walking.bin", "arraybuffer",
+		"../../_tmp/cat_walk.gltf", "json",
+		"../../_tmp/cat_walk.bin", "arraybuffer",
+
 		"../../files/models/vegeta.gltf", "json", 
 		"../../files/models/vegeta.bin", "arraybuffer",
 	);

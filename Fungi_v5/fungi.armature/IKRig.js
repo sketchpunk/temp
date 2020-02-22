@@ -61,8 +61,8 @@ class IKRig{
 		return this;
 	}
 	
-	add_chain( name, name_ary, axis="z", end_name=null, ik_solver=null ){
-		let i, b, ch = new Chain( axis );
+	add_chain( name, name_ary, end_name=null, ik_solver=null ){ //  axis="z",
+		let i, b, ch = new Chain(  ); // axis
 		for( i of name_ary ){
 			b = this.pose.get_bone( i );
 			ch.add_bone( b.idx, b.len );
@@ -130,15 +130,15 @@ IKRig.ARM_MIXAMO = 1;
 //#########################################################
 
 class Chain{
-	constructor( axis="z" ){
+	constructor( ){ // axis="z"
 		this.bones		= new Array();	// Index to a bone in an armature / pose
 		this.len		= 0;			// Chain Length
 		this.len_sqr	= 0;			// Chain Length Squared, Cached for Checks without SQRT
 		this.cnt		= 0;			// How many Bones in the chain
-		this.align_axis	= axis;			// Chain is aligned to which axis
+		//this.align_axis	= axis;			// Chain is aligned to which axis
 		this.end_idx 	= null;			// Joint that Marks the true end of the chain
 
-		this.alt_dir 	= Vec3.FORWARD.clone();
+		//this.alt_dir 	= Vec3.FORWARD.clone();
 
 		this.alt_fwd 	= Vec3.FORWARD.clone();
 		this.alt_up		= Vec3.UP.clone();
@@ -148,7 +148,9 @@ class Chain{
 
 	// #region Getters / Setters
 	add_bone( idx, len ){
-		this.bones.push({ idx, len });
+		let o = { idx, len };
+
+		this.bones.push( o );
 		this.cnt++;
 		this.len		+= len;
 		this.len_sqr	= this.len * this.len;
@@ -159,15 +161,15 @@ class Chain{
 	last(){ return this.bones[ this.cnt-1 ].idx; }
 	idx( i ){ return this.bones[ i ].idx; }
 
-	set_alt_dir( dir, tpose=null, idx=0 ){
+	//set_alt_dir( dir, tpose=null, idx=0 ){
 		//if( tpose ){
 		//	let b = tpose.bones[ this.bones[ idx ].idx ],
 		//		q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
 		//	this.alt_dir.from_quat( q, dir );	// Use invert to get direction that will Recreate the real direction
 		//}else this.alt_dir.copy( v );
 
-		return this;
-	}
+	//	return this;
+	//}
 
 	set_alt( fwd, up, tpose=null ){
 		if( tpose ){
@@ -183,7 +185,6 @@ class Chain{
 
 		return this;
 	}
-
 	// #endregion ////////////////////////////////////////////////
 	
 	// #region Special Methods
@@ -239,20 +240,20 @@ function init_mixamo_rig( arm, rig ){
 		.add_point( "foot_l", "LeftFoot" )
 		.add_point( "foot_r", "RightFoot" )
 
-		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ], "x", "RightHand" )
-		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "x", "LeftHand" )
+		.add_chain( "arm_r", [ "RightArm", "RightForeArm" ],  "RightHand" ) //"x",
+		.add_chain( "arm_l", [ "LeftArm", "LeftForeArm" ], "LeftHand" ) //"x", 
 
-		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "z", "RightFoot" )
-		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "z", "LeftFoot" )
+		.add_chain( "leg_r", [ "RightUpLeg", "RightLeg" ], "RightFoot" ) //"z", 
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftLeg" ], "LeftFoot" )  //"z", 
 
-		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ], "y" )
+		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ] ) //, "y"
 	;
 
 	// Set Direction of Joints on th Limbs
-	rig.chains.leg_l.set_alt_dir( Vec3.FORWARD, rig.tpose );
-	rig.chains.leg_r.set_alt_dir( Vec3.FORWARD, rig.tpose );
-	rig.chains.arm_r.set_alt_dir( Vec3.BACK, rig.tpose );
-	rig.chains.arm_l.set_alt_dir( Vec3.BACK, rig.tpose );
+	//rig.chains.leg_l.set_alt_dir( Vec3.FORWARD, rig.tpose );
+	//rig.chains.leg_r.set_alt_dir( Vec3.FORWARD, rig.tpose );
+	//rig.chains.arm_r.set_alt_dir( Vec3.BACK, rig.tpose );
+	//rig.chains.arm_l.set_alt_dir( Vec3.BACK, rig.tpose );
 
 	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
 	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );

@@ -1,0 +1,147 @@
+<!DOCTYPE html><script type="module">
+import App		from "../../fungi/App.js";
+import Torus	from "../../fungi/geo/Torus.js";
+import Quad		from "../../fungi/geo/Quad.js";
+
+/*
+https://www.martinpalko.com/triplanar-mapping/
+https://medium.com/@bgolus/normal-mapping-for-a-triplanar-shader-10bf39dca05a
+https://www.youtube.com/watch?v=JgmIM7qhGh8
+https://github.com/bobbykaz/spatial-mapping-shaders
+
+https://smeenk.com/unity-asset-store/hololens-shader-pack/
+   https://assetstore.unity.com/packages/vfx/shaders/hololens-shader-pack-89989
+*/
+
+//#####################################################
+
+App.builder( true, false )
+	.set_camera( 0, 30, 8, 0, 0.0, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse()
+	.build();
+
+let gPnt, gMotion, gUbo;
+
+//#####################################################
+
+function on_draw( dt, ss ){
+	//gUbo.set_var( "pos", gPnt.Node.local.pos ).update();
+}
+
+function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader and Meshes
+
+	let e, mat;
+	init_shader();
+		
+	//mat = gShader.new_material( "mat_floor", { "base_color":"#ff7f7fff"} );
+	//e = Torus.knot( "shape", mat );
+	//e.Node.set_pos( 0, 1.8, 0 );
+
+	mat = gShader.new_material( "mat_floor",  null ); // { "base_color":"#404040ff"}
+	mat.options.cullFace = false;
+
+	e = Quad( "floor", mat );
+	e.Node.rot_by( -90, "x" ).set_scl( 5 );
+
+	return true;
+}
+
+//#####################################################
+
+let gShader = null;
+function init_shader(){
+	gUbo = App.Ubo.build( "Light", 10, [
+		{ name:"pos", type:"vec3" },
+		{ name:"color", type:"vec3" },
+	]);
+
+	gUbo.set_var( "pos", [0,5,0] )
+		.set_var( "color", App.Colour.rgb("#ffffff") )
+		.update();
+
+	gShader = App.Shader.from_src( "SH_TESTER", vert_src, frag_src )
+		.add_uniform_blocks( ["Global","Model","Light"] )
+		//.add_uniform( "base_color", "rgba", "#b0b0b0ff" )
+	;
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_pos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_pos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec4 base_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_pos;
+
+	const float LinesPerUnit = 6.0;
+	const float LineThickness = 0.05;
+
+	//-------------------------
+
+	void main( void ){
+
+		vec3 ap = mod( ( abs( frag_pos ) * LinesPerUnit ), 1.0 );
+
+		float x = LineThickness * 0.5;
+		float xx = 1.0 - x;
+
+		float a = 0.0;
+		if( ap < x ) a = 1.0;
+
+		//float b = 0.0;
+		//if( xx > ap ) b = 1.0;
+
+		//float ab = max( a, b );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		out_color = vec4( 0.0, 0.047, 0.275, 1.0 );
+	}`;
+</script><page-layout></page-layout>
