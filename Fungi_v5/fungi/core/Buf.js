@@ -45,6 +45,7 @@ class Buf{
 		set_interleaved( i_info ){
 			this.interleaved	= i_info;
 			this.stride_len		= i_info.stride_len;
+			this.comp_len 		= i_info.comp_len;
 			return this;
 		}
 

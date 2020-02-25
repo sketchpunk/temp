@@ -1,0 +1,723 @@
+<!DOCTYPE html><html><head><title></title></head><script type="module">
+import App, { Shader, Material, Components, System, Entity }	from "../fungi/engine/App.js";
+import Vao, { Buf }					from "../fungi/core/Vao2.js";
+import Maths, { Quat, Vec3 }		from "../fungi/maths/Maths.js";
+import Transform					from "../fungi/maths/Transform.js";
+import Capsule						from "../fungi/primitives/Capsule.js";
+import Armature 					from "../fungi.armature/Armature.js";
+import ArmaturePreview				from "../fungi.armature/ArmaturePreview.js";
+import DynBuffer					from "../fungi/data/DynBuffer.js";
+
+//#############################################################################
+new App.builder()
+	.launch()
+	.load_armature()
+	.download( dl=>dl.addGrp( "shader", 
+		"../fungi/shaders/VecWColor.txt", 
+		//"../fungi/shaders/LowPolyPhong.txt", 
+		"../fungi.armature/shaders/ArmaturePreview.txt",
+	) ) 
+	.load_scene( true, true, true )
+	.set_camera( -90, 10, 2, 0, 0.2, 0 )
+	.add( init )
+	.render_loop( on_draw )
+	//.render_on_mouse( on_draw )
+	.build().catch( (e)=>console.error("error",e) );
+
+//#############################################################################
+function on_draw( dt, ss ){ App.ecs.sys_run(); }
+
+//https://www.google.com/imgres?imgurl=https%3A%2F%2Fi.ytimg.com%2Fvi%2FF0FVCrSXA1U%2Fmaxresdefault.jpg&imgrefurl=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DF0FVCrSXA1U&docid=HtRNLFxBkiScnM&tbnid=wufQJ8hbv55kBM%3A&vet=10ahUKEwiXkdfot4jmAhUIVN8KHaVyDxkQMwg-KAAwAA..i&w=1280&h=720&bih=817&biw=1218&q=IK%20Rigs%20ubisoft&ved=0ahUKEwiXkdfot4jmAhUIVN8KHaVyDxkQMwg-KAAwAA&iact=mrc&uact=8
+//#############################################################################
+
+async function init(){
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SHADER & MATERIALS
+	let json	= Shader.parseInline( "inline_shader" ),
+		shader	= Shader.buildFromJson( json );
+
+	if( !shader ) return false;
+
+	let mat = Material.build( shader, json.materials[ 0 ] );
+	//mat.bind().apply(); // Bind Shader, Then Apply Uniforms to Shader
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	/*
+
+	let c_geo = Capsule( 8, 4, 0.5, 0.5 );
+	
+    //let vao_pnt = new Vao().bind()
+    //    .add_vertices( Buf.new_array( c_geo.vertices, false, false ), 3 )
+    //    .unbind_all();
+    //vao_pnt.elmCount = c_geo.vertices.length / 3;
+    //App.$Draw( "latticePnt", vao_pnt, "VecWColor", 0 );
+    
+
+    //console.log( new Quat().from_axis_angle( [1,0,0], 90 * Math.PI / 180) );
+
+    let ins_data = new InterleavedFloatArray()
+    	.add_var( "rot", 4 )
+    	.add_var( "pos", 3 )
+    	.expand_by( 2, false )
+    	//.set_all( [0,0,0,1], [0,1,0] );
+
+	ins_data.push( [0,0,0,1], [-1,0,0] );
+	//ins_data.push( new Quat().from_axis_angle( [1,0,0], 45 * Math.PI / 180), [1,0,0] );
+
+    console.log( ins_data );
+
+
+    let vao_tri = new Vao().bind()
+        .add_vertices( Buf.new_array( c_geo.vertices, true, false ), 3 )
+		.add_indices( Buf.new_element( c_geo.indices, true, false ) )
+
+		.add_buf( "ins_pos", 
+			Buf.new_array( ins_data.buffer, false, false ), 
+			10, 
+			ins_data.var_comp_len("rot"), 
+			"FLOAT", 
+			ins_data.stride_byte_len, 
+			ins_data.var_byte_offset("rot"), 
+			true )
+		.add_partition( 11, 
+			ins_data.var_comp_len("pos"), 
+			"FLOAT", 
+			ins_data.stride_byte_len, 
+			ins_data.var_byte_offset("pos"), 
+			true )
+
+		//.add_buf( "ins_pos", Buf.new_array( ins_pos, false, false ), 9, 3, "FLOAT", 28, 0, true )
+		//.add_partition( 10, 4, "FLOAT", 28, 12, true )
+		
+		//.add_buf( "ins_pos", id, attr_loc, comp_len=3, data_type="FLOAT", stride=0, offset=0, is_instance=false )
+        .unbind_all()
+		.set( c_geo.indices.length, true, ins_data.len );
+    //vao_tri.elmCount = c_geo.indices.length;
+    App.$Draw( "latticeTri", vao_tri, mat, 4 );
+
+	*/
+
+	
+
+    let proto = ProtoRig.$( null, PROTO_MAN );
+   	//ArmaturePreview.$( proto, "ArmaturePreview", 2 );
+
+    ProtoRigSystem.init( App.ecs );
+
+    //console.log( proto );
+
+    /*
+    let b;
+    b = proto.Armature.get_bone( "LeftLeg1" ).Node;
+    b.local.rot.rot_x( Maths.toRad(-25) );
+
+    b = proto.Armature.get_bone( "LeftLeg2" ).Node;
+    b.local.rot.rot_x( Maths.toRad(100) );
+
+    b = proto.Armature.get_bone( "LeftLeg3" ).Node;
+    b.local.rot.rot_x( Maths.toRad(-90) );
+
+    b = proto.Armature.get_bone( "LeftFoot" ).Node;
+    b.local.rot.rot_x( Maths.toRad(15) );
+
+   	b = proto.Armature.get_bone( "LeftArm1" ).Node;
+    b.local.rot.rot_x( Maths.toRad(75) ).rot_z( Maths.toRad(15) );
+
+   	b = proto.Armature.get_bone( "LeftArm2" ).Node;
+    b.local.rot.rot_z( Maths.toRad(45) );
+
+    b = proto.Armature.get_bone( "RightLeg1" ).Node;
+    b.local.rot.rot_x( Maths.toRad(-25) );
+
+    b = proto.Armature.get_bone( "RightLeg2" ).Node;
+    b.local.rot.rot_x( Maths.toRad(100) );
+
+    b = proto.Armature.get_bone( "RightLeg3" ).Node;
+    b.local.rot.rot_x( Maths.toRad(-90) );
+
+    b = proto.Armature.get_bone( "RightFoot" ).Node;
+    b.local.rot.rot_x( Maths.toRad(15) );
+
+   	b = proto.Armature.get_bone( "RightArm1" ).Node;
+    b.local.rot.rot_x( Maths.toRad(75) ).rot_z( Maths.toRad(-15) );
+
+   	b = proto.Armature.get_bone( "RightArm2" ).Node;
+    b.local.rot.rot_z( Maths.toRad(-45) );
+    */
+    
+
+    //b.Node.setPos( 2, 0, 0 );
+
+   // console.log( "Bone", b );
+
+    /*
+	var s = JSON.stringify(c_geo.vertices, function(k, v) {
+	    if (v instanceof  Float32Array) return Array.apply([], v);
+	    return v;
+	});
+	console.log( s );
+	*/
+
+	return true;
+}
+
+/*
+	// TEST
+	let sf_buf = new InterleavedArray();
+	sf_buf
+		.add_var( "pos", 3 )
+		.add_var( "size", 1 )
+		.add_var( "color", 3 )
+		.add_var( "shape", 1 )
+		.expand_by( 3 );
+	sf_buf.push( [1,2,3], 5, [0,0,0], 0 );
+	sf_buf.push( [4,5,6], 6, [0,0,0], 0 );
+	sf_buf.push( [7,8,9], 7, [0,0,0], 0 );
+	sf_buf.set( 1, "size", 100 );
+	sf_buf.set( 2, "pos", [300,200,100] );
+*/
+class InterleavedFloatArray{
+	constructor(){
+		this.buffer 		= null;			// Array Object that will hold the raw aata.
+		this.capacity 		= 0;			// Total Possible Elements (Note Bytes)
+		this.len			= 0;			// Count of Elements ( Total set of stride components )
+		this.stride_len 	= 0; 			// Stride Length in Float Count, not Bytes
+		this.vars 			= new Array();	// Definition of Interleaved Data 
+		this.map 			= {};			// Map The Names to the Array Index of the Vars
+	}
+
+
+	///////////////////////////////////////////////////////////////////
+	// 
+	///////////////////////////////////////////////////////////////////
+	get byte_capacity(){ return this.buffer.byteLength; }	// Get the Capacity Length in Bytes
+	get stride_byte_len(){ return this.stride_len * 4; }	// Get the Stride Length in Bytes
+	get byte_len(){ return this.len * this.stride_len * 4; }
+	var_byte_offset( v_name ){ return this.vars[ this.map[ v_name ] ].offset * 4; } // Get Byte Offset of specific variable
+	var_comp_len( v_name ){ return this.vars[ this.map[ v_name ] ].len; }
+
+	///////////////////////////////////////////////////////////////////
+	// 
+	///////////////////////////////////////////////////////////////////
+		reset(){ this.len = 0; return this; }
+
+		add_var( name, float_len ){
+			this.map[ name ] = this.vars.length;
+			this.vars.push({
+				name 	: name,
+				len		: float_len,
+				offset	: this.stride_len,
+			});
+			this.stride_len += float_len;
+			return this;
+		}
+
+		expand_by( size, use_all=false ){
+			let capacity	= this.capacity + size,
+				fb			= new Float32Array( capacity * this.stride_len );
+
+			if( this.buffer ){
+				for( let i=0; i < this.buffer.length; i++ ) fb[ i ] = this.buffer[ i ];
+			}
+
+			this.capacity	= capacity;
+			this.buffer		= fb;
+
+			if( use_all ) this.len = this.capacity;
+			return this;
+		}
+
+
+	///////////////////////////////////////////////////////////////////
+	// 
+	///////////////////////////////////////////////////////////////////
+		// Set a specific var at a specific element index
+		set_var( idx, v_name, data ){
+			let vr = this.vars[ this.map[ v_name ] ];
+
+			idx = (idx * this.stride_len) + vr.offset;
+
+			if( vr.len == 1 )	this.buffer[ idx ] = data;
+			else				this.buffer.set( data, idx );
+
+			//for( let i=0; i < vr.len; i++ ) this.buffer[ idx + i ] = data[ i ];
+			//}
+
+			return this;
+		}
+
+		set( idx ){
+			let i, v;
+			idx *= this.stride_len;
+
+			for( i=1; i < arguments.length; i++ ){
+				v = this.vars[ i-1 ];
+
+				if( v.len == 1 ) 	this.buffer[ idx + v.offset ] = arguments[ i ];
+				else				this.buffer.set( arguments[ i ], idx + v.offset );
+			}
+
+			return this;
+		}
+
+		set_all(){
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Validation
+			let v, i, arg_len = arguments.length
+			if( arg_len != this.vars.length ){ console.error( "set_all argument length mismatch for var length" ); return null; }
+
+			// Make sure all the arguments are of the right size.
+			for( i=0; i < arg_len; i++ ){
+				v = this.vars[ i ];
+				if( v.len > 1 && arguments[ i ].length != v.len ){ console.error( "Variable len mismatch for ", v.name ); return null; }
+			}
+			
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			let ii, j;
+			for( i=0; i < this.capacity; i++ ){
+				ii = i * this.stride_len;
+
+				for( j=0; j < arg_len; j++ ){
+					v = this.vars[ j ];
+
+					if( v.len == 1 ) 	this.buffer[ ii + v.offset ] = a;
+					else				this.buffer.set( arguments[ j ], ii + v.offset );
+				}
+			}
+
+			return this;
+		}
+
+		push(){
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Validation
+			if( arguments.length != this.vars.length ){ console.error( "push argument length mismatch for var length" ); return null; }
+			
+			if( this.len >= this.capacity ){ console.error( "InterleavedFloatArray is at capacity" ); return null; }
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			let i, v, idx = this.len, offset = idx * this.stride_len;
+
+			for( i=0; i < arguments.length; i++ ){
+				v = this.vars[ i ];
+
+				if( v.len > 1 && arguments[ i ].length != v.len ){ console.error( "Variable len mismatch for ", v.name ); return null; }
+
+				if( v.len == 1 )	this.buffer[ offset + v.offset ] = arguments[ i ];
+				else				this.buffer.set( arguments[ i ], offset + v.offset );
+			}
+
+			this.len++;
+			return idx;
+		}
+
+		rm( i ){
+			/*
+			if( i >= this.len ){ console.log( "Can not remove, Index is greater then length"); return this; }
+
+			//If removing last one, Just change the length
+			let b_idx = this.len - 1;
+			if( i == b_idx ){ this.len--; return this; }
+
+			let a_idx				= i * B_LEN;	// Index of Vec to Remove
+			b_idx					*= B_LEN;		// Index of Final Vec.
+			this.buffer[ a_idx ]	= this.buffer[ b_idx ];
+			this.buffer[ a_idx+1 ]	= this.buffer[ b_idx+1 ];
+			this.buffer[ a_idx+2 ]	= this.buffer[ b_idx+2 ];
+			this.len--;
+			*/
+		
+			return this;
+		}
+}
+
+
+class ProtoRig{
+	static $( e=null, config ){
+		if( !e )			e = App.$Draw();
+		if( !e.Armature )	Entity.com_fromName( e, "Armature" );
+
+		let o_proto = Entity.com_fromName( e, "ProtoRig" );
+		o_proto.build( e, config, e.Armature );
+
+		Armature.finalize( e );
+		return e;
+	}
+
+	constructor(){
+		this.bone_buffer = null;
+
+		// Flat Worldspace Transfrom from Armature Bones
+	    this.flat_bone_transform = new InterleavedFloatArray()
+	    	.add_var( "rot", 4 )
+	    	.add_var( "pos", 3 );
+
+	    // Capsule Visual Configuration
+	    this.flat_config = new InterleavedFloatArray()
+	    	.add_var( "top", 4 )	// xyz = scale dome, w translate Y position
+	    	.add_var( "bot", 4 )
+	    	.add_var( "rot", 4 );	// Quaternion Rotation
+	}
+
+	build( e, ary, arm ){
+		let cnt 	= ary.length,
+			fbt		= this.flat_bone_transform,
+			fc		= this.flat_config,
+			pebone 	= null,
+			itm, ebone;
+
+		fbt.expand_by( cnt, true );	// Initialize Bone Transform Buffer
+		fc.expand_by( cnt, false );	// Initialize Config Buffer
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Build up armature bones and capsule configurations
+		for( itm of ary ){
+			pebone = ( itm.p_idx != null )? arm.bones[ itm.p_idx ] : null;
+
+			// Create Armature Bone
+			ebone = arm.add_bone( itm.name, itm.len, pebone, itm.idx );
+			ebone.Node.setPos( itm.bone_pos );
+			ebone.Node.setRot( itm.bone_rot );
+
+			fc.push( itm.top, itm.bot, itm.rot );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup Buffer to hold the Flat World Space Transform of the Bones
+		let bone_buf = Buf.new_array( fbt.buffer, false, false );
+		this.bone_buffer = new DynBuffer( bone_buf, fbt.byte_capacity, true )
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Build Capsule Mesh
+		let c_geo	= Capsule( 8, 4, 0.5, 0 );
+ 		let vao		= new Vao().bind()
+ 			// Mesh
+        	.add_vertices( Buf.new_array( c_geo.vertices, true, false ), 3 )
+			.add_indices( Buf.new_element( c_geo.indices, true, false ) )
+
+			// Flat WS Bone Transform ( Instanced )
+			.add_buf( "bones", bone_buf, 10, fbt.var_comp_len("rot"), "FLOAT", fbt.stride_byte_len, fbt.var_byte_offset("rot"), true )
+			.add_partition( 11, fbt.var_comp_len("pos"), "FLOAT", fbt.stride_byte_len, fbt.var_byte_offset("pos"), true )
+
+			// Capsule Configuration ( Instanced )
+			.add_buf( "config", Buf.new_array( fc.buffer, true, false ), 13, fc.var_comp_len("top"), "FLOAT", fc.stride_byte_len, fc.var_byte_offset("top"), true )
+			.add_partition( 14, fc.var_comp_len("bot"), "FLOAT", fc.stride_byte_len, fc.var_byte_offset("bot"), true )
+			.add_partition( 15, fc.var_comp_len("rot"), "FLOAT", fc.stride_byte_len, fc.var_byte_offset("rot"), true )
+
+        	.unbind_all()
+			.set( c_geo.indices.length, true, fbt.len );
+
+    	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    	// Add To Drawing
+    	e.Draw.add( vao, "ProtoRig", 4 );
+	}
+
+	update_bone_buffer(){ 
+		this.bone_buffer.update( this.flat_bone_transform.buffer );
+	}
+} Components( ProtoRig );
+
+
+class ProtoRigSystem extends System{
+	static init( ecs, priority = 810 ){
+		ecs.sys_add( new ProtoRigSystem(), priority );
+	}
+	run( ecs ){
+		let e, i, ws, bones, flat, ary = ecs.query_entities( [ "Armature", "ProtoRig" ] );
+		for( e of ary ){
+
+			if( e.Armature.isModified ){
+				bones	= e.Armature.bones;
+				flat	= e.ProtoRig.flat_bone_transform;
+				
+				for( i=0; i < bones.length; i++ ){
+					ws = bones[ i ].Node.world;
+					flat.set( i, ws.rot, ws.pos );
+				}
+
+				e.ProtoRig.update_bone_buffer();
+			}
+		}
+	}
+}
+
+const QUAT_Z90	= Array.from( new Quat().from_axis_angle( [0,0,1], 90 * Math.PI / 180 ) );
+const QUAT_Z180	= Array.from( new Quat().from_axis_angle( [0,0,1], Math.PI ) );
+const QUAT_X180	= Array.from( new Quat().from_axis_angle( [1,0,0], Math.PI ) );
+
+const QUAT_ZN90	= Array.from( new Quat().from_axis_angle( [0,0,1], -90 * Math.PI / 180 ) );
+const QUAT_X90	= Array.from( new Quat().from_axis_angle( [1,0,0], 90 * Math.PI / 180 ) );
+const QUAT_XN90	= Array.from( new Quat().from_axis_angle( [1,0,0], -90 * Math.PI / 180 ) );
+const QUAT_X45	= Array.from( new Quat().from_axis_angle( [1,0,0], 45 * Math.PI / 180 ) );
+const QUAT_XN45	= Array.from( new Quat().from_axis_angle( [1,0,0], -45 * Math.PI / 180 ) );
+const QUAT_XN20	= Array.from( new Quat().from_axis_angle( [1,0,0], -20 * Math.PI / 180 ) );
+const QUAT_XN10	= Array.from( new Quat().from_axis_angle( [1,0,0], -10 * Math.PI / 180 ) );
+const QUAT_X10	= Array.from( new Quat().from_axis_angle( [1,0,0], 10 * Math.PI / 180 ) );
+const QUAT_X20	= Array.from( new Quat().from_axis_angle( [1,0,0], 20 * Math.PI / 180 ) );
+const QUAT_NONE	= [0,0,0,1];
+
+const PROTO_MAN = [
+	{ "name":"Hips", "len":0.07, "idx":0, "p_idx":null,		"bone_pos":[0,0.750,0],		"bone_rot":[0,0,0,1], "top":[0.12,0.12,0.12,0.05], "bot":[0.12,0.12,0.12,-0.05], "rot":QUAT_Z90 },
+	{ "name":"Spine", "len":0.09, "idx":1, "p_idx":0,		"bone_pos":[0,0.07,0],	"bone_rot":[0,0,0,1], "top":[0.1,0.1,0.1,0.1], "bot":[0.1,0.1,0.1,0], "rot":QUAT_NONE },
+	{ "name":"Spine1", "len":0.1, "idx":2, "p_idx":1,		"bone_pos":[0,0.09,0],	"bone_rot":[0,0,0,1], "top":[0.14,0.14,0.14,0.1], "bot":[0.13,0.13,0.13,0], "rot":QUAT_NONE },
+	{ "name":"Spine2", "len":0.07, "idx":3, "p_idx":2,		"bone_pos":[0,0.1,0.0],	"bone_rot":[0,0,0,1], "top":[0.16,0.16,0.18,0.06], "bot":[0.16,0.16,0.18,-0.06], "rot":QUAT_Z90 },
+	{ "name":"Neck", "len":0.07, "idx":4, "p_idx":3,		"bone_pos":[0,0.07,0],	"bone_rot":[0,0,0,1], "top":[0.06,0.06,0.06,0.05], "bot":[0.07,0.07,0.07,0], "rot":QUAT_NONE },
+	{ "name":"Head", "len":0.1, "idx":5, "p_idx":4,			"bone_pos":[0,0.07,0.015],	"bone_rot":[0,0,0,1], "top":[0.12,0.11,0.12,0.045], "bot":[0.105,0.13,0.105,0], "rot":QUAT_NONE },
+
+	{ "name":"LeftShoulder", "len":0.075, "idx":6, "p_idx":3,	"bone_pos":[0.09,0.03,-0.002],	"bone_rot":QUAT_ZN90, "top":[0.11,0.11,0.12,0.02], "bot":[0.11,0.11,0.12,0], "rot":QUAT_NONE },
+	{ "name":"LeftArm", "len":0.19, "idx":7, "p_idx":6,	"bone_pos":[0,0.075,0],	"bone_rot":QUAT_NONE, "top":[0.060,0.060,0.060,0.15], "bot":[0.08,0.08,0.08,0], "rot":QUAT_NONE },
+	{ "name":"LeftForeArm", "len":0.170, "idx":8, "p_idx":7,	"bone_pos":[0,0.19,0],	"bone_rot":QUAT_NONE, "top":[0.05,0.05,0.05,0.145], "bot":[0.07,0.07,0.07,0], "rot":QUAT_NONE },
+	
+	{ "name":"LeftHand", "len":0.020, "idx":9, "p_idx":8,	"bone_pos":[0,0.170,0],	"bone_rot":QUAT_NONE, "top":[0.05,0.05,0.06,0.0], "bot":[0.05,0.05,0.06,0], "rot":QUAT_NONE },
+	{ "name":"LeftHandIndex1", "len":0.025, "idx":10, "p_idx":9,	"bone_pos":[-0.006,0.025,0.013],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+	{ "name":"LeftHandIndex2", "len":0.015, "idx":11, "p_idx":10,	"bone_pos":[0,0.025,0.0],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+
+	{ "name":"LeftHandMiddle1", "len":0.025, "idx":12, "p_idx":9,	"bone_pos":[-0.006,0.025,-0.013],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+	{ "name":"LeftHandMiddle1", "len":0.015, "idx":13, "p_idx":12,	"bone_pos":[0,0.025,0.0],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+
+	{ "name":"LeftHandThumb1", "len":0.02, "idx":14, "p_idx":9,	"bone_pos":[-0.006,0.005,0.03],	"bone_rot":QUAT_X90, "top":[0.02,0.02,0.02,0.004], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+	{ "name":"LeftHandThumb2", "len":0.010, "idx":15, "p_idx":14,	"bone_pos":[0,0.02,0.0],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.004], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+
+	{ "name":"LeftUpLeg", "len":0.35, "idx":16, "p_idx":0,	"bone_pos":[ 0.075, -0.01, 0 ],	"bone_rot":QUAT_Z180, "top":[0.08,0.08,0.08,0.30], "bot":[0.10,0.1,0.10,0], "rot":QUAT_NONE },
+	{ "name":"LeftUpLeg", "len":0.35, "idx":17, "p_idx":16,	"bone_pos":[ 0, 0.36, 0 ],	"bone_rot":QUAT_NONE, "top":[0.055,0.055,0.055,0.31], "bot":[0.08,0.08,0.08,0], "rot":QUAT_NONE },
+	{ "name":"LeftFoot", "len":0.11, "idx":18, "p_idx":17,	"bone_pos":[ 0, 0.35, 0 ],	"bone_rot":QUAT_X90, "top":[0.09,0.06,0.06,0.07], "bot":[0.09,0.06,0.06,0], "rot":QUAT_NONE },
+	{ "name":"LeftToeBase", "len":0.05, "idx":19, "p_idx":18,	"bone_pos":[ 0, 0.11, 0 ],	"bone_rot":QUAT_NONE, "top":[0.06,0.06,0.055,0.015], "bot":[0.06,0.06,0.055,-0.015], "rot":QUAT_Z90 },
+
+	{ "name":"RightUpLeg", "len":0.35, "idx":20, "p_idx":0,	"bone_pos":[ -0.075, -0.01, 0 ],	"bone_rot":QUAT_Z180, "top":[0.08,0.08,0.08,0.30], "bot":[0.10,0.1,0.10,0], "rot":QUAT_NONE },
+	{ "name":"RightUpLeg", "len":0.35, "idx":21, "p_idx":20,	"bone_pos":[ 0, 0.36, 0 ],	"bone_rot":QUAT_NONE, "top":[0.055,0.055,0.055,0.31], "bot":[0.08,0.08,0.08,0], "rot":QUAT_NONE },
+	{ "name":"RightFoot", "len":0.11, "idx":22, "p_idx":21,	"bone_pos":[ 0, 0.35, 0 ],	"bone_rot":QUAT_X90, "top":[0.09,0.06,0.06,0.07], "bot":[0.09,0.06,0.06,0], "rot":QUAT_NONE },
+	{ "name":"RightToeBase", "len":0.05, "idx":23, "p_idx":22,	"bone_pos":[ 0, 0.11, 0 ],	"bone_rot":QUAT_NONE, "top":[0.06,0.06,0.055,0.015], "bot":[0.06,0.06,0.055,-0.015], "rot":QUAT_Z90 },
+
+	{ "name":"RightShoulder", "len":0.075, "idx":24, "p_idx":3,	"bone_pos":[-0.09,0.03,-0.002],	"bone_rot":QUAT_Z90, "top":[0.11,0.11,0.12,0.02], "bot":[0.11,0.11,0.12,0], "rot":QUAT_NONE },
+	{ "name":"RightArm", "len":0.19, "idx":25, "p_idx":24,	"bone_pos":[0,0.075,0],	"bone_rot":QUAT_NONE, "top":[0.060,0.060,0.060,0.15], "bot":[0.08,0.08,0.08,0], "rot":QUAT_NONE },
+	{ "name":"RightForeArm", "len":0.170, "idx":26, "p_idx":25,	"bone_pos":[0,0.19,0],	"bone_rot":QUAT_NONE, "top":[0.05,0.05,0.05,0.145], "bot":[0.07,0.07,0.07,0], "rot":QUAT_NONE },
+	
+
+	{ "name":"RightHand", "len":0.020, "idx":27, "p_idx":26,	"bone_pos":[0,0.170,0],	"bone_rot":QUAT_NONE, "top":[0.05,0.05,0.06,0.0], "bot":[0.05,0.05,0.06,0], "rot":QUAT_NONE },
+	{ "name":"RightHandIndex1", "len":0.025, "idx":28, "p_idx":27,	"bone_pos":[-0.006,0.025,0.013],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+	{ "name":"RightHandIndex2", "len":0.015, "idx":29, "p_idx":28,	"bone_pos":[0,0.025,0.0],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+
+	{ "name":"RightHandMiddle1", "len":0.025, "idx":30, "p_idx":27,	"bone_pos":[-0.006,0.025,-0.013],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+	{ "name":"RightHandMiddle1", "len":0.015, "idx":31, "p_idx":30,	"bone_pos":[0,0.025,0.0],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.011], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+
+	{ "name":"RightHandThumb1", "len":0.02, "idx":32, "p_idx":27,	"bone_pos":[-0.006,0.005,0.03],	"bone_rot":QUAT_X90, "top":[0.02,0.02,0.02,0.004], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+	{ "name":"RightHandThumb2", "len":0.010, "idx":33, "p_idx":32,	"bone_pos":[0,0.02,0.0],	"bone_rot":QUAT_NONE, "top":[0.02,0.02,0.02,0.004], "bot":[0.022,0.022,0.022,0], "rot":QUAT_NONE },
+];
+
+const PROTO_DINO = [
+	{ "name":"Hips", "len":0.15, "idx":0, "p_idx":null,	"bone_pos":[0,0.5,0],			"bone_rot":QUAT_X90, "top":[0.45,0.45,0.45,0.05], "bot":[0.45,0.45,0.45,-0.05], "rot":QUAT_NONE },
+	{ "name":"Spine", "len":0.15, "idx":1, "p_idx":0,	"bone_pos":[0,0.15,-0.03],	"bone_rot":QUAT_XN10, "top":[0.33,0.33,0.33,0.1], "bot":[0.33,0.33,0.33,0], "rot":QUAT_NONE },
+	{ "name":"Spine1", "len":0.2, "idx":2, "p_idx":1,	"bone_pos":[0,0.15,-0.03],	"bone_rot":QUAT_XN10, "top":[0.30,0.30,0.30,0.1], "bot":[0.30,0.30,0.30,0], "rot":QUAT_NONE },
+	{ "name":"Neck", "len":0.2, "idx":3, "p_idx":2,		"bone_pos":[0,0.2,-0.04],	"bone_rot":QUAT_NONE, "top":[0.20,0.20,0.20,0.15], "bot":[0.20,0.20,0.20,0], "rot":QUAT_NONE },
+	{ "name":"Head", "len":0.1, "idx":4, "p_idx":3,		"bone_pos":[0,0.2,0.00],	"bone_rot":QUAT_X20, "top":[0.31,0.31,0.31,0.25], "bot":[0.34,0.34,0.34,0.1], "rot":QUAT_NONE },
+
+	{ "name":"LeftLeg1", "len":0.24, "idx":5, "p_idx":0, "bone_pos":[0.18,0,0],	"bone_rot":QUAT_X90, "top":[0.18,0.18,0.18,0.18], "bot":[0.22,0.22,0.22,0.05], "rot":QUAT_NONE },
+	{ "name":"LeftLeg2", "len":0.21, "idx":6, "p_idx":5, "bone_pos":[0,0.24,0],	"bone_rot":QUAT_NONE, "top":[0.10,0.10,0.10,0.19], "bot":[0.15,0.15,0.15,0.05], "rot":QUAT_NONE },
+	{ "name":"LeftLeg3", "len":0.19, "idx":7, "p_idx":6, "bone_pos":[0,0.21,0],	"bone_rot":QUAT_NONE, "top":[0.06,0.06,0.06,0.20], "bot":[0.08,0.08,0.08,0.05], "rot":QUAT_NONE },
+	{ "name":"LeftFoot", "len":0.1, "idx":8, "p_idx":7, "bone_pos":[0,0.21,0],	"bone_rot":QUAT_XN90, "top":[0.13,0.08,0.08,0.1], "bot":[0.13,0.08,0.08,0.02], "rot":QUAT_NONE },
+
+	{ "name":"LeftArm1", "len":0.22, "idx":9, "p_idx":2, "bone_pos":[0.07,0.08,0.1],	"bone_rot":QUAT_ZN90, "top":[0.06,0.06,0.06,0.18], "bot":[0.08,0.08,0.08,0.00], "rot":QUAT_NONE },
+	{ "name":"LeftArm2", "len":0.24, "idx":10, "p_idx":9, "bone_pos":[0,0.22,0],	"bone_rot":QUAT_NONE, "top":[0.04,0.04,0.04,0.18], "bot":[0.05,0.05,0.05,0.00], "rot":QUAT_NONE },
+
+	{ "name":"Tail1", "len":0.19, "idx":11, "p_idx":0,	"bone_pos":[0,-0.2,-0.05],	"bone_rot":QUAT_X180, "top":[0.25,0.15,0.25,0.12], "bot":[0.25,0.1,0.25,0], "rot":QUAT_NONE },
+	{ "name":"Tail2", "len":0.22, "idx":12, "p_idx":11,	"bone_pos":[0,0.19,0],	"bone_rot":QUAT_NONE, "top":[0.18,0.15,0.18,0.15], "bot":[0.21,0.1,0.21,0], "rot":QUAT_NONE },
+	{ "name":"Tail3", "len":0.22, "idx":13, "p_idx":12,	"bone_pos":[0,0.22,0],	"bone_rot":QUAT_NONE, "top":[0.12,0.1,0.12,0.15], "bot":[0.17,0.1,0.17,0], "rot":QUAT_NONE },
+	{ "name":"Tail4", "len":0.22, "idx":14, "p_idx":13,	"bone_pos":[0,0.22,0],	"bone_rot":QUAT_NONE, "top":[0.07,0.1,0.07,0.15], "bot":[0.11,0.1,0.11,0], "rot":QUAT_NONE },
+	{ "name":"Tail5", "len":0.22, "idx":15, "p_idx":14,	"bone_pos":[0,0.22,0],	"bone_rot":QUAT_NONE, "top":[0.03,0.1,0.03,0.15], "bot":[0.07,0.1,0.07,0], "rot":QUAT_NONE },
+
+	{ "name":"RightLeg1", "len":0.24, "idx":16, "p_idx":0, "bone_pos":[-0.18,0,0],	"bone_rot":QUAT_X90, "top":[0.18,0.18,0.18,0.18], "bot":[0.22,0.22,0.22,0.05], "rot":QUAT_NONE },
+	{ "name":"RightLeg2", "len":0.21, "idx":17, "p_idx":16, "bone_pos":[0,0.24,0],	"bone_rot":QUAT_NONE, "top":[0.10,0.10,0.10,0.19], "bot":[0.15,0.15,0.15,0.05], "rot":QUAT_NONE },
+	{ "name":"RightLeg3", "len":0.19, "idx":18, "p_idx":17, "bone_pos":[0,0.21,0],	"bone_rot":QUAT_NONE, "top":[0.06,0.06,0.06,0.20], "bot":[0.08,0.08,0.08,0.05], "rot":QUAT_NONE },
+	{ "name":"RightFoot", "len":0.1, "idx":19, "p_idx":18, "bone_pos":[0,0.21,0],	"bone_rot":QUAT_XN90, "top":[0.13,0.08,0.08,0.1], "bot":[0.13,0.08,0.08,0.02], "rot":QUAT_NONE },
+
+	{ "name":"RightArm1", "len":0.22, "idx":20, "p_idx":2, "bone_pos":[-0.07,0.08,0.1],	"bone_rot":QUAT_Z90, "top":[0.06,0.06,0.06,0.18], "bot":[0.08,0.08,0.08,0.00], "rot":QUAT_NONE },
+	{ "name":"RightArm2", "len":0.24, "idx":21, "p_idx":20, "bone_pos":[0,0.22,0],	"bone_rot":QUAT_NONE, "top":[0.04,0.04,0.04,0.18], "bot":[0.05,0.05,0.05,0.00], "rot":QUAT_NONE },
+];
+
+
+
+/*
+	
+- Scale the Domes by X and Z
+- Need to rotate
+- Translate the Domes away from center.
+
+Instance
+- WS Position
+- WS Rotation
+- WS Scale
+Interlaced Buffer (Dynamic) v4 v3 v3 
+
+
+- Vec3 xy scale, z move ( Scaling + Translation of Dome )
+- Capsule Rotation Quat
+Interlaced Buffer (Static) v4 v3 v3
+
+
+- Instead storing a Group ID, Use Vertex_index in shader, if idx < X ? Top : Bot
+
+
+bones	= [
+	{"name":"Hips","lvl":0,"len":0.07423185751087967,"idx":0,"p_idx":null,"pos":[0.001691931509412825,0.8518908023834229,0.04233919829130173],"rot":[0,0,0,1]},
+	{"name":"Spine","lvl":1,"len":0.08660374852911501,"idx":1,"p_idx":0,"pos":[0,0.07300597429275513,-0.013434894382953644],"rot":[-0.0908687561750412,0,0,0.9958629608154297]},
+	{"name":"Spine1","lvl":2,"len":0.09897592826648108,"idx":2,"p_idx":1,"pos":[-2.3283064365386963e-10,0.08660377562046051,-1.6763806343078613e-8],"rot":[8.940696716308594e-8,0,0,1]},
+	{"name":"Spine2","lvl":3,"len":0.11134745441543295,"idx":3,"p_idx":2,"pos":[-1.1641532182693481e-10,0.09897592663764954,7.450580596923828e-9],"rot":[-1.7136335372924805e-7,0,0,1]},
+	{"name":"Neck","lvl":4,"len":0.09018257802122544,"idx":4,"p_idx":3,"pos":[1.1641532182693481e-10,0.11134748160839081,2.60770320892334e-8],"rot":[0.09086886793375015,0,0,0.9958629608154297]},
+	{"name":"Head","lvl":5,"len":0.2,"idx":5,"p_idx":4,"pos":[1.1641532182693481e-10,0.08891844749450684,-0.015046834945678711],"rot":[-8.73254357713904e-9,0,0,1]},
+	{"name":"LeftShoulder","lvl":4,"len":0.12533710570802964,"idx":6,"p_idx":3,"pos":[0.06169901043176651,0.09800639748573303,-0.0023431330919265747],"rot":[0.5396683216094971,0.4524856507778168,-0.5605334043502808,0.4356802701950073]},
+	{"name":"LeftArm","lvl":5,"len":0.17420996543288508,"idx":7,"p_idx":6,"pos":[-2.561137080192566e-8,0.12533706426620483,-1.0710209608078003e-8],"rot":[-0.057084135711193085,-0.001414879341609776,0.024739207699894905,0.9980618953704834]},
+	{"name":"LeftForeArm","lvl":6,"len":0.22670181482183904,"idx":8,"p_idx":7,"pos":[4.260800778865814e-8,0.174209862947464,7.869675755500793e-8],"rot":[-0.07619540393352509,0.00150683440733701,-0.019718056544661522,0.9968968033790588]},
+	{"name":"LeftHand","lvl":7,"len":0.1,"idx":9,"p_idx":8,"pos":[-5.029141902923584e-8,0.22670170664787292,1.2014061212539673e-7],"rot":[-0.10912764817476273,0.0898929312825203,0.00004303800596971996,0.9899548292160034]},
+	{"name":"RightShoulder","lvl":4,"len":0.12533724035076096,"idx":10,"p_idx":3,"pos":[-0.06169900670647621,0.09804624319076538,-0.002559661865234375],"rot":[0.5385406017303467,-0.45344027876853943,0.5613337755203247,0.4350522458553314]},
+	{"name":"RightArm","lvl":5,"len":0.17422942452920026,"idx":11,"p_idx":10,"pos":[5.122274160385132e-9,0.12533719837665558,-8.195638656616211e-8],"rot":[-0.05638902261853218,0.0015993844717741013,-0.02830304577946663,0.9980063438415527]},
+	{"name":"RightForeArm","lvl":6,"len":0.22669271095994745,"idx":12,"p_idx":11,"pos":[3.259629011154175e-9,0.17422938346862793,1.126900315284729e-7],"rot":[-0.07646241784095764,-0.001603146200068295,0.020896486937999725,0.9968522191047668]},
+	{"name":"RightHand","lvl":7,"len":0.1,"idx":13,"p_idx":12,"pos":[1.862645149230957e-9,0.22669261693954468,8.707866072654724e-8],"rot":[-0.1098177433013916,-0.08273951709270477,0.0006666815024800599,0.990501880645752]},
+	{"name":"LeftUpLeg","lvl":1,"len":0.37693269240721733,"idx":14,"p_idx":0,"pos":[0.07827957719564438,-0.04049783945083618,-0.01180013082921505],"rot":[0.0012189809931442142,0.03373518958687782,-0.9987580180168152,0.03664567321538925]},
+	{"name":"LeftLeg","lvl":2,"len":0.3581824309934082,"idx":15,"p_idx":14,"pos":[2.5429471861571074e-9,0.37693268060684204,9.108589438255876e-10],"rot":[-0.013338188640773296,-0.000002298355411767261,0.000789112295024097,0.9999107718467712]},
+	{"name":"LeftFoot","lvl":3,"len":0.16265543018563247,"idx":16,"p_idx":15,"pos":[1.8335413187742233e-9,0.35818231105804443,3.346940502524376e-9],"rot":[0.5369540452957153,-0.06625143438577652,0.04235189035534859,0.8399389386177063]},
+	{"name":"LeftToeBase","lvl":4,"len":0.03,"idx":17,"p_idx":16,"pos":[2.240994945168495e-9,0.16265539824962616,2.8347130864858627e-8],"rot":[0.2538582384586334,-0.17659825086593628,0.04720042645931244,0.9498111605644226]},
+	{"name":"RightUpLeg","lvl":1,"len":0.37694170927111514,"idx":18,"p_idx":0,"pos":[-0.07827957719564438,-0.04049783945083618,-0.011591173708438873],"rot":[0.0012514338595792651,-0.03403257951140404,0.9987480044364929,0.03664257749915123]},
+	{"name":"RightLeg","lvl":2,"len":0.35844982446117296,"idx":19,"p_idx":18,"pos":[-9.489667718298733e-9,0.3769416809082031,-3.2159732654690742e-9],"rot":[-0.016968226060271263,0.00001146549857367063,-0.0007698459085077047,0.9998557567596436]},
+	{"name":"RightFoot","lvl":3,"len":0.16623513451785563,"idx":20,"p_idx":19,"pos":[-2.7066562324762344e-9,0.3584497272968292,3.754394128918648e-9],"rot":[0.5454418659210205,0.06389955431222916,-0.04175892844796181,0.8346652984619141]},
+	{"name":"RightToeBase","lvl":4,"len":0.03,"idx":21,"p_idx":20,"pos":[8.571078069508076e-9,0.16623513400554657,2.7474015951156616e-8],"rot":[0.24863985180854797,0.1860281527042389,-0.048723652958869934,0.9493144750595093]}
+];
+
+*/
+
+
+//#############################################################################
+</script><body>
+
+<script id="inline_shader" type="plain/text">
+<shader>{
+	"name"		: "ProtoRig",
+	"ubo"		: [ "UBOGlobal", "UBOModel", "UBOLighting" ],
+	"uniforms":[
+		{ "name":"uBaseColor", "type":"rgba" }
+	]
+}<\shader>
+	
+<materials>[
+	{ "name":"ProtoRig",	"uniforms":[
+		{ "name":"uBaseColor", "value": "ff7f7fff" }
+	], "options":{ "cullFace": true }}
+]<\materials>
+	
+<vertex>
+#version 300 es
+	layout(location=0)	in vec3 a_position;
+
+	layout(location=10)	in vec4 a_ins_rot;
+	layout(location=11)	in vec3 a_ins_pos;
+
+	layout(location=13)	in vec4 a_cfg_top;
+	layout(location=14)	in vec4 a_cfg_bot;
+	layout(location=15)	in vec4 a_cfg_rot;
+
+
+	uniform UBOGlobal{
+		mat4	projViewMatrix;
+		vec3	cameraPos;
+		float	globalTime;
+		vec2	screenSize;
+		float	deltaTime;
+	};
+
+	uniform UBOModel{
+		mat4 	modelMatrix;
+		mat3	normalMatrix;
+	};
+
+	out vec3 v_worldPos;
+	out vec3 v_cameraPos;
+
+	const int DIV_IDX = 25; // LT = TOP DOME
+
+	vec3 quat_mul_vec3( vec4 q, vec3 v ){ return v + (2.0 * cross(q.xyz, cross(q.xyz, v) + (q.w * v))); }
+
+	void main(void){
+		vec3 pos = a_position;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Capsule Configuration
+		if( gl_VertexID < DIV_IDX ){
+			pos.xyz	*= a_cfg_top.xyz;
+			pos.y	+= a_cfg_top.w;
+		}else{
+			pos.xyz	*= a_cfg_bot.xyz;
+			pos.y	+= a_cfg_bot.w;
+		}
+
+		pos = quat_mul_vec3( a_cfg_rot, pos );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Transform Instances
+		pos 		= quat_mul_vec3( a_ins_rot, pos );
+		pos 		+= a_ins_pos;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec4 wpos	= modelMatrix * vec4( pos, 1.0 );
+		v_worldPos	= wpos.xyz;
+		v_cameraPos	= cameraPos;
+
+		gl_Position = projViewMatrix * wpos;
+	}
+<\vertex>
+
+<fragment>
+	#version 300 es
+	precision mediump float;
+
+	uniform UBOLighting{
+		vec3 lightPosition;
+		vec3 lightDirection;
+		vec3 lightColor;
+	};
+
+	uniform vec4 uBaseColor;
+
+	in vec3 v_cameraPos;
+	in vec3 v_worldPos;
+
+	out vec4 oFragColor;
+
+	//const vec3 uBaseColor			= vec3(1.0, 0.498, 0.498); //ff 7f 7f
+	//const vec3 uBaseColor			= vec3(0.95, 0.95, 0.95); //ff 7f 7f
+	const float uAmbientStrength	= 0.5;
+	const float uDiffuseStrength	= 0.5;
+	const float uSpecularStrength	= 0.2f;	//0.15
+	const float uSpecularShininess	= 1.0f; //256.0
+
+	vec4 phongLight(vec3 norm, vec3 vertPos, vec3 camPos){
+		//Ambient Lighting
+		vec3 cAmbient		= lightColor * uAmbientStrength;
+		
+		//Diffuse Lighting
+		vec3 lightVector	= normalize(lightPosition - vertPos);	//light direction based on pixel world position
+		float diffuseAngle	= max( dot(norm,lightVector) ,0.0);		//Angle between Light Direction and Pixel Direction (1==90d)
+		vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
+
+		//Specular Lighting
+		vec3 camVector		= normalize(camPos - vertPos);		//Camera Direction based on pixel world position
+		vec3 reflectVector	= reflect(-lightVector, norm);		//Reflective direction of line from pixel direction as pivot.
+		float specular		= pow( max( dot(reflectVector,camVector) ,0.0), uSpecularShininess ); //Angle of reflected light and camera eye
+		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
+
+		//Final Color
+		return vec4(uBaseColor.rgb * (cAmbient + cDiffuse + cSpecular), uBaseColor.a);
+	}
+
+	vec3 lowPolyNormal(vec3 vertPos){  //Calc the Normal of the Rasterizing Pixel
+		return normalize( cross( dFdx(vertPos), dFdy(vertPos) ) );
+	}
+
+	void main(void){
+		oFragColor = phongLight( lowPolyNormal(v_worldPos) , v_worldPos, v_cameraPos);
+		//oFragColor = vec4(0.0, 0.0, 0.0, 1.0);
+	}
+<\fragment>
+</script>
+
+</body></html>

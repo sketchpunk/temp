@@ -69,6 +69,7 @@ let App = {
 	builder	: function( use_debug=false, use_scene=true ){ return new Builder( use_debug, use_scene ); },
 	get_e	: ( idx )=>{ return App.ecs.entities[ idx ]; },
 	
+	$		: ( name, com_ary=null )=>{ return App.ecs.entity( name, com_ary ); },
 	$Draw	: ( name, mesh, mat, mode=Mesh.TRI )=>{
 		let e = App.ecs.entity( name, ["Node", "Draw"] );
 		if( mesh && mat ) e.Draw.add( mesh, mat, mode )

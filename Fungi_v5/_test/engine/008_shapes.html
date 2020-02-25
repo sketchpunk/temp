@@ -1,0 +1,25 @@
+<!DOCTYPE html><script type="module">
+import App from "../../fungi/App.js";
+
+//#####################################################
+App.builder( false, false )
+	//.load_shaders( "./shaders/BaseColor.js" )
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let Shape = await import( "../../fungi/geo/Capsule.js" ).then( m=>m.default );
+
+	let mat = App.ShaderBuilder({ base_color : "#ff0000ff", cull_face:false });
+	//let mat = App.new_mat( "BaseColor", { color:0xff0000 } );
+
+	let e = Shape( "cap", mat );
+
+	return true;
+}
+
+</script><page-layout></page-layout>

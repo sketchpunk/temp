@@ -62,6 +62,7 @@ class Renderer{
 			if( this.shader !== s ){
 				this.shader = s;
 				gl.ctx.useProgram( s.program );
+				//console.log("LOAD SHADER", s );
 			}
 			return this;
 		}
