@@ -1,0 +1,183 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE}	from "../../fungi.3js/App.js";
+import Vec3			from "../../fungi/maths/Vec3.js";
+import Spline		from "../../fungi/maths/Spline.js";
+
+//#####################################################
+App.builder( true )
+	.set_camera( 0, 20, 4.0, 0, 0.35, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+let gSpline;
+
+//#####################################################
+async function init(){
+
+	gSpline = Spline.from_hermite( true );
+	//gSpline = gSpline = Spline.from_bezier_cubic( true );
+
+	gSpline
+		.add( [-1.5,1,-1.5],	{ tension:0, bias:0 } )
+		.add( [-0.8,0.2,1.2],	{ tension:0, bias:0 } )
+		.add( [1.4,0.5,1],		{ tension:0, bias:0 } )
+		.add( [0.5,0,-0.5],		{ tension:0, bias:0 } );
+
+	//gSpline.at( 0.51 );
+
+	out_pnts( gSpline );
+	out_path( gSpline, 30 );
+
+	//let map = gSpline.gen_map();
+	//out_map( gSpline, map );
+
+	new SplineMap( gSpline );
+
+	return true;
+}
+
+function out_pnts( s ){
+	for( let p of s.points ){
+		App.Debug.pnt( p.pos, 0x00ffff, 2, 15 );
+	}
+}
+
+function out_path( s, samp=10 ){
+	let t, v0 = new Vec3(), v1 = new Vec3();
+
+	s.at( 0, v0 );
+	App.Debug.pnt( v0, 0xff0000, 2, 5 );
+
+	for( let i=1; i <= samp; i++ ){
+		t = i / samp;
+		s.at( t, v1 );
+
+
+		App.Debug.ln( v0, v1 );
+		//App.Debug.pnt( v1, 0xff0000, 2, 5 );
+
+		v0.copy( v1 );
+	}
+}
+
+function out_map( s, m, samp=10 ){
+	let t,tt, v = new Vec3(), d = new Vec3(), dd = new Vec3();
+
+	for( let i=0; i <= samp; i++ ){
+		t = i / samp;
+		tt = m.at( t );
+		
+		s.at( tt, v );
+		s.dxdy( tt, d ).norm();
+
+		App.Debug
+			.pnt( v, 0x00ff00, 1, 5 )
+			.ln( v, dd.from_scale( d, 0.3 ).add( v ), 0x00ff00 );
+	}
+}
+
+class SplineMap{
+	constructor( s=null, samp_cnt=5 ){
+		if( s ) this.from_spine( s, samp_cnt );
+	}
+
+	from_spine( s, samp_cnt=5 ){
+		// HOW Many Splines are we dealing with?
+		let ccnt = s.curve_count();
+		console.log( "count", ccnt );
+
+		let max = samp_cnt - 1;
+		let v0	= new Vec3(),
+			v1	= new Vec3();
+
+		let i, j, t;
+		for( i=0; i < ccnt; i++ ){
+			console.log( "- CURVE", i );
+			
+			for( j=0; j <= max; j++ ){
+				t = j / max;
+
+				console.log( "--- Sample %i Time %f", j, t );
+				s.at_curve( i, t, v1 );
+
+				App.Debug.pnt( v1, 0xff00ff, 1, 8 );
+
+				//.................................
+				v0.copy( v1 );
+			}
+
+			if( i >= 0 ) break;
+		}
+	}
+}
+
+class SplineXMap{
+	arc_len		= 0;	// Total Length of the Spline
+	samp_cnt 	= 0;	// Total Samples
+	len_ary 	= null;	// Total length at each sample 
+	inc_ary 	= null;	// Length Traveled at each samples
+	time_ary 	= null; // Curve T Value at each samples
+
+	constructor( s=null, samp_cnt=20 ){
+		if( s ) this.from_spline( s, samp_cnt );
+	}
+
+	from_splinex( s, samp_cnt=20 ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.len_ary 	= new Array( samp_cnt );
+		this.inc_ary	= new Array( samp_cnt );
+		this.time_ary	= new Array( samp_cnt );
+		this.samp_cnt 	= samp_cnt;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let v0	= new Vec3(),
+			v1	= new Vec3(),
+			max	= samp_cnt - 1,
+			len, t;
+
+		s.at( 0, v0 );
+		this.len_ary[ 0 ]	= 0;
+		this.inc_ary[ 0 ]	= 0;
+		this.time_ary[ 0 ]	= 0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( let i=1; i <= max; i++ ){
+			t = i / max;
+			s.at( t, v1 );
+
+			//.................................
+			len 				= Vec3.len( v0, v1 );
+			this.arc_len		+= len;					// Total Length
+			this.len_ary[ i ]	= this.arc_len;			// Current Total Length
+			this.inc_ary[ i ]	= len;					// Length between Current+Previous Point
+			this.time_ary[ i ]	= t;					// Time Curve Step
+
+			//.................................
+			v0.copy( v1 );
+		}
+
+		return this;
+	}
+
+	at( t ){
+		if( t >= 1 ) return 1;
+		if( t <= 0 ) return 0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let i, t_len = this.arc_len * t;
+
+		for( i=this.samp_cnt-1; i >= 0; i-- ){	// Search for first length SMALLER then the searching one
+			if( this.len_ary[ i ] < t_len ){				
+				let tt = ( t_len - this.len_ary[ i ] ) / this.inc_ary[ i+1 ]; 	// Normalize the Search Length   ( x-a / b-a )
+				return this.time_ary[ i ] * (1-tt) + this.time_ary[ i+1 ] * tt;	// Interpolate the Curve Time between two points
+			}
+		}
+
+		return 0;
+	}
+}
+
+
+
+</script><page-layout></page-layout>

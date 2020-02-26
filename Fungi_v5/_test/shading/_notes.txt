@@ -2,3 +2,11 @@ https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading
 https://www.scratchapixel.com/lessons/3d-basic-rendering/phong-shader-BRDF
 
 https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
+
+
+https://alain.xyz/blog/advances-in-material-models
+
+https://gamedev.stackexchange.com/questions/129139/how-do-i-calculate-uv-space-from-world-space-in-the-fragment-shader
+
+// PERFECT, WORLD SPACE TEXTURES
+https://forum.unity.com/threads/mapping-texture-to-world-position-instead-of-object-position.94766/

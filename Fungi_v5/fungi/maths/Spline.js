@@ -44,6 +44,17 @@ class Spline{
 		return out;
 	}
 
+	// Get a position of a specific curve
+	at_curve( i, t, out ){
+		let info = this.curve.spline_get( i, this.points.length, this.is_loop );
+		info.t = t;
+
+		out = out || new Vec3();
+		this.curve.at( info, this.points, out );
+
+		return out;
+	}
+
 	dxdy( t, out ){
 		out = out || new Vec3();
 
@@ -53,8 +64,9 @@ class Spline{
 		return out;
     }
     
-    gen_map( samp_cnt=20 ){ return new SplineLenMap( this, samp_cnt ); }
-
+	gen_map( samp_cnt=20 ){ return new SplineLenMap( this, samp_cnt ); }
+	
+	curve_count(){ return this.curve.spline_count( this.points.length, this.is_loop ); }
 
     static debug_points( d, s ){ for( let p of s.points ) d.pnt( p.pos, 0x00ffff, 2, 15 ); return this; }
     static debug_path( d, s, samp=10 ){
@@ -136,6 +148,14 @@ class Hermite{
 		out[1] = a0 * b[1] + a1 * ( (b[1]-a[1]) * tb_p  + (c[1]-b[1]) * tb_n ) + a2 * ( (c[1]-b[1]) * tb_p  + (d[1]-c[1]) * tb_n ) + a3 * c[1];
 		out[2] = a0 * b[2] + a1 * ( (b[2]-a[2]) * tb_p  + (c[2]-b[2]) * tb_n ) + a2 * ( (c[2]-b[2]) * tb_p  + (d[2]-c[2]) * tb_n ) + a3 * c[2];
 		return out;
+	}
+
+	static spline_count( point_cnt, is_loop=false ){ return ( is_loop )? point_cnt : point_cnt - 3; }
+
+	static spline_get( i, point_cnt, is_loop=false ){
+		return ( is_loop )?
+			{ a:mod( i-1, point_cnt ), b:i, c:mod( i+1, point_cnt ), d:mod( i+2, point_cnt ) } :
+			{ a:i, b:i+1, c:i+2, d:i+3 };
 	}
 
 	static spline_t( t, point_cnt, is_loop=false ){

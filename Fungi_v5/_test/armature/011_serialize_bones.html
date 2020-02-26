@@ -1,0 +1,40 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrPromise		from "../../fungi/lib/XhrPromise.js";
+import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder()
+	//.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js", 
+	.use_armature()
+	.set_camera( 40, 30, 2.5, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+async function init(){
+	let dl = await XhrPromise.get( 
+		"../../_tmp/maximo_bones.gltf", "json", 
+		"../../_tmp/maximo_bones.bin", "arraybuffer",
+	);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Abstract Loading
+	let e = GltfUtil.get_bone_view( "test", dl[0], dl[1] );
+	e.info.active = false;
+
+	let json = e.Armature.serialize_bones();
+	
+	let buf = "[\n";
+	for( let i=0; i < json.length; i++ ){
+		if( i != 0 ) buf += ",\n";
+		buf += JSON.stringify( json[ i ] );
+	}
+	buf += "\n]";
+
+	console.log( buf );
+
+	return true;
+}
+</script><page-layout></page-layout>
