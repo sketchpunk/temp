@@ -142,7 +142,7 @@ function wireframe_mesh2( itm, x=0, y=0, z=0, ry=0 ){
 
 function path_object( ary ){
 	let spline 	= Spline.from_hermite( true ).load_flat_array( ary );
-	let map 	= spline.gen_map( 30 );
+	let map 	= spline.gen_map( 5 );
 	return {
 		spline, map,
 		pos : new Vec3(),
