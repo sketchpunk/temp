@@ -1,0 +1,744 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import IKTarget 		from "../../fungi.armature/IKTarget.js";
+
+import Animation		from "../../fungi/lib/Animation.js";
+import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
+
+import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, {Gltf}	from "../../fungi/lib/GltfUtil.js";
+import IKRig			from "../../fungi.armature/IKRig.js";
+import ProtoRig			from "../../fungi.armature/ProtoRig.js";
+
+//#####################################################
+
+App.builder( true, true )
+	.use_armature()
+	.init_mod( "../fungi.armature/BoneSpring.js" )
+	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
+	.set_camera( 0, 10, 3.0, 0.0, 0.9, 0 )
+	.add( init )
+	.render_loop( on_draw )
+	//.render_on_mouse()
+	.build();
+
+//#####################################################
+
+let gAnimate, gEntitySrc, gModelA, gModelB, gIKPose;
+function on_draw( dt, ss ){
+	gAnimate( dt * 0.9 ); // * 0.1
+}
+
+async function init(){
+	let dl = await XhrQueue
+		.url( "../../_tmp/" )
+		//.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
+		.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
+		.then();
+
+	ProtoRig.init();
+
+	if( dl.src ) gAnimate = load_src( dl.src.json, dl.src.bin );
+	if( dl.veg ) load_mesh_a( dl.veg.json, dl.veg.bin );
+	if( dl.rex ) load_mesh_b( dl.rex.json, dl.rex.bin );
+
+	let e = ProtoRig.$( "rig", MAXIMO, true );
+	e.add_com( "IKRig" ).init( null, false );
+	gModelA = e;
+	e.Node.set_pos( 1, 0, 0 );
+
+	gIKPose = new IKPose();
+
+	//gAnimate( 0.70 );
+	//gAnimate( 0.6 );
+	gAnimate( 1.1 );
+
+	return true;
+}
+
+//#####################################################
+
+function load_src( json, bin ){
+	/*
+	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
+	*/
+	let e		= GltfUtil.get_bone_view( "src", json, bin );
+	
+	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
+	let pm		= new PoseAnimator();
+	let rig 	= e.add_com( "IKRig" )
+		.init( null, true, IKRig.ARM_MIXAMO )
+		.recompute_from_tpose(); // Mesh requires a few bits to be recomputed because of Mixamo Scaling
+
+	gEntitySrc  = e;
+
+	return ( dt )=>{
+		pm.tick( dt ).update( anim, rig.pose );
+		rig.apply_pose();
+
+		compute_ik_pose( gEntitySrc, gIKPose );
+		
+		if( gModelA ){
+			gIKPose.apply_rig( gModelA.IKRig );
+			gModelA.IKRig.apply_pose();
+		}
+
+		if( gModelB ){
+			gIKPose.apply_rig( gModelB.IKRig );
+			gModelB.IKRig.apply_pose();
+		}
+
+	}
+}
+
+function load_mesh_a( json, bin ){
+
+	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
+	/*
+	let e		= GltfUtil.get_bone_view( "target_a", json, bin );
+	*/
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
+	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+	tpose.apply();
+
+	rig.points.head.idx = rig.points.neck.idx; // Lil hack cause Head Isn't Skinned Well.
+	e.Node.set_pos( 1.0, 0, 0 );
+	gModelA = e;
+}
+
+function load_mesh_b( json, bin ){	
+	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
+	let e		= GltfUtil.get_debug_view( "target_b", json, bin, mat );
+	/*
+	let e		= GltfUtil.get_bone_view( "target_b", json, bin );
+	*/
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
+	let rig 	= e
+		.add_com( "IKRig" )
+		.init( tpose, false, 0 )
+
+		.add_point( "hip", "hip" )
+		.add_point( "head", "face_joint" )
+		.add_point( "foot_l", "LeftFoot" )
+		.add_point( "foot_r", "RightFoot" )
+
+		.add_point( "wing_l", "left_wing" )
+		.add_point( "wing_r", "right_wing" )
+
+		.add_chain( "leg_r", [ "RightUpLeg", "RightKnee", "RightShin" ], "RightFoot", "three_bone" ) //"z", 
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftKnee", "LeftShin" ], "LeftFoot", "three_bone" ) // "z", 
+		.add_chain( "spine", [ "Spine", "Spine1" ] )
+		.add_chain( "tail", ["tail_1","tail_2","tail_3","tail_4","tail_5","tail_6","tail_7"] )
+		.set_leg_lmt( null, -0.1 )
+	;
+
+	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+
+	tpose.apply();
+
+	// Add some Spring Movement to specific bones
+	e.add_com( "BoneSpring" )
+		.add( rig.get_chain_indices( "tail" ), 2.9, 0.9, -0.1 )
+		.add( rig.points.wing_l.idx, 5.0, 0.9 )
+		.add( rig.points.wing_r.idx, 5.0, 0.9 );
+
+	e.Node.set_pos( -1.0, 0, 0 );
+	gModelB = e;
+}
+
+//#####################################################
+
+import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
+
+class IKPose{
+	constructor(){
+		this.target = new IKTarget();
+
+		this.hip = {
+			bind_height	: 0, // Use to help Scale movement.
+			pos_dif 	: new Vec3(),
+			dir			: new Vec3(),
+			twist		: 0,
+		};
+
+		this.spine	= [
+			{ dir_up: new Vec3(), dir_fwd: new Vec3() },
+			{ dir_up: new Vec3(), dir_fwd: new Vec3() },
+		];
+
+		this.foot_l	= { dir:new Vec3(), twist:0 };
+		this.foot_r	= { dir:new Vec3(), twist:0 };
+		this.head	= { dir:new Vec3(), twist:0 };
+
+		this.leg_l = { len_scale:0,	dir:new Vec3(),	joint_dir:new Vec3() };
+		this.leg_r = { len_scale:0,	dir:new Vec3(), joint_dir:new Vec3() };
+		this.arm_l = { len_scale:0,	dir:new Vec3(),	joint_dir:new Vec3() };
+		this.arm_r = { len_scale:0,	dir:new Vec3(), joint_dir:new Vec3() };
+	}
+
+	////////////////////////////////////////////////////////////////////
+	// 
+	////////////////////////////////////////////////////////////////////
+		set_hip( dir=null, twist=null, pos=null, bind_h=null ){
+			if( dir )			this.hip.dir.copy( dir );
+			if( pos ) 			this.hip.pos_dif.copy( pos );
+			if( twist != null )	this.hip.twist			= twist;
+			if( bind_h != null)	this.hip.bind_height	= bind_h;
+			return this;
+		}
+
+	////////////////////////////////////////////////////////////////////
+	// 
+	////////////////////////////////////////////////////////////////////
+		apply_rig( rig ){
+			this.apply_hip( rig );
+			
+			this.apply_limb( rig, rig.chains.leg_l, this.leg_l, true );
+			this.apply_limb( rig, rig.chains.leg_r, this.leg_r, true );
+			
+			this.apply_look_twist( rig, rig.points.foot_l.idx, this.foot_l );
+			this.apply_look_twist( rig, rig.points.foot_r.idx, this.foot_r );
+			
+			this.apply_spine( rig, rig.chains.spine, this.spine );
+			
+			if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
+			if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
+
+			this.apply_look_twist( rig, rig.points.head.idx, this.head );
+		}
+
+		apply_hip( rig ){
+			let b_info	= rig.points.hip,							// Bone Info
+				tb 		= rig.tpose.bones[ b_info.idx ],			// TPose Bone (Bind Pose info)
+				pb		= rig.pose.bones[ b_info.idx ],				// Pose Bone
+				q 		= new Quat(),
+				p 		= new Vec3();
+			/*
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// ROTATION
+			q	.from_unit_vecs( Vec3.FORWARD, this.hip.dir )		// Compute Swing Rotation, TODO, Need Bone's actual Forward Direction if different
+				.mul( tb.world.rot )								// Add World Space Bind Pose of the bone
+				.pmul_axis_angle( this.hip.dir, this.hip.twist );	// Add Twist, using direction as rotation axis
+
+			if( tb.p_idx != null ){									// To Local Space
+				q.pmul_invert( rig.tpose.bones[ tb.p_idx ].world.rot );
+			}
+			*/
+			this.apply_look_twist( rig, rig.points.hip.idx, this.hip, true );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// TRANSLATION
+			let h_scl = this.hip.bind_height / tb.world.pos.y;		// Create Scale value from Src's Hip Height and Target's Hip Height
+			
+			p	.from_scale( this.hip.pos_dif, h_scl )				// Scale the Translation of Source Animation
+				.add( tb.world.pos );								// Apply translation to Hip's Bind Position
+
+			p[0] = tb.world.pos[0];
+			p[2] = tb.world.pos[2];
+
+			rig.pose.set_bone( b_info.idx, null, p );					// Save Rotation/Translation back to the pose.
+		}
+
+		apply_limb( rig, chain, limb, use_limit=false ){
+			// Parent and Chain Start World Transform
+			let pt = new Transform(),	
+				ct = new Transform();
+			rig.pose.get_parent_world( chain.first(), pt, ct );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// How much of the Chain length to use to calc End Effector
+			let len;
+			if( use_limit ) len = ( rig.leg_len_lmt || chain.len );
+			else 			len = chain.len;
+
+			len *= limb.len_scale;
+			this.target.from_pos_dir( ct.pos, limb.dir, limb.joint_dir, len );	// Setup IK Target
+			
+			//this.floor_ik_limit( 0.02 );
+
+			let solver = chain.ik_solver || "limb";
+			this.target[ solver ]( chain, rig.tpose, rig.pose, pt );
+		}
+
+		floor_ik_limit( y_lmt ){
+			if( this.target.end_pos.y >= y_lmt ) return;
+
+			let a = this.target.start_pos,
+				b = this.target.end_pos,
+				s = (y_lmt - a.y) / (b.y - a.y); // Normalize Limit Value
+
+			this.target.end_pos.set( (b.x-a.x)*s+a.x, y_lmt, (b.z-a.z)*s+a.z );
+
+			this.target.len_sqr		= Vec3.len_sqr( this.target.start_pos, this.target.end_pos );
+			this.target.len			= Math.sqrt( this.target.len_sqr );
+		}
+
+		apply_look_twist( rig, b_idx, ik, do_twist=false ){
+			let tb	= rig.tpose.bones[ b_idx ],
+				pb	= rig.pose.bones[ b_idx ],
+				q	= new Quat(),
+				v	= new Vec3(),
+				pt	= new Transform(),
+				ct	= new Transform();
+
+			rig.pose.get_parent_world( b_idx, pt );	// Get Parent Bone's World Space Transform
+			ct.from_add( pt, tb.local );			// Add Bone's Bind Local Space
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Inverting the BIND World Space rotation, can then transform
+			// a vector that can be recreated in the right orientation from
+			// the animated bone. In this case, I want to use WS Forward as my Main Vector
+			// For most of the bones I'll use with this function, WS FWD does the job.
+			q.from_invert( tb.world.rot );
+			let fwd_alt = Vec3.transform_quat( Vec3.FORWARD, q ); 
+
+			v.from_quat( ct.rot, fwd_alt );	// Re create FWD direction based on current animated pose
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			q.from_unit_vecs( v, ik.dir )			// Compute Swing Rotation
+			q.mul( ct.rot );						// Add World Space Rotation
+			//if( do_twist ) q.pmul_axis_angle( ik.dir, ik.twist );	// Add Twist, using direction as rotation axis\
+			q.pmul_axis_angle( ik.dir, ik.twist );	// Add Twist, using direction as rotation axis
+			q.pmul_invert( pt.rot );				// To Local Space
+
+			rig.pose.set_bone( b_idx, q );		
+		}
+
+		apply_spine( rig, chain, ik ){
+			let cnt		= chain.cnt - 1;
+			let t_fwd	= new Vec3();
+			let t_up	= new Vec3();
+			let q		= new Quat();
+			let t, idx, tb, pb;
+
+			//this.spine	= [
+			//{ dir: new Vec3(), twist:0, dir_f: new Vec3() },
+			//{ dir: new Vec3(), twist:0, dir_f: new Vec3() },
+			//];
+
+			let pt	= new Transform(),
+				ct	= new Transform();
+			rig.pose.get_parent_world( chain.first(), pt );	// Get Parent Bone's World Space Transform
+
+			//let dpos	= new Vec3();
+			let alt_fwd	= new Vec3();
+			let alt_up	= new Vec3();
+			let sw_fwd	= new Vec3();
+			let sw_up	= new Vec3();
+			let sw_lft	= new Vec3();
+			let twist;
+
+			for( let i=0; i <= cnt; i++ ){
+				idx		= chain.bones[ i ].idx;
+				tb		= rig.tpose.bones[ idx ];
+				pb		= rig.pose.bones[ idx ];
+				t		= i / cnt ;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Compute the Target Directions
+				t_fwd.from_lerp( ik[0].dir_fwd, ik[1].dir_fwd, t );
+				t_up.from_lerp( ik[0].dir_up, ik[1].dir_up, t );
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				ct.from_add( pt, tb.local );				// Add Local to get WS in pose
+				q.from_invert( tb.world.rot );				// Invert of TPose World
+				
+				alt_fwd.from_quat( q, Vec3.FORWARD );		// Alternative Fwd
+				alt_up.from_quat( q, Vec3.UP );				// Alternative Fwd
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				//dpos.from_add( ct.pos, [1,0.0,0] );
+				//App.Debug.ln( dpos, Vec3.add( dpos, d_up ), "orange" );
+				//App.Debug.ln( dpos, Vec3.add( dpos, sw_up ), "yellow" );
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Swing & Twist
+				sw_up.from_quat( ct.rot, alt_up );			// See true WS up
+				q.from_unit_vecs( sw_up, t_up );			// Compute Swing Rotation
+				q.mul( ct.rot );							// Add World Space Rotation
+			
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				sw_fwd.from_quat( q, alt_fwd );				// See true WS Forward
+				twist = Vec3.angle( sw_fwd, t_fwd );		// Swing+Pose have same Fwd, Use Angle between both UPs for twist
+
+				if( twist >= 0.001 ){ 
+					// Swing FWD and Pose FWD Should be the same in ws, So no need to calc it,
+					// So using Pose Fwd and Swing up to get Swing left
+					// Is the Angle going to be Negative?, use Swing Left to determine if 
+					// its in the left or right side of UP
+					sw_lft.from_cross( sw_up, sw_fwd ).norm();
+
+					if( Vec3.dot( sw_lft, t_fwd ) < 0 ) twist = -twist;
+					q.pmul_axis_angle( t_up, twist );
+				}
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				q.pmul_invert( pt.rot );		// To Local Space
+				rig.pose.set_bone( idx, q );
+
+				pt.add( q, tb.local.pos, tb.local.scl );
+			}
+		}
+}
+
+
+function compute_ik_pose( e, ik_pose ){
+	let rig = e.IKRig;
+
+	rig.pose.update_world();
+	App.Debug.reset();
+
+	//compute_hip_QUAT( rig, ik_pose );
+	compute_hip_VEC( rig, ik_pose );
+
+	compute_limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
+	compute_limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
+
+	compute_look_twist( rig, rig.points.foot_l.idx, ik_pose.foot_l );
+	compute_look_twist( rig, rig.points.foot_r.idx, ik_pose.foot_r );
+
+	compute_spine( rig, rig.chains.spine, ik_pose );
+
+	compute_limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
+	compute_limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
+
+	compute_look_twist( rig, rig.points.head.idx, ik_pose.head, false );
+
+	visualize( rig, ik_pose );
+}
+
+function compute_hip_QUAT( rig, ik_pose ){
+	let b_info	= rig.points.hip,						// Bone Info
+		pb		= rig.pose.bones[ b_info.idx ],			// Hip Pose Bone
+		tb		= rig.tpose.bones[ b_info.idx ],		// Hip TPose Bone
+		a_axis 	= new Axis().from_quat( pb.world.rot ),	// Animated Axis from Quaternion
+		t_axis 	= new Axis().from_quat( tb.world.rot ),	// TPose (Bind) Axis
+		q		= new Quat();
+
+	// Create Swing rotation between the Bind+Animated Forward Direction
+	// Rotate the TPose Rotation, this moves Bind forward to match the animated Forward
+	// While Keeping UP and Left where it would be without any Twisting motion.
+	q	.from_unit_vecs( t_axis.z, a_axis.z )			
+		.mul( tb.world.rot );							
+
+	let s_axis 	= new Axis().from_quat( q ), 						// Swing Axis 
+		sign	= ( Vec3.dot( s_axis.x, a_axis.y ) >= 0 )? -1:1,	// Is the Angle going to be Negative?, use Swing Left to determine
+		twist	= Vec3.angle( s_axis.y, a_axis.y ) * sign,			// Get Angle Between TPose Swing UP and Animated UP
+		pos_dif = Vec3.sub( pb.world.pos, tb.world.pos );			// How much translation from bind pose has the animated hip gone.
+
+	// Set all the required info needed to perform some IK on the target Hip Bone
+	ik_pose.set_hip( a_axis.z, twist, pos_dif, tb.world.pos.y );
+}
+
+function compute_hip_VEC( rig, ik_pose ){
+	let b_info	= rig.points.hip,										// Bone Info
+		pb 		= rig.pose.bones[ b_info.idx ],							// Hip Pose Bone
+		tb		= rig.tpose.bones[ b_info.idx ],						// Hip TPose Bone
+		
+		t_up 	= Vec3.transform_quat( Vec3.UP, tb.world.rot ),			// TPose Up
+		a_fwd 	= Vec3.transform_quat( Vec3.FORWARD, pb.world.rot ),	// Animated Fwd
+		a_up 	= Vec3.transform_quat( Vec3.UP, pb.world.rot ),			// Animated Up
+
+		s_lft 	= Vec3.cross( t_up, a_fwd ).norm(),						// Swing Left
+		s_up 	= Vec3.cross( a_fwd, s_lft ).norm(), 					// Swing Up
+		sign	= ( Vec3.dot( s_lft, a_up ) < 0 )? 1:-1,				// Is the Angle going to be Negative?, use Swing Left to determine
+		twist 	= Vec3.angle( s_up, a_up ) * sign,						// Get Angle Between TPose Swing UP and Animated UP
+		pos_dif	= Vec3.sub( pb.world.pos, tb.world.pos );				// How much translation from bind pose has the animated hip gone.
+
+	/*
+	App.Debug.pnt( pb.world.pos, "orange" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_fwd, 0.5 ).add( pb.world.pos ), "orange" );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_up, 0.5 ).add( pb.world.pos ), "orange" );
+	*/
+	// Set all the required info needed to perform some IK on the target Hip Bone
+	ik_pose.set_hip( a_fwd, twist, pos_dif, tb.world.pos.y );
+}
+
+function compute_limb( pose, chain, ik_limb ){
+	let b0		= pose.bones[ chain.first() ],				// First Bone
+		b1		= pose.bones[ chain.end_idx ],				// END Bone, which is not part of the chain (Hand,Foot)
+		dir		= Vec3.sub( b1.world.pos, b0.world.pos ),
+		len 	= dir.len();	// Direction from start of chain, toward end bone, which is end Effector
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Using the First bone rotation to determine it's joint direction seems to produce the smoothest animation
+	ik_limb.joint_dir.copy( Vec3.transform_quat( chain.alt_up, b0.world.rot ) ); 
+
+	ik_limb.len_scale = len / chain.len;	// Normalize the length to the End Effector using the Chain Length as Max.
+	ik_limb.dir.copy( dir.norm() );			// Save Direction to end Effector
+
+	dir.from_cross( ik_limb.joint_dir, ik_limb.dir ); 			// Calc Left
+	ik_limb.joint_dir.from_cross( ik_limb.dir, dir ).norm(); 	// Recalc Up
+
+	//console.log( ik_limb, chain.len, len );
+	/*
+	App.Debug.pnt( b1.world.pos, "green", 0.01 );
+	App.Debug.pnt( b0.world.pos, "red", 0.01 );
+	App.Debug.ln( b0.world.pos, Vec3.scale( ik_limb.dir, ik_limb.len_scale * chain.len ).add(b0.world.pos), "red" );
+	App.Debug.ln( b0.world.pos, Vec3.scale( ik_limb.joint_dir, 0.3 ).add(b0.world.pos), "red" );
+	
+	b1 = pose.bones[ chain.idx(1) ];
+	App.Debug.ln( b1.world.pos, Vec3.scale( ik_limb.joint_dir, 0.3 ).add(b1.world.pos), "red" );
+
+	//let t0 = tpose.bones[ chain.idx(0) ];
+	let p0 = pose.bones[ chain.idx(0) ];
+	//let q = new Quat().from_invert( t0.world.rot );
+	//let alt_fwd = Vec3.transform_quat( Vec3.BACK, q );
+	let fwd = Vec3.transform_quat( chain.alt_dir, p0.world.rot );
+
+	App.Debug.ln( p0.world.pos, Vec3.scale( fwd, 0.3 ).add( p0.world.pos ), "yellow" );
+	*/
+}
+
+function compute_look_twist( rig, b_idx, ik, do_debug=false ){
+	let pb		= rig.pose.bones[ b_idx ],						// Pose Bone
+		tb		= rig.tpose.bones[ b_idx ],						// TPose Bone
+		q		= new Quat().from_invert( tb.world.rot ),		// TPose WS Rotation Inverted
+		t_fwd	= Vec3.transform_quat( Vec3.FORWARD, q ),		// Calc TPose WS Inverted Directions
+		t_up	= Vec3.transform_quat( Vec3.UP, q ),			
+		p_fwd	= Vec3.transform_quat( t_fwd, pb.world.rot ),	// Use Inverted Directions to get Pose's WS Direction
+		p_up	= Vec3.transform_quat( t_up, pb.world.rot );
+
+	q.from_unit_vecs( Vec3.FORWARD, p_fwd )			// Rotation Difference From True FWD and Pose FWD, Swing Rotation
+		.mul( tb.world.rot );						// Apply Swing to TPose WS Rotation, gives Swing in WS
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let s_up	= Vec3.transform_quat( t_up, q ),	// Get UP Direction of the Swing Rotation
+		twist	= Vec3.angle( s_up, p_up );			// Swing+Pose have same Fwd, Use Angle between both UPs for twist
+
+	if( twist <= (0.01 * Math.PI / 180) ){
+		twist = 0; // If Less the .01 Degree, dont bother twisting.
+	}else{
+		// Swing FWD and Pose FWD Should be the same in ws, So no need to calc it,
+		// So using Pose Fwd and Swing up to get Swing left
+		// Is the Angle going to be Negative?, use Swing Left to determine if 
+		// its in the left or right side of UP
+		let s_lft = Vec3.cross( s_up, p_fwd ).norm();
+		if( Vec3.dot( s_lft, p_up ) >= 0 )	twist = -twist; 
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	ik.dir.copy( p_fwd );
+	ik.twist = twist;
+
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	if( do_debug ){
+		App.Debug.pnt( pb.world.pos );
+		App.Debug.ln( pb.world.pos, Vec3.scale( p_fwd, 0.4).add( pb.world.pos ), "orange" ); // Pose
+		App.Debug.ln( pb.world.pos, Vec3.scale( p_up, 0.4).add( pb.world.pos ), "orange" );
+
+		let s_fwd = Vec3.transform_quat( t_fwd, q );	// Get Swing Forward
+		App.Debug.ln( pb.world.pos, Vec3.scale( s_fwd, 0.3).add( pb.world.pos ), "yellow" ); // Swing
+		App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3).add( pb.world.pos ), "yellow" );
+
+		// test
+		q.from_axis_angle( p_fwd, twist );
+		let tmp = Vec3.transform_quat( s_up, q );
+
+		App.Debug.ln( pb.world.pos, Vec3.scale( tmp, 0.35).add( pb.world.pos ), "red" );
+		App.Debug.ln( pb.world.pos, Vec3.scale( Vec3.FORWARD, 0.7).add( pb.world.pos ), "green" );
+	}
+	/**/
+}
+
+function compute_spine( rig, chain, ik_pose ){
+	let i_ary 	= [ chain.first(), chain.last() ],
+		alt_fwd	= new Vec3(),
+		alt_up	= new Vec3(),
+		p_fwd	= new Vec3(),
+		p_up	= new Vec3(),
+		s_fwd	= new Vec3(),
+		s_lft	= new Vec3(),
+		q 		= new Quat(),
+		pb, tb, twist, j = 0;
+
+	for( let i of i_ary ){
+		// Get The Bone Transforms
+		tb = rig.tpose.bones[ i ];
+		pb = rig.pose.bones[ i ];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get the Resting ALT Directions from TPOSE
+		q.from_invert( tb.world.rot );
+		alt_fwd.from_quat( q, Vec3.FORWARD );
+		alt_up.from_quat( q, Vec3.UP );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get the Pose Directions based of ALTs
+		p_fwd.from_quat( pb.world.rot, alt_fwd );
+		p_up.from_quat( pb.world.rot, alt_up );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+		// get swing rotation between up and the pose up
+		// then apply to bind pose
+		q.from_unit_vecs( Vec3.UP, p_up )	// Calc swing rotation
+			.mul( tb.world.rot );			// Apply it to the WS T Pose
+
+		s_fwd.from_quat( q, alt_fwd );		// whats the fwd when applying swing
+		twist = Vec3.angle( s_fwd, p_fwd );	// get angle between swing fwd and pose fwd
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if twist is negative
+		if( twist <= (0.01 * Math.PI / 180) ){
+			twist = 0; // If Less the .01 Degree, dont bother twisting.
+		}else{
+			// Swing UP and Pose UP Should be the same in ws, So no need to calc it,
+			// So using Pose UP and Swing FWD to get Swing left
+			// Is the Angle going to be Negative?, use Swing Left to determine if 
+			// its in the left or right side of SWING FWD
+			s_lft.from_cross( p_up, s_fwd ).norm();
+			if( Vec3.dot( s_lft, p_fwd ) < 0 )	twist = -twist;
+			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.3 ).add( pb.world.pos ), "yellow" );
+			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.4 ).add( pb.world.pos ), "red" );
+		}
+
+		//ik_pose.spine[ j ].dir.copy( p_up );
+		//ik_pose.spine[ j ].dir_f.copy( p_fwd );
+		//ik_pose.spine[ j ].twist = twist;
+
+		ik_pose.spine[ j ].dir_up.copy( p_up );
+		ik_pose.spine[ j ].dir_fwd.copy( p_fwd );
+
+		j++;
+	}
+}
+
+function visualize( rig, ik ){
+	let pb, i, a = new Vec3(), b = new Vec3(), q = new Quat();
+
+	//----------------------------
+	// HIP
+	pb = rig.pose.bones[ rig.points.hip.idx ].world;
+	App.Debug
+		.pnt( pb.pos, "orange", 0.07, 2 )
+		.ln( pb.pos, a.from_scale( ik.hip.dir, 0.20 ).add( pb.pos ), "cyan", null, true );
+
+	//----------------------------
+	// LEGS
+	for( i of [ "leg_l", "leg_r" ] ){
+		pb = rig.pose.bones[ rig.chains[i].first() ].world;
+		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
+		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
+		App.Debug
+			.pnt( pb.pos, "yellow", 0.05, 1 )
+			.pnt( a, "red", 0.05, 1 )
+			.ln( pb.pos, a, "yellow", "red", true )
+			.ln( pb.pos, b, "cyan", null, true );
+	}
+
+	//----------------------------
+	// SPINE
+	pb = rig.pose.bones[ rig.chains.spine.first() ].world;
+	//q.from_axis_angle( Vec3.UP, ik.spine[0].twist );
+	//b.from_quat( q );
+	App.Debug
+		.pnt( pb.pos, "yellow", 0.04, 1 )
+		.ln( pb.pos, a.from_scale( ik.spine[0].dir_up, 0.20 ).add( pb.pos ), "cyan", null, true )
+		.ln( pb.pos, a.from_scale( ik.spine[0].dir_fwd, 0.20 ).add( pb.pos ), "cyan", null, true )
+		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
+
+	pb = rig.pose.bones[ rig.chains.spine.last() ].world;
+	//q.from_axis_angle( Vec3.UP, ik.spine[1].twist );
+	//b.from_quat( q );
+	App.Debug
+		.pnt( pb.pos, "yellow", 0.04, 1 )
+		.ln( pb.pos, a.from_scale( ik.spine[1].dir_up, 0.20 ).add( pb.pos ), "cyan", null, true )
+		.ln( pb.pos, a.from_scale( ik.spine[1].dir_fwd, 0.20 ).add( pb.pos ), "cyan", null, true )
+		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
+
+	//----------------------------
+	// ARMS
+	for( i of [ "arm_l", "arm_r" ] ){
+		pb = rig.pose.bones[ rig.chains[i].first() ].world;
+		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
+		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
+		App.Debug
+			.pnt( pb.pos, "yellow", 0.05, 1 )
+			.pnt( a, "red", 0.05, 1 )
+			.ln( pb.pos, a, "yellow", "red", true )
+			.ln( pb.pos, b, "cyan", null, true );
+	}
+
+	//----------------------------
+	// HIP
+	pb = rig.pose.bones[ rig.points.head.idx ].world;
+	App.Debug
+		.pnt( pb.pos, "orange", 0.07, 2 )
+		.ln( pb.pos, a.from_scale( ik.head.dir, 0.20 ).add( pb.pos ), "cyan", null, true );
+}
+
+
+const ROTX90 = [0,0,0.7071067690849304,0.7071067690849304];
+const ROTX20 = Quat.axis_angle(Vec3.LEFT, 20*Math.PI/180);
+const ROTXN10 = Quat.axis_angle(Vec3.LEFT, -10*Math.PI/180);
+const MAXIMO = [
+	{ "name":"Hips", "len":0.105, "idx":0,"p_idx":null,	"top":[0.15,0.05], "bot":[0.15,-0.05], "rot":ROTX90, "bone_pos":[0,1.039,0.020], "bone_rot":[2.4268916831715615e-7,0,0,1]  },
+	{ "name":"Spine", "len":0.097, "idx":1,"p_idx":0, "top":[0.16,0.16,0.14, 0 ], "bot":[0.16,0.16,0.14,0], "bone_pos":[0,0.105,0], "bone_rot":[-0.044645827263593674,-8.692448299794618e-27,-4.453656740259141e-20,0.9990028738975525]},
+	{ "name":"Spine1", "len":0.093, "idx":2,"p_idx":1, "top":[0.19,0.19,0.16,0.05], "bot":[0.17,0.12,0.14,0], "bone_pos":[0,0.097,0], "bone_rot":[-0.029409686103463173,-3.2960057599844583e-21,4.441442901526913e-20,0.999567449092865]},
+	{ "name":"Spine2", "len":0.167, "idx":3,"p_idx":2, "top":[0.19,0.16,0.19,0.06], "bot":[0.19,0.16,0.19,-0.06], "pos":[0,0.08,0], "rot":ROTX90, "bone_pos":[0,0.093,0], "bone_rot":[0.07400670647621155,3.6727628484210417e-28,9.542332680489529e-27,0.9972577691078186]},
+	{ "name":"Neck", "len":0.053, "idx":4, "p_idx":3, "top":[0.07,0.04], "bot":[0.1,0.1,0.07,0], "bone_pos":[0,0.1656,-0.0251],"bone_rot":[1.9075930168810373e-8,-1.1470830885815196e-34,-8.605402693567593e-35,1]},
+	{ "name":"Head", "len":0.1, "idx":5, "p_idx":4, "top":[0.15,0.11], "bot":[0.133,0.15,0.133, 0.05], "pos":[0,0,0.025], "bone_pos":[0,0.053,0],"bone_rot":[-1.3502827300726494e-8,-4.0840682940945415e-35,-6.660796967887298e-36,1]},
+
+	{ "name":"LeftShoulder","len":0.108,"idx":6,"p_idx":3, "top":[0.12,0.07], "bot":[0.145,0], "bone_pos":[0.045,0.1084,-0.026],"bone_rot":[0.7071067690849304,0.7071067690849304,5.338507236274381e-8,-5.338507236274381e-8]},
+	{ "name":"LeftArm","len":0.278,"idx":7,"p_idx":6, "top":[0.08,0.23], "bot":[0.10,0], "bone_pos":[-0.005,0.105,-0.022],"bone_rot":[-1.495118037678709e-35,-4.519952057080445e-8,1.1566897702458666e-34,1]},
+	{ "name":"LeftForeArm","len":0.283,"idx":8,"p_idx":7, "top":[0.06,0.24], "bot":[0.075,0], "bone_pos":[0,0.278,0],"bone_rot":[-6.706603130623989e-7,7.00962573318975e-7,0.0000016832213987072464,1]},
+	{ "name":"LeftHand","len":0.039,"idx":9,"p_idx":8, "top":[0.04,0.03,0.09,0.073], "bot":[0.05,0.03,0.07,-0.015], "bone_pos":[0,0.283,0],"bone_rot":[-0.0000016157980553543894,0.000001614453026377305,-9.588043212716002e-7,1]},
+	
+	{ "name":"LeftHandThumb1","len":0.041,"idx":10,"p_idx":9, "top":[0.03,0.025], "bot":[0.04,0], "bone_pos":[-0.015,0.024,-0.026],"bone_rot":[-0.22191810607910156,-0.059467192739248276,0.25190043449401855,0.9400862455368042]},
+	{ "name":"LeftHandThumb2","len":0.034,"idx":11,"p_idx":10, "top":[0.025,0.018], "bot":[0.025,0], "bone_pos":[0,0.041,0],"bone_rot":[-0.000019305929527035914,0.00003363657015142962,-0.0000676217969157733,1]},
+	{ "name":"LeftHandThumb3","len":0.03,"idx":12,"p_idx":11, "top":[0.020,0.025], "bot":[0.025,0], "bone_pos":[0,0.034,0],"bone_rot":[0.011500630527734756,-0.0017704364145174623,0.0036687529645860195,0.9999255537986755]},
+	{ "name":"LeftHandIndex1","len":0.036,"idx":13,"p_idx":9, "top":[0.024,0.021], "bot":[0.024,0], "bone_pos":[-0.0051,0.087,-0.035],"bone_rot":[0.000002279914497194113,-0.0000023154120754043106,-7.219787789836118e-7,1]},
+	{ "name":"LeftHandIndex2","len":0.028,"idx":14,"p_idx":13, "top":[0.024,0.016], "bot":[0.024,0], "bone_pos":[0,0.036,0],"bone_rot":[-0.000005065046025265474,0.000005125999450683594,-2.465329940193328e-9,1]},
+	{ "name":"LeftHandIndex3","len":0.02,"idx":15,"p_idx":14, "top":[0.020,0.023], "bot":[0.024,0], "bone_pos":[0,0.0288,0],"bone_rot":[0.000014023946278030053,-0.00001409131618856918,-0.000004982239261153154,1]},
+	{ "name":"LeftHandMiddle1","len":0.036,"idx":16,"p_idx":9, "top":[0.024,0.022], "bot":[0.024,0], "bone_pos":[0,0.094,-0.011],"bone_rot":[0.0000022864619495521765,-0.0000023154120754043106,-7.244172479659028e-7,1]},
+	{ "name":"LeftHandMiddle2","len":0.029,"idx":17,"p_idx":16, "top":[0.024,0.017], "bot":[0.024,0], "bone_pos":[0,0.036,0],"bone_rot":[-0.0000030297826469904976,0.000003099441300946637,-9.861094579788343e-12,1]},
+	{ "name":"LeftHandMiddle3","len":0.02,"idx":18,"p_idx":17, "top":[0.020,0.023], "bot":[0.024,0], "bone_pos":[0,0.029,0],"bone_rot":[1.3773330920230364e-7,-1.8769137000163028e-7,0.000008413082468905486,1]},
+	{ "name":"LeftHandRing1","len":0.031,"idx":19,"p_idx":9, "top":[0.024,0.021], "bot":[0.024,0], "bone_pos":[-0.0004,0.091,0.0137],"bone_rot":[0.0000022736619484930998,-0.0000023154120754043106,-7.243664867928601e-7,1]},
+	{ "name":"LeftHandRing2","len":0.029,"idx":20,"p_idx":19, "top":[0.024,0.016], "bot":[0.024,0], "bone_pos":[0,0.031,0],"bone_rot":[-0.0000017625555983613594,0.000001788139229574881,-5.4141510719141195e-11,1]},
+	{ "name":"LeftHandRing3","len":0.02,"idx":21,"p_idx":20, "top":[0.020,0.023], "bot":[0.024,0], "bone_pos":[0,0.029,0],"bone_rot":[0.0000031824711186345667,-0.000003104724555669236,0.000009005581887322478,1]},
+	{ "name":"LeftHandPinky1","len":0.036,"idx":22,"p_idx":9, "top":[0.020,0.023], "bot":[0.020,0], "bone_pos":[-0.0048,0.0807,0.0373],"bone_rot":[0.0000022765411813452374,-0.0000023154120754043106,-7.243598361128534e-7,1]},
+	{ "name":"LeftHandPinky2","len":0.021,"idx":23,"p_idx":22, "top":[0.02,0.016], "bot":[0.02,0], "bone_pos":[0,0.036,0],"bone_rot":[0.000006353253411361948,-0.000006276305157371098,0.000002819155724864686,1]},
+	{ "name":"LeftHandPinky3","len":0.02,"idx":24,"p_idx":23, "top":[0.016,0.023], "bot":[0.02,0.005], "bone_pos":[0,0.021,0],"bone_rot":[-0.000005777703790954547,0.000005574775059358217,-0.000008853048711898737,1]},
+	
+	{ "name":"RightShoulder","len":0.108,"idx":25,"p_idx":3, "top":[0.12,0.07], "bot":[0.145,0], "bone_pos":[-0.045,0.1084,-0.026],"bone_rot":[1.0185958743136325e-8,-1.0185956966779486e-8,0.7071067690849304,0.7071067690849304]},
+	{ "name":"RightArm","len":0.278,"idx":26,"p_idx":25, "top":[0.08,0.23], "bot":[0.10,0], "bone_pos":[-0.005,0.105,-0.022],"bone_rot":[3.736904002898115e-35,-1.006445394960507e-15,-5.495755792415194e-35,1]},
+	{ "name":"RightForeArm","len":0.283,"idx":27,"p_idx":26, "top":[0.06,0.24], "bot":[0.075,0], "bone_pos":[0,0.278,0],"bone_rot":[2.1040301589891897e-7,-2.0325643390606274e-7,6.31208195045474e-7,1]},
+	{ "name":"RightHand","len":0.039,"idx":28,"p_idx":27, "top":[0.04,0.03,0.09,0.073], "bot":[0.05,0.03,0.07,-0.015], "bone_pos":[0,0.283,0],"bone_rot":[0.000003163138671880006,-0.000003194210648871376,-6.312201321634348e-7,1]},
+	
+	{ "name":"RightHandPinky1","len":0.036,"idx":29,"p_idx":28, "top":[0.020,0.023], "bot":[0.020,0], "bone_pos":[-0.0048,0.0807,-0.0373],"bone_rot":[-0.0000033630744837864768,0.0000033974647521972656,-1.1425927912145362e-11,1]},
+	{ "name":"RightHandPinky2","len":0.021,"idx":30,"p_idx":29, "top":[0.02,0.016], "bot":[0.02,0], "bone_pos":[0,0.036,0],"bone_rot":[0.000011971213098149747,-0.000011956633898080327,-0.0000056385929383395705,1]},
+	{ "name":"RightHandPinky3","len":0.1,"idx":31,"p_idx":30, "top":[0.016,0.023], "bot":[0.02,0.005], "bone_pos":[0,0.021,0],"bone_rot":[-0.00000802205249783583,0.000008068487659329548,-3.9523754935544275e-7,1]},
+	{ "name":"RightHandRing1","len":0.031,"idx":32,"p_idx":28, "top":[0.024,0.021], "bot":[0.024,0], "bone_pos":[-0.0004,0.091,-0.0137],"bone_rot":[-0.000003366203372934251,0.000003397464979570941,-1.1436558297606148e-11,1]},
+	{ "name":"RightHandRing2","len":0.029,"idx":33,"p_idx":32, "top":[0.024,0.016], "bot":[0.024,0], "bone_pos":[0,0.031,0],"bone_rot":[0.000008235279892687686,-0.000008292319762404077,-0.000006086941539251711,1]},
+	{ "name":"RightHandRing3","len":0.02,"idx":34,"p_idx":33, "top":[0.020,0.023], "bot":[0.024,0], "bone_pos":[0,0.029,0],"bone_rot":[-0.000015700450603617355,0.00001574820271343924,0.000015092553439899348,1]},
+	{ "name":"RightHandMiddle1","len":0.036,"idx":35,"p_idx":28, "top":[0.024,0.022], "bot":[0.024,0], "bone_pos":[0,0.094,0.011],"bone_rot":[-0.000003373543677298585,0.0000033974647521972656,1.1594199558762064e-11,1]},
+	{ "name":"RightHandMiddle2","len":0.029,"idx":36,"p_idx":35, "top":[0.024,0.017], "bot":[0.024,0], "bone_pos":[0,0.036,0],"bone_rot":[-0.000003787220066442387,0.0000038214084270293824,-0.000002019868361458066,1]},
+	{ "name":"RightHandMiddle3","len":0.02,"idx":37,"p_idx":36, "top":[0.020,0.023], "bot":[0.024,0], "bone_pos":[0,0.029,0],"bone_rot":[0.000003721492703334661,-0.0000037618035548803164,0.0000020198690435790922,1]},
+	{ "name":"RightHandIndex1","len":0.036,"idx":38,"p_idx":28, "top":[0.024,0.0210], "bot":[0.024,0], "bone_pos":[-0.0051,0.087,0.035],"bone_rot":[-0.0000033692147098918213,0.0000033974647521972656,-1.1446789696667459e-11,1]},
+	{ "name":"RightHandIndex2","len":0.028,"idx":39,"p_idx":38, "top":[0.024,0.016], "bot":[0.024,0], "bone_pos":[0,0.036,0],"bone_rot":[0.000005616404450847767,-0.000005643691110890359,-0.0000020674101506301668,1]},
+	{ "name":"RightHandIndex3","len":0.02,"idx":40,"p_idx":39, "top":[0.020,0.023], "bot":[0.024,0], "bone_pos":[0,0.0288,0],"bone_rot":[0.000002786867753457045,-0.000002750003659457434,0.000012031735423079226,1]},
+	{ "name":"RightHandThumb1","len":0.041,"idx":41,"p_idx":28, "top":[0.03,0.025], "bot":[0.04,0], "bone_pos":[-0.015,0.024,0.026],"bone_rot":[0.22176654636859894,0.05947277694940567,0.25208544731140137,0.9400720596313477]},
+	{ "name":"RightHandThumb2","len":0.034,"idx":42,"p_idx":41, "top":[0.025,0.018], "bot":[0.025,0], "bone_pos":[0,0.041,0],"bone_rot":[0.00034027191577479243,-0.00019238849927205592,-0.0003856124822050333,0.9999998211860657]},
+	{ "name":"RightHandThumb3","len":0.03,"idx":43,"p_idx":42, "top":[0.020,0.025], "bot":[0.025,0], "bone_pos":[0,0.034,0],"bone_rot":[-0.011897333897650242,0.00195137073751539,0.004018437582999468,0.9999192357063293]},
+
+	{ "name":"LeftUpLeg","len":0.443,"idx":44,"p_idx":0, "top":[0.16,0.36], "bot":[0.16,0], "bone_pos":[0.094,-0.067,-0.015],"bone_rot":[-4.371138828673793e-8,0,1,3.406487686135706e-22]},
+	{ "name":"LeftLeg","len":0.445,"idx":45,"p_idx":44, "top":[0.10,0.43], "bot":[0.14,0], "bone_pos":[0,0.443,0],"bone_rot":[0.003196412930265069,0.0000028676147394435247,-1.5653178309094073e-8,0.9999948740005493]},
+	{ "name":"LeftFoot","len":0.115,"idx":46,"p_idx":45, "top":[0.14,0.1,0.1,0.06], "bot":[0.14,0.1,0.17,0], "bone_pos":[0,0.445,0],"bone_rot":[0.354154109954834,-0.0000027842902454722207,0.0000010277683486492606,0.935187041759491]
+		,"rot":ROTX20, "pos":[0,0,-0.019] },
+	{ "name":"LeftToeBase","len":0.1,"idx":47,"p_idx":46, "top":[0.13,0.09,0.06,0.07], "bot":[0.13,0.09,0.09,0.01], "bone_pos":[0,0.115,0],"bone_rot":[0.4079362452030182,1.7544498120969365e-7,-2.7185055984091377e-8,0.9130104184150696]
+		,"rot":ROTXN10 ,"pos":[0,0,0.04] },
+
+	{ "name":"RightUpLeg","len":0.443,"idx":48,"p_idx":0, "top":[0.16,0.36], "bot":[0.16,0], "bone_pos":[-0.094,-0.067,-0.015],"bone_rot":[-4.371138828673793e-8,0,1,3.406487686135706e-22]},
+	{ "name":"RightLeg","len":0.445,"idx":49,"p_idx":48, "top":[0.10,0.43], "bot":[0.14,0], "bone_pos":[0,0.443,0],"bone_rot":[0.003213413991034031,-0.000005006765604775865,-1.5807968267722572e-8,0.9999948143959045]},
+	{ "name":"RightFoot","len":0.115,"idx":50,"p_idx":49, "top":[0.14,0.1,0.1,0.06], "bot":[0.14,0.1,0.17,0], "bone_pos":[0,0.445,0],"bone_rot":[0.3540933132171631,0.000004626839199772803,-0.0000017285617559537059,0.935210108757019]
+		,"rot":ROTX20, "pos":[0,0,-0.019] },
+	{ "name":"RightToeBase","len":0.1,"idx":51,"p_idx":50, "top":[0.13,0.09,0.06,0.07], "bot":[0.13,0.09,0.09,0.01], "bone_pos":[0,0.115,0],"bone_rot":[0.4079799950122833,1.589943821045381e-7,-4.328248692786474e-8,0.9129908680915833]
+		,"rot":ROTXN10 ,"pos":[0,0,0.04] }
+];
+
+
+</script><page-layout></page-layout>
