@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html><head></head><body>
+
+	<div onMouseDown=" Drag.start( event, this ); " 
+		style="position:absolute; top:10px; left:10px; width:100px; height:100px; background-color:gray;"></div>
+
+<script>
+
+class Drag{
+	static MOVE	= 1;
+	static END	= 0;
+
+    static elm			= null;
+    static callback 	= null;
+    static offset_x 	= 0;
+	static offset_y 	= 0;
+	
+	static move_bind	= Drag.move.bind( Drag );
+	static end_bind		= Drag.end.bind( Drag );
+
+    static start( e, elm, drag_cb=null ){
+		e.stopPropagation(); e.preventDefault();
+
+		let rect		= elm.getBoundingClientRect();
+        this.offset_x	= e.pageX - rect.left;
+        this.offset_y	= e.pageY - rect.top;
+        this.callback	= drag_cb;
+        this.elm		= elm;
+
+        //Turn on Global Events to handle dragging.
+        window.addEventListener( "mousemove",	this.move_bind );
+        window.addEventListener( "mouseup",		this.end_bind );
+    }
+
+    static move( e ){
+		e.stopPropagation(); e.preventDefault();
+
+		let x = e.pageX - this.offset_x;
+		let y = e.pageY - this.offset_y;
+
+		this.elm.style.left	= x + "px";
+		this.elm.style.top 	= y + "px";
+
+		if( this.callback ) this.callback( this.MOVE, e.pageX, e.pageY, x, y );
+    }
+
+    static end( e ){
+		e.stopPropagation(); e.preventDefault();
+
+		// Start Cleaning up
+		this.elm = null;
+		window.removeEventListener( "mousemove",	this.move_bind );
+		window.removeEventListener( "mouseup",		this.end_bind );
+		
+		// Call handler if one is set
+		if( this.callback ){
+			this.callback( this.END, e.pageX, e.pageY );
+			this.callback = null;
+		}
+    }
+}
+
+class Dom{
+	// #region Events
+	static on( e, name, func ){ e.addEventListener( name, func ); return this; }
+	static off( e, name, func ){ e.removeEventListener( name, func ); return this; }
+	static stop( e ){ e.preventDefault(); e.stopPropagation(); return this; }
+	// #endregion //////////////////////////////////////////////////////////////
+
+	// #region Elements
+	static $function( ename, cls, parent ){
+		let elm = document.createElement( ename );
+		if( cls ) elm.className = cls;
+		if( parent ) parent.appendChild( elm );
+		return elm;
+	}
+
+	static div( cls, parent ){ return this.$( "div", cls, parent ); }
+	static th( parent, cls ){ return this.$( "th", cls, parent ); }
+	static a( txt, href, cls, parent ){
+		let elm = this.$( "a", cls, parent );
+		if( txt ) elm.innerHTML	= txt;
+		elm.href = href || "javascript:void(0)";
+		return elm;
+	}
+	static span( txt, parent, cls ){
+		let elm = this.$( "span", cls, parent );
+		if( txt != null && txt != undefined ) elm.innerHTML	= txt;
+		return elm; 
+	}
+	// #endregion //////////////////////////////////////////////////////////////
+
+	// #region Methods
+	static hide( e ){
+		//if( !e.dataset.orig_display ) e.dataset.orig_display = e.style.display;
+		e.style.display = "none";
+		return e;
+	}
+	// #endregion //////////////////////////////////////////////////////////////
+}
+
+function uuid(){
+    let dt = new Date().getTime();
+    if( window.performance && typeof window.performance.now === "function" ) dt += performance.now(); //use high-precision timer if available
+    
+    let uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = (dt + Math.random()*16)%16 | 0;
+        dt = Math.floor(dt/16);
+        return (c=='x' ? r : (r&0x3|0x8)).toString(16);
+    });
+    return uuid;
+}
+
+</script>
+
+</body>
+</html>
