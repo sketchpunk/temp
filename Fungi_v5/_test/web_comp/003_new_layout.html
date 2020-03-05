@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+	html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+	nav, section, main, div, header, footer, canvas, span, label { box-sizing:border-box; }
+	a{ text-decoration:none; }
+	*{ font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:16px;}
+
+	canvas{ border:0px solid #888888; }
+	
+	/* ------------------------------------------------- */
+	.Layout{ display:flex; flex-direction:column; background-color:#1E1E1E; align-items:stretch; }
+	
+	/* ------------------------------------------------- */
+	.Layout > header{ display:flex; flex-direction:row; flex: 1 1 auto; }
+	
+	/* ------------------------------------------------- */
+	.Layout > footer{ display:flex; flex-direction:row; justify-content:space-between; flex: 0 0 24px; z-index:4000; align-content:center;
+		background-color:#007ACC; color:#eeeeee;   }
+	.Layout > footer.off{ display:none; }
+
+	.Layout > footer a,
+	.Layout > footer label { font-size:12px; color:#eeeeee; padding:3px 6px 0px 6px; cursor:pointer; }
+
+	.Layout > footer a:hover,
+	.Layout > footer label:hover{ background-color:#008DED; }
+
+	.Layout > footer > header{ display:flex; }
+	.Layout > footer > footer{ display:flex; }
+	
+	/* ------------------------------------------------- */
+	.Layout > header > nav{ background-color:#333333; color:#858585; box-shadow: 0px 0px 5px #00000088; padding:0px 0px 1px 0px;
+		z-index:3000; flex: 0 0 50px; display:flex; flex-direction:column; justify-content:space-between; }
+	.Layout > header > nav.off{ display:none; }
+
+	.Layout > header > nav > header{ display:flex; flex-direction:column; }
+	.Layout > header > nav > footer{ display:flex; flex-direction:column; }
+	
+	.Layout > header > nav a{ color:#858585; text-align:center; font-size:32px; padding-bottom:2px;
+		border-width:0px 2px; border-style:solid; border-color:transparent;
+		transition: color 0.3s ease-out, border-left-color 0.2s ease-out; }
+	.Layout > header > nav a:hover{ color:#CCCCCC; border-left-color:#999999; }
+	.Layout > header > nav a.on{ border-left-color:lime; }
+
+	/* ------------------------------------------------- */
+	.Layout > header > section{ z-index:2000; flex:0 0 200px;
+		background-color:#252526; border-right:1px solid #2a2a2a; box-shadow: 0px 0px 4px #00000066; }
+	.Layout > header > section.off{ display:none; }
+
+	/* ------------------------------------------------- */
+	.Layout > header > main{ z-index:1000; flex:1 1 auto; overflow:hidden; position:relative; }
+	.Layout > header > main > canvas{ position:absolute; top:0px; left:0px; }
+</style>	
+</head>
+<body class="Layout">
+	<header>
+		<nav><!--https://www.toptal.com/designers/htmlarrows/math/  https://www.tutorialrepublic.com/html-reference/html5-tags.php-->
+			<header>
+				<a href="javascript:void(0)">&#10033;</a>
+				<a href="javascript:void(0)">&#10010;</a>
+				<a href="javascript:void(0)" onClick="toggle_footer( this );">&starf;</a>
+			</header>
+			<footer>
+				<a href="javascript:void(0)" onClick="toggle_panel( this );">&#9776;</a>
+			</footer>
+			<!--
+				<a href="javascript:void(0)">&#9737;</a>
+				<a href="javascript:void(0)">&diams;</a>
+				<a href="javascript:void(0)">&#9856;</a>
+				<a href="javascript:void(0)">&#9881;</a>
+				<a href="javascript:void(0)">&#10022;</a>
+			-->
+		</nav>
+		<section class="off"></section><!---->
+		<main><canvas></canvas></main>
+	</header>
+	<footer>
+		<header>
+			<a href="https://www.github.com/sketchpunk/fungi" target="_blank">Fungi</a>
+		</header>
+		<footer>
+			<label>FPS : 60</label>
+		</footer>
+	</footer>
+
+<script>
+	let observer	= null;
+	let canvas		= null;
+	let section		= null;
+	let footer 		= null;
+
+	window.onload = ()=>{
+		let l = new Layout();
+		l.add_nav_btn( "x", _=>console.log("woot") );
+
+		/*
+		let main = document.querySelector( "body > header > main" );
+		section  = document.querySelector( "body > header > section" );
+		footer  = document.querySelector( "body > footer" );
+		canvas = main.querySelector( "canvas" );
+
+		observer = new ResizeObserver( on_resize );
+		observer.observe( main );
+		*/
+	};
+
+	function on_resize( ary ){
+		let rect = ary[0].contentRect;
+		canvas.style.width = (rect.width-0) + "px";
+		canvas.style.height	= (rect.height-0) + "px";
+		//console.log( "resize" );
+	}
+
+	function toggle_panel( e ){
+		if( e.classList.contains("on") ){
+			e.classList.remove("on");
+			//section.classList.add("off");
+		}else{
+			e.classList.add("on");
+			//section.classList.remove("off");
+		}
+	}
+
+	function toggle_footer( e ){
+		if( e.classList.contains("on") ){
+			e.classList.remove("on");
+			footer.classList.add("off");
+		}else{
+			e.classList.add("on");
+			footer.classList.remove("off");
+		}
+	}
+
+	class Layout{
+		observer	= null;
+		canvas		= null;
+		section		= null;
+		footer 		= null;
+		nav 		= null;
+		nav_top		= null;
+
+		constructor(){
+			let top			= document.querySelector( "body > header" );
+			let main 		= top.querySelector( "main" );
+
+			this.nav 		= top.querySelector( "nav" );
+			this.nav_top 	= this.nav.querySelector( "header" );
+			this.section 	= top.querySelector( "section" );
+			this.canvas		= main.querySelector( "canvas" );
+			this.footer		= document.querySelector( "body > footer" );
+			
+			this.observer	= new ResizeObserver( ary=>this.on_main_resize( ary ) );
+			this.observer.observe( main );
+		}
+
+		use_footer( s ){
+			if( s )	this.footer.classList.remove("off");
+			else	this.footer.classList.add("off");
+			return this;
+		}
+
+		use_nav( s ){
+			if( s )	this.nav.classList.remove("off");
+			else	this.nav.classList.add("off");
+			return this;
+		}
+
+		use_panel( s ){
+			if( s )	this.section.classList.remove("off");
+			else	this.section.classList.add("off");
+			return this;
+		}
+
+		add_nav_btn( txt, click ){
+			let a = document.createElement( "a" );
+			a.href		= "javascript:void(0)";
+			a.innerHTML	= txt;
+			a.addEventListener( "click", click );
+			this.nav_top.appendChild( a );
+			return this;
+		}
+
+		on_main_resize( ary ){
+			let rect = ary[0].contentRect;
+			this.canvas.style.width		= (rect.width-0) + "px";
+			this.canvas.style.height	= (rect.height-0) + "px";
+			//console.log( "resize" );
+		}
+	}
+</script>
+</body>
+</html>
