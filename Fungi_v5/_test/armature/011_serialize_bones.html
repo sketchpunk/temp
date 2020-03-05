@@ -15,14 +15,19 @@ App.builder()
 //#####################################################
 async function init(){
 	let dl = await XhrPromise.get( 
-		"../../_tmp/maximo_bones.gltf", "json", 
-		"../../_tmp/maximo_bones.bin", "arraybuffer",
+		"../../_tmp/rex_bones.gltf", "json", 
+		"../../_tmp/rex_bones.bin", "arraybuffer",
+
+		//"../../_tmp/maximo_bones.gltf", "json", 
+		//"../../_tmp/maximo_bones.bin", "arraybuffer",
 	);
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Abstract Loading
 	let e = GltfUtil.get_bone_view( "test", dl[0], dl[1] );
-	e.info.active = false;
+	//e.info.active = false;
+	//console.log( e );
+	//e.Node.set_scl( 0.2 );
 
 	let json = e.Armature.serialize_bones();
 	
