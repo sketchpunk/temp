@@ -292,7 +292,7 @@ let App = {
 
 
 //#########################################################
-
+console.log("-- Fungi.App");
 window.App = App;	// Put App in the Global Scope.
 export default App;
 export { 

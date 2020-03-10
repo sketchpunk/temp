@@ -1,4 +1,5 @@
-import { Vec3, Quat, Transform } from "../fungi/maths/Maths.js";
+import { Vec3, Quat, Transform } from "../../fungi/maths/Maths.js";
+import { THREE } from "../App.js";
 
 //#################################################################
 class BoneSpring{
@@ -41,16 +42,21 @@ class BoneSpring{
 			pos = new Vec3(),
 			i, sb, b, s;
 
-        console.log( this.sets );
+		let vv = new THREE.Vector3(),
+			qq = new THREE.Quaternion();
+
+        //console.log( this.sets );
 		for( i=0; i < this.sets.length; i++ ){
 			s 	= this.sets[ i ];					// Get Bone Set
 			b 	= rig.arm.bones[ s.bones[0].idx ];	// Root Bone
-            console.log("x", s );
+
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Compute Parent's World Space Transform
-			if( b.ref.Node.parent )
-				b.ref.Node.parent.Node.get_world_transform( pt );
-			else pt.clear();
+			if( b.ref.parent ){
+				pt.pos.from_struct( b.ref.parent.getWorldPosition( vv ) );
+				pt.rot.from_struct( b.ref.parent.getWorldQuaternion( qq ) );
+				pt.scl.from_struct( b.ref.parent.getWorldScale( vv ) );
+			}else pt.clear();
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			for( sb of s.bones ){
@@ -78,15 +84,20 @@ class BoneSpring{
 			rot 	= new Quat(),
 			i, b, s, sb, s_pos;
 
+		let vv = new THREE.Vector3(),
+			qq = new THREE.Quaternion();
+
 		for( i=0; i < this.sets.length; i++ ){
 			s 	= this.sets[ i ];					// Get Bone Set
 			b 	= rig.arm.bones[ s.bones[0].idx ];	// Root Bone Node
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Compute Parent's World Space Transform
-			if( b.ref.Node.parent )
-				b.ref.Node.parent.Node.get_world_transform( pt );
-			else pt.clear();
+			if( b.ref.parent ){
+				pt.pos.from_struct( b.ref.parent.getWorldPosition( vv ) );
+				pt.rot.from_struct( b.ref.parent.getWorldQuaternion( qq ) );
+				pt.scl.from_struct( b.ref.parent.getWorldScale( vv ) );
+			}else pt.clear();
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			for( sb of s.bones ){
@@ -109,9 +120,8 @@ class BoneSpring{
 					.mul( ct.rot )								// Apply it to WS Bind Transfrom
 					.pmul_invert( pt.rot );						// Convert it to local Space
 
-				//---------------------------
-				b.ref.Node.set_rot( rot );						// Save Results
-				//pose.set_bone( bone.idx, rot );					
+				//---------------------------						
+				b.ref.quaternion.fromArray( rot );				// Save Results
 				pt.add( rot, b.local.pos, b.local.scl );		// Use new rotation to build the next parent ws transform for next bone
 			}
 		}
@@ -177,65 +187,6 @@ class SemiImplicitEuler{
 		return this.pos;
 	}
 }
-
-// #region Save Incase
-/*
-class TensionSpring{
-	constructor( t=2.0, d=1.2 ){
-		this.vel = new Vec3();
-		this.pos = new Vec3();
-		this.tar = new Vec3();
-
-		this.tension = t;
-		this.damping = d;
-		//this.mass		= 1;
-		//this.mass_inv	= 1 / this.mass;	// a = f / m OR a = f * m_inv
-	}
-
-	reset( pos=null, tar=null, vel=null ){
-		if( pos ) 	this.pos.copy( pos );
-		else 		this.pos.set( 0,0,0 );
-
-		if( tar ) 	this.tar.copy( tar );
-		else 		this.tar.set( 0,0,0 );
-
-		if( vel )	this.vel.copy( vel );
-		else		this.vel.set( 0,0,0 );
-
-		return this;
-	}
-	
-	//{ type:"tension", tension:2.0, damp:1.2, tension_inc:0, damp_inc:0 }
-	static from_config( c, inc=null ){
-		return ( inc != null )?
-			new TensionSpring( c.tension + (c.tension_inc || 0) * inc, c.damp + (c.damp_inc || 0) * inc ) :
-			new TensionSpring( c.tension , c.damp );
-	}
-
-
-	set_target( p ){ this.tar.copy( p ); return this; }
-	update( dt, target_pos=null ){
-		if( target_pos ) this.tar.copy( target_pos );
-
-		// Compute Acceleration, Add it to Velocity
-		let ax	= -this.tension * ( this.pos[0] - this.tar[0] ), // * this.mass_inv,
-			ay	= -this.tension * ( this.pos[1] - this.tar[1] ), // * this.mass_inv,
-			az	= -this.tension * ( this.pos[2] - this.tar[2] ); // * this.mass_inv;
-
-		this.vel[0] += ( ax - this.damping * this.vel[0] ) * dt;
-		this.vel[1] += ( ay - this.damping * this.vel[1] ) * dt;
-		this.vel[2] += ( ay - this.damping * this.vel[2] ) * dt;
-
-		// Add Velocity to Position
-		this.pos[0] += this.vel[0] * dt;
-		this.pos[1] += this.vel[1] * dt;
-		this.pos[2] += this.vel[2] * dt;
-		return this.pos;
-	}
-}
-*/
-
-// #endregion
 
 //#################################################################
 export default BoneSpring;

@@ -1,5 +1,6 @@
 import App, { Components, Quat } from "../App.js";
-import Vec3 from "../../fungi/maths/Vec3.js";
+import Vec3			from "../../fungi/maths/Vec3.js";
+import Transform	from "../../fungi/maths/Transform.js";
 
 class Obj{
 	constructor(){

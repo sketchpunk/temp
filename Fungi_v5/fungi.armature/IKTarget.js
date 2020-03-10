@@ -2,8 +2,6 @@ import Maths, { Quat, Vec3 }	from "../fungi/maths/Maths.js";
 import Transform				from "../fungi/maths/Transform.js";
 import Axis						from "../fungi/maths/Axis.js";
 
-import App from "../fungi/App.js";
-
 class IKTarget{
 	constructor(){
 		this.start_pos		= new Vec3();	// World Position start of an IK Chain

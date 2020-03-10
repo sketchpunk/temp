@@ -1,30 +1,26 @@
 <!DOCTYPE html><script type="module">
-import App				from "../../fungi/App.js";
-import IKTarget 		from "../../fungi.armature/IKTarget.js";
+import App, {THREE} 	from "../../fungi.3js/App.js";
+import GltfUtil, {Gltf} from "../../fungi.3js/lib/GltfUtil.js";
 
 import Animation		from "../../fungi/lib/Animation.js";
 import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
 
 import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
-import GltfUtil, {Gltf}	from "../../fungi/lib/GltfUtil.js";
-import IKRig			from "../../fungi.armature/IKRig.js";
+import IKRig 			from "../../fungi.armature/IKRig.js";
+import IKTarget 		from "../../fungi.armature/IKTarget.js";
 
 //#####################################################
-
-App.builder( true, true )
-	.use_armature()
-	.init_mod( "../fungi.armature/BoneSpring.js" )
-	.load_shaders( "../fungi.armature/LowPolySkin.js" )
-	//.set_camera( 40, 20, 2.0, 0, 0.7, 0 )
-	.set_camera( 0, 10, 3.0, 0.0, 0.9, 0 )
+App.builder( true )
+	.init_mod( "./com/Armature.js", "./com/BoneSpring.js" ) //
+	.set_camera( 0, 10, 2.5, 0, 0.75, 0 )
 	.add( init )
-	//.render_loop( on_draw )
-	.render_on_mouse()
+	.render_loop( on_draw )
+	//.render_on_mouse()
 	.build();
 
 //#####################################################
+let gEntitySrc, gAnimate, gModelA, gModelB, gIKPose;
 
-let gAnimate, gEntitySrc, gModelA, gModelB, gIKPose;
 function on_draw( dt, ss ){
 	gAnimate( dt * 0.9 ); // * 0.1
 }
@@ -32,8 +28,8 @@ function on_draw( dt, ss ){
 async function init(){
 	let dl = await XhrQueue
 		.url( "../../_tmp/" )
-		//.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
-		.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
+		.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
+		//.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
 		.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
 		.url( "../../files/models/" )
 		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
@@ -44,10 +40,7 @@ async function init(){
 	if( dl.rex ) load_mesh_b( dl.rex.json, dl.rex.bin );
 
 	gIKPose = new IKPose();
-
-	//gAnimate( 0.70 );
-	//gAnimate( 0.6 );
-	gAnimate( 1.1 );
+	gAnimate( 0.2 );
 
 	return true;
 }
@@ -55,24 +48,20 @@ async function init(){
 //#####################################################
 
 function load_src( json, bin ){
-	/*
-	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
-	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
-	*/
 	let e		= GltfUtil.get_bone_view( "src", json, bin );
-	
 	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
 	let pm		= new PoseAnimator();
 	let rig 	= e.add_com( "IKRig" )
 		.init( null, true, IKRig.ARM_MIXAMO )
 		.recompute_from_tpose(); // Mesh requires a few bits to be recomputed because of Mixamo Scaling
-
+	
 	gEntitySrc  = e;
 
 	return ( dt )=>{
 		pm.tick( dt ).update( anim, rig.pose );
 		rig.apply_pose();
 
+		
 		compute_ik_pose( gEntitySrc, gIKPose );
 		
 		if( gModelA ){
@@ -84,33 +73,27 @@ function load_src( json, bin ){
 			gIKPose.apply_rig( gModelB.IKRig );
 			gModelB.IKRig.apply_pose();
 		}
-
+		/**/
 	}
+	return null;
 }
 
 function load_mesh_a( json, bin ){
-
-	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
-	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
-	/*
-	let e		= GltfUtil.get_bone_view( "target_a", json, bin );
-	*/
+	let e 		= GltfUtil.get_debug_view( "target_a", json, bin, new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } ) );
 	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
 	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+
 	tpose.apply();
 
 	rig.points.head.idx = rig.points.neck.idx; // Lil hack cause Head Isn't Skinned Well.
-	e.Node.set_pos( 1.0, 0, 0 );
+	e.Obj.set_pos( 1.0, 0, 0 );
+
 	gModelA = e;
 }
 
-function load_mesh_b( json, bin ){	
-	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
-	let e		= GltfUtil.get_debug_view( "target_b", json, bin, mat );
-	/*
-	let e		= GltfUtil.get_bone_view( "target_b", json, bin );
-	*/
-	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
+function load_mesh_b( json, bin ){
+	let e 		= GltfUtil.get_debug_view( "target_b", json, bin, new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } ) );
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );	
 	let rig 	= e
 		.add_com( "IKRig" )
 		.init( tpose, false, 0 )
@@ -132,6 +115,7 @@ function load_mesh_b( json, bin ){
 
 	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
 	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	/**/
 
 	tpose.apply();
 
@@ -141,7 +125,7 @@ function load_mesh_b( json, bin ){
 		.add( rig.points.wing_l.idx, 5.0, 0.9 )
 		.add( rig.points.wing_r.idx, 5.0, 0.9 );
 
-	e.Node.set_pos( -1.0, 0, 0 );
+	e.Obj.set_pos( -1.0, 0, 0 );
 	gModelB = e;
 }
 
@@ -347,7 +331,7 @@ class IKPose{
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				//dpos.from_add( ct.pos, [1,0.0,0] );
-				//App.Debug.ln( dpos, Vec3.add( dpos, d_up ), "orange" );
+				//App.Debug.ln( dpos, Vec3.add( dpos, d_up ), 0xff8000 );
 				//App.Debug.ln( dpos, Vec3.add( dpos, sw_up ), "yellow" );
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -445,9 +429,9 @@ function compute_hip_VEC( rig, ik_pose ){
 		pos_dif	= Vec3.sub( pb.world.pos, tb.world.pos );				// How much translation from bind pose has the animated hip gone.
 
 	/*
-	App.Debug.pnt( pb.world.pos, "orange" );
-	App.Debug.ln( pb.world.pos, Vec3.scale( a_fwd, 0.5 ).add( pb.world.pos ), "orange" );
-	App.Debug.ln( pb.world.pos, Vec3.scale( a_up, 0.5 ).add( pb.world.pos ), "orange" );
+	App.Debug.pnt( pb.world.pos, 0xff8000 );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_fwd, 0.5 ).add( pb.world.pos ), 0xff8000 );
+	App.Debug.ln( pb.world.pos, Vec3.scale( a_up, 0.5 ).add( pb.world.pos ), 0xff8000 );
 	*/
 	// Set all the required info needed to perform some IK on the target Hip Bone
 	ik_pose.set_hip( a_fwd, twist, pos_dif, tb.world.pos.y );
@@ -524,19 +508,19 @@ function compute_look_twist( rig, b_idx, ik, do_debug=false ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	if( do_debug ){
 		App.Debug.pnt( pb.world.pos );
-		App.Debug.ln( pb.world.pos, Vec3.scale( p_fwd, 0.4).add( pb.world.pos ), "orange" ); // Pose
-		App.Debug.ln( pb.world.pos, Vec3.scale( p_up, 0.4).add( pb.world.pos ), "orange" );
+		App.Debug.ln( pb.world.pos, Vec3.scale( p_fwd, 0.4).add( pb.world.pos ), 0xff8000 ); // Pose
+		App.Debug.ln( pb.world.pos, Vec3.scale( p_up, 0.4).add( pb.world.pos ), 0xff8000 );
 
 		let s_fwd = Vec3.transform_quat( t_fwd, q );	// Get Swing Forward
-		App.Debug.ln( pb.world.pos, Vec3.scale( s_fwd, 0.3).add( pb.world.pos ), "yellow" ); // Swing
-		App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3).add( pb.world.pos ), "yellow" );
+		App.Debug.ln( pb.world.pos, Vec3.scale( s_fwd, 0.3).add( pb.world.pos ), 0xffff00 ); // Swing
+		App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3).add( pb.world.pos ), 0xffff00 );
 
 		// test
 		q.from_axis_angle( p_fwd, twist );
 		let tmp = Vec3.transform_quat( s_up, q );
 
-		App.Debug.ln( pb.world.pos, Vec3.scale( tmp, 0.35).add( pb.world.pos ), "red" );
-		App.Debug.ln( pb.world.pos, Vec3.scale( Vec3.FORWARD, 0.7).add( pb.world.pos ), "green" );
+		App.Debug.ln( pb.world.pos, Vec3.scale( tmp, 0.35).add( pb.world.pos ), 0xff0000 );
+		App.Debug.ln( pb.world.pos, Vec3.scale( Vec3.FORWARD, 0.7).add( pb.world.pos ), 0x00ff00 );
 	}
 	/**/
 }
@@ -588,7 +572,7 @@ function compute_spine( rig, chain, ik_pose ){
 			// its in the left or right side of SWING FWD
 			s_lft.from_cross( p_up, s_fwd ).norm();
 			if( Vec3.dot( s_lft, p_fwd ) < 0 )	twist = -twist;
-			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.3 ).add( pb.world.pos ), "yellow" );
+			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.3 ).add( pb.world.pos ), 0xffff00 );
 			//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.4 ).add( pb.world.pos ), "red" );
 		}
 
@@ -610,8 +594,8 @@ function visualize( rig, ik ){
 	// HIP
 	pb = rig.pose.bones[ rig.points.hip.idx ].world;
 	App.Debug
-		.pnt( pb.pos, "orange", 0.07, 2 )
-		.ln( pb.pos, a.from_scale( ik.hip.dir, 0.20 ).add( pb.pos ), "cyan", null, true );
+		.pnt( pb.pos, 0xff8000, 2, 5 )
+		.ln( pb.pos, a.from_scale( ik.hip.dir, 0.20 ).add( pb.pos ), 0x00ffff, null, true );
 
 	//----------------------------
 	// LEGS
@@ -620,10 +604,10 @@ function visualize( rig, ik ){
 		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
 		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
 		App.Debug
-			.pnt( pb.pos, "yellow", 0.05, 1 )
-			.pnt( a, "red", 0.05, 1 )
-			.ln( pb.pos, a, "yellow", "red", true )
-			.ln( pb.pos, b, "cyan", null, true );
+			.pnt( pb.pos, 0xffff00, 1, 2.5 )
+			.pnt( a, 0xff0000, 1, 2.5 )
+			.ln( pb.pos, a, 0xffff00, 0xff0000, true )
+			.ln( pb.pos, b, 0x00ffff, null, true );
 	}
 
 	//----------------------------
@@ -632,19 +616,19 @@ function visualize( rig, ik ){
 	//q.from_axis_angle( Vec3.UP, ik.spine[0].twist );
 	//b.from_quat( q );
 	App.Debug
-		.pnt( pb.pos, "yellow", 0.04, 1 )
-		.ln( pb.pos, a.from_scale( ik.spine[0].dir_up, 0.20 ).add( pb.pos ), "cyan", null, true )
-		.ln( pb.pos, a.from_scale( ik.spine[0].dir_fwd, 0.20 ).add( pb.pos ), "cyan", null, true )
-		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
+		.pnt( pb.pos, 0xffff00, 1, 2.5 )
+		.ln( pb.pos, a.from_scale( ik.spine[0].dir_up, 0.20 ).add( pb.pos ), 0x00ffff, null, true )
+		.ln( pb.pos, a.from_scale( ik.spine[0].dir_fwd, 0.20 ).add( pb.pos ), 0x00ffff, null, true )
+		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), 0x00ffff, null, true );
 
 	pb = rig.pose.bones[ rig.chains.spine.last() ].world;
 	//q.from_axis_angle( Vec3.UP, ik.spine[1].twist );
 	//b.from_quat( q );
 	App.Debug
-		.pnt( pb.pos, "yellow", 0.04, 1 )
-		.ln( pb.pos, a.from_scale( ik.spine[1].dir_up, 0.20 ).add( pb.pos ), "cyan", null, true )
-		.ln( pb.pos, a.from_scale( ik.spine[1].dir_fwd, 0.20 ).add( pb.pos ), "cyan", null, true )
-		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), "cyan", null, true );
+		.pnt( pb.pos, 0xffff00, 1, 2.5 )
+		.ln( pb.pos, a.from_scale( ik.spine[1].dir_up, 0.20 ).add( pb.pos ), 0x00ffff, null, true )
+		.ln( pb.pos, a.from_scale( ik.spine[1].dir_fwd, 0.20 ).add( pb.pos ), 0x00ffff, null, true )
+		//.ln( pb.pos, b.scale( 0.20 ).add( pb.pos ), 0x00ffff, null, true );
 
 	//----------------------------
 	// ARMS
@@ -653,202 +637,19 @@ function visualize( rig, ik ){
 		a.from_scale( ik[i].dir, ik[i].len_scale * rig.chains[i].len ).add( pb.pos );
 		b.from_scale( ik[i].joint_dir, 0.2 ).add( pb.pos );
 		App.Debug
-			.pnt( pb.pos, "yellow", 0.05, 1 )
-			.pnt( a, "red", 0.05, 1 )
-			.ln( pb.pos, a, "yellow", "red", true )
-			.ln( pb.pos, b, "cyan", null, true );
+			.pnt( pb.pos, 0xffff00, 1, 2.5 )
+			.pnt( a, 0xff0000, 1, 2.5 )
+			.ln( pb.pos, a, 0xffff00, 0xff0000, true )
+			.ln( pb.pos, b, 0x00ffff, null, true );
 	}
 
 	//----------------------------
-	// HIP
+	// Head
 	pb = rig.pose.bones[ rig.points.head.idx ].world;
 	App.Debug
-		.pnt( pb.pos, "orange", 0.07, 2 )
-		.ln( pb.pos, a.from_scale( ik.head.dir, 0.20 ).add( pb.pos ), "cyan", null, true );
+		.pnt( pb.pos, 0xff8000, 2, 4 )
+		.ln( pb.pos, a.from_scale( ik.head.dir, 0.20 ).add( pb.pos ), 0x00ffff, null, true );
 }
 
-// #region junk
-
-function compute_footOLD( rig, b_idx, ik ){
-
-//let b_idx = rig.points.foot_l.idx;
-//let b_idx = rig.points.foot_l.idx;
-
-let tb = rig.tpose.bones[ b_idx ];
-let pb = rig.pose.bones[ b_idx ];
-
-let tb_rot_i = new Quat().from_invert( tb.world.rot );
-let t_fwd = Vec3.transform_quat( Vec3.FORWARD, tb_rot_i );
-let t_up = Vec3.transform_quat( Vec3.UP, tb_rot_i );
-
-let p_fwd	= Vec3.transform_quat( t_fwd, pb.world.rot );
-let p_up	= Vec3.transform_quat( t_up, pb.world.rot );
-
-//	App.Debug.ln( pb.world.pos, Vec3.scale( p_fwd, 0.4 ).add( pb.world.pos ), "black" );
-//	App.Debug.ln( pb.world.pos, Vec3.scale( p_up, 0.4 ).add( pb.world.pos ), "black" );
-
-let q = new Quat();
-q.from_unit_vecs( Vec3.FORWARD, p_fwd ).mul( tb.world.rot );
-
-let s_fwd = Vec3.transform_quat( t_fwd, q );
-let s_up =  Vec3.transform_quat( t_up, q );	
-
-//	App.Debug.ln( pb.world.pos, Vec3.scale( s_fwd, 0.3 ).add( pb.world.pos ), "red" );
-//	App.Debug.ln( pb.world.pos, Vec3.scale( s_up, 0.3 ).add( pb.world.pos ), "red" );
-
-let twist	= Vec3.angle( s_up, p_up );
-
-if( twist <= (0.5 * Math.PI / 180) ){
-	twist = 0; // If Less the Half Degree, dont bother twisting.
-}else{
-	let s_lft = Vec3.cross( s_up, s_fwd ).norm();
-	//App.Debug.ln( pb.world.pos, Vec3.scale( s_lft, 0.3 ).add( pb.world.pos ), "red" );
-	if( Vec3.dot( s_lft, p_up ) >= 0 )	twist = -twist; // Is the Angle going to be Negative?, use Swing Left to determine
-}
-
-//console.log( twist );
-//console.log( (0.5 * Math.PI / 180) );
-//console.log( (twist * 180 / Math.PI) );
-
-ik.dir.copy( p_fwd );
-ik.twist = twist;
-
-//let v = Vec3.transform_quat( Vec3.FORWARD, pb.world.rot );
-
-//App.Debug.quat( pb.world.rot, pb.world.pos );
-
-//console.log( b_idx );
-
-
-/*
-let b_info	= rig.points.hip,						// Bone Info
-	pb		= rig.pose.bones[ b_info.idx ],			// Hip Pose Bone
-	tb		= rig.tpose.bones[ b_info.idx ],		// Hip TPose Bone
-	a_axis 	= new Axis().from_quat( pb.world.rot ),	// Animated Axis from Quaternion
-	t_axis 	= new Axis().from_quat( tb.world.rot ),	// TPose (Bind) Axis
-	q		= new Quat();
-
-// Create Swing rotation between the Bind+Animated Forward Direction
-// Rotate the TPose Rotation, this moves Bind forward to match the animated Forward
-// While Keeping UP and Left where it would be without any Twisting motion.
-q	.from_unit_vecs( t_axis.z, a_axis.z )			
-	.mul( tb.world.rot );							
-
-let s_axis 	= new Axis().from_quat( q ), 						// Swing Axis 
-	sign	= ( Vec3.dot( s_axis.x, a_axis.y ) >= 0 )? -1:1,	// Is the Angle going to be Negative?, use Swing Left to determine
-	twist	= Vec3.angle( s_axis.y, a_axis.y ) * sign,			// Get Angle Between TPose Swing UP and Animated UP
-	pos_dif = Vec3.sub( pb.world.pos, tb.world.pos );			// How much translation from bind pose has the animated hip gone.
-
-// Set all the required info needed to perform some IK on the target Hip Bone
-ik_pose.set_hip( a_axis.z, twist, pos_dif, tb.world.pos.y );
-*/
-}
-
-// Find Foot's Up direction that will look forward when transformed by the bind rotation.
-//if( find_up ){
-//	v.from_quat( ct.rot, Vec3.UP );			// Get Current Direction
-//	q.from_unit_vecs( Vec3.FORWARD, v );	// Difference between Forward and Dir
-//	o.up.from_quat( q, Vec3.UP );			// UP offset to form Forward
-//}
-//
-/*
-	"black"		: "#000000",
-	"white"		: "#ffffff",
-	"red"		: "#ff0000",
-	"green"		: "#00ff00",
-	"blue"		: "#0000ff",
-	"fuchsia"	: "#ff00ff",
-	"cyan"		: "#00ffff",
-	"yellow"	: "#ffff00",
-	"orange"	: "#ff8000",
- */
-
-
-//let b	= gEntitySrc.Armature.get_e( "LeftFoot" );
-	//let wt = b.Node.get_world_transform();
-	//App.Debug.pnt( wt.pos, "red", 0.09 );
-	//App.Debug.ln( wt.pos, Vec3.transform_quat( Vec3.BACK, wt.rot ).add( wt.pos ), "red" );
-
-	//let rig = gModelA.IKRig;
-
-	/*
-	let rig = gEntitySrc.IKRig;
-	let chain = rig.chains.leg_l;
-	let b0 = rig.tpose.bones[ chain.first() ];
-	let b1 = rig.tpose.bones[ chain.last() ];
-
-	let v = Vec3.sub( b1.world.pos, b0.world.pos ).len();
-	App.Debug.pnt( b0.world.pos, "green" );
-	App.Debug.pnt( b1.world.pos, "red" );
-
-	console.log( v, b0.len );
-	*/
-
-	/*
-	let q = new Quat();
-	let v = new Vec3();
-	v.from_quat( b.world.rot, Vec3.UP );
-	App.Debug.ln( b.world.pos, Vec3.add(v, b.world.pos), "red" );
-
-	q.from_unit_vecs( Vec3.FORWARD, v );
-	let qi = new Quat();
-	qi.from_invert( b.world.rot );
-
-	//qi.from_unit_vecs( v, Vec3.FORWARD );
-
-	let fwd_alt = new Vec3();
-	let up_alt 	= new Vec3();
-	fwd_alt.from_quat( qi, Vec3.FORWARD );
-	up_alt.from_quat( qi, Vec3.UP ); 
-
-	let vt = Vec3.transform_quat( fwd_alt, b.world.rot  );
-	let ut = Vec3.transform_quat( up_alt, b.world.rot  );
-
-	App.Debug.ln( b.world.pos, fwd_alt.add(b.world.pos), "orange" );
-	App.Debug.ln( b.world.pos, vt.add(b.world.pos), "green" );
-	App.Debug.ln( b.world.pos, Vec3.add(b.world.pos, ut ), "blue" );
-	*/
-
-	
-
-
-
-	//if( find_up ){
-	//	v.from_quat( ct.rot, Vec3.UP );			// Get Current Direction
-	//	q.from_unit_vecs( Vec3.FORWARD, v );	// Difference between Forward and Dir
-	//	o.up.from_quat( q, Vec3.UP );			// UP offset to form Forward
-	//}
-
-
-	//App.Debug.quat( b.world.rot, b.world.pos, 0.5 );
-
-	//let v = new Vec3();
-	//let q = new Quat();
-	//let fwd = new Vec3();
-
-	//v.from_quat( b.world.rot, Vec3.FORWARD );
-	//q.from_unit_vecs( v, Vec3.FORWARD );
-	//fwd.from_quat( q, v );
-
-	//App.Debug.ln( b.world.pos, fwd.scale(0.3).add(b.world.pos), "orange" );
-	//App.Debug.ln( b.world.pos, v.add(b.world.pos), "red" );
-
-
-	//v.from_quat( b.world.rot, Vec3.UP );
-	//console.log( v.near_zero().norm() );
-	//App.Debug.ln( b.world.pos, v.add(b.world.pos), "red" );
-
-	//v.from_quat( b.world.rot, Vec3.BACK );
-	//console.log( v.near_zero().norm() );
-	//App.Debug.ln( b.world.pos, v.add(b.world.pos), "blue" );
-
-
-//	v.from_quat( ct.rot, Vec3.UP );			// Get Current Direction
-//	q.from_unit_vecs( Vec3.FORWARD, v );	// Difference between Forward and Dir
-//	o.up.from_quat( q, Vec3.UP );			// UP offset to form Forward
-
-	//console.log( b );
-
-// #endregion
 
 </script><page-layout></page-layout>

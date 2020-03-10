@@ -207,7 +207,6 @@ let App = {
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Register Components and Setup Systems
 		OrbitCamera.init();
-
 		return true;
 	}
 
