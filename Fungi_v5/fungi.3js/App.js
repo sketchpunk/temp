@@ -1,17 +1,15 @@
-
 import PageLayout 			from "../fungi/webcom/PageLayout.js";
-
-import * as THREE			from "./lib/three.module.js";
+import * as THREE			from "./three.module.js";
 
 import Ecs, { Components }	from "../fungi/engine/Ecs.js";
 import RenderLoop			from "../fungi/engine/RenderLoop.js"
 
 import InputTracker 		from "../fungi/lib/InputTracker.js";
 
-import OrbitCamera 			from "./sys/OrbitCamera.js";
-import Obj 					from "./com/Obj.js";
+import OrbitCamera 			from "./ecs/OrbitCamera.js";
+import Obj 					from "./ecs/Obj.js";
 
-import Maths, { Vec3, Quat }	from "../../fungi/maths/Maths.js";
+import Maths, { Vec3, Quat }	from "../fungi/maths/Maths.js";
 
 /*++++++++++++++++++++++++++++++++++++++++++++++++
 SYSTEMS LAYOUT
@@ -216,7 +214,7 @@ let App = {
 	}
 
 	async function init_debug(){
-		let mod 	= await import("./lib/Debug.js");
+		let mod 	= await import("./Debug.js");
 		App.Debug	= mod.default.init();
 		return true;
 	}

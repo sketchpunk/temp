@@ -11,8 +11,8 @@ import IKTarget 		from "../../fungi.armature/IKTarget.js";
 
 //#####################################################
 App.builder( true )
-	.init_mod( "./com/Armature.js", "./com/BoneSpring.js" ) //
-	.set_camera( 0, 10, 2.5, 0, 0.75, 0 )
+	.init_mod( "./ecs/Armature.js", "./ecs/BoneSpring.js" ) //
+	.set_camera( 40, 10, 3.5, 0, 0.75, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse()

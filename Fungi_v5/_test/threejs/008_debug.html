@@ -1,7 +1,7 @@
 <!DOCTYPE html><script type="module">
-import App, {THREE} from "../../fungi.3js/App.js";
-import Points from "../../fungi.3js/lib/Points.js";
-import Lines from "../../fungi.3js/lib/Lines.js";
+import App, {THREE}	from "../../fungi.3js/App.js";
+import Points		from "../../fungi.3js/ecs/Points.js";
+import Lines		from "../../fungi.3js/ecs/Lines.js";
 
 //#####################################################
 App.builder( true )
@@ -11,7 +11,6 @@ App.builder( true )
 	.build();
 
 //#####################################################
-
 function init(){
 	App.Debug
 		.pnt_raw( -1, 0.1, 0, 0xff0000, 0 )
