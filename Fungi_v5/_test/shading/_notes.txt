@@ -20,3 +20,11 @@ https://www.youtube.com/watch?v=TpWI2rU8iF0  TOON SHADER, multi parts. Even has 
 
 https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/diffuse.html
 https://www.learnopengles.com/tag/lambertian-reflectance/
+
+
+https://threejs.org/docs/index.html#api/en/materials/MeshPhysicalMaterial
+https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
+
+https://www.clicktorelease.com/code/spherical-normal-mapping/#
+
+https://www.clicktorelease.com/code/cross-hatching/
