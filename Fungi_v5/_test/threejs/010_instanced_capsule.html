@@ -1,0 +1,85 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE}	from "../../fungi.3js/App.js";
+import Capsule 		from "../../fungi/geo/Capsule.js";
+
+/*
+https://medium.com/@pailhead011/instancing-with-three-js-36b4b62bc127
+https://medium.com/@pailhead011/instancing-with-three-js-part-2-3be34ae83c57
+
+https://threejs.org/examples/?q=instanc#webgl_instancing_dynamic
+https://github.com/mrdoob/three.js/blob/master/examples/webgl_instancing_dynamic.html
+*/
+
+//#####################################################
+App.builder( true )
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+function init(){
+	let g = Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	//console.log( g );
+
+	let geo = new THREE.InstancedBufferGeometry();
+	geo.setIndex( new THREE.BufferAttribute( g.ind, 1 ) );
+	geo.addAttribute( "position", new THREE.BufferAttribute( g.vert, 3 ) );
+	geo.addAttribute( "normal", new THREE.BufferAttribute( g.norm, 3 ) );
+	geo.addAttribute( "a_cfg_top", new THREE.InstancedBufferAttribute( new Float32Array([1,1,1,0.5, 0.7,1,0.7,0.9]), 4 ) );  
+	geo.addAttribute( "a_cfg_bot", new THREE.InstancedBufferAttribute( new Float32Array([1,1,1,-0.5, 1,1,1,0]), 4 ) );
+	geo.addAttribute( "a_cfg_rot", new THREE.InstancedBufferAttribute( new Float32Array([0,0,0,1, 0,0,0,1]), 4 ) );
+	geo.addAttribute( "a_cfg_pos", new THREE.InstancedBufferAttribute( new Float32Array([1,0,0, -1,0,0]), 3 ) );
+	
+
+	geo.maxInstancedCount = 2;
+
+	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
+	mat.onBeforeCompile = (shader)=>{
+		shader.vertexShader = 
+			`attribute vec4 a_cfg_top;
+			attribute vec4 a_cfg_bot;
+			attribute vec4 a_cfg_rot;
+			attribute vec3 a_cfg_pos;
+
+			const int DIV_IDX = 31; // LT = TOP DOME
+			vec3 quat_mul_vec3( vec4 q, vec3 v ){ return v + (2.0 * cross(q.xyz, cross(q.xyz, v) + (q.w * v))); }
+
+			vec4 qmul(vec4 q1, vec4 q2){
+				return vec4(q2.xyz * q1.w + q1.xyz * q2.w + cross(q1.xyz, q2.xyz), q1.w * q2.w - dot(q1.xyz, q2.xyz) );
+			}
+			
+			` + 
+			shader.vertexShader.replace("#include <begin_vertex>",`
+				vec3 pos = position;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Capsule Configuration
+				if( gl_VertexID < DIV_IDX ){
+					pos.xyz	*= a_cfg_top.xyz;	// Scale Dom
+					pos.y	+= a_cfg_top.w;		// Move Dome
+				}else{
+					pos.xyz	*= a_cfg_bot.xyz;	// Scale Dom
+					pos.y	+= a_cfg_bot.w;		// Move Dome
+				}
+				pos = quat_mul_vec3( a_cfg_rot, pos );
+				pos += a_cfg_pos;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Transform Instances
+				//pos 		= quat_mul_vec3( a_ins_rot, pos );
+				//pos 		+= a_ins_pos;
+
+
+				vec3 transformed = pos;
+			`);
+		//console.log( shader.vertexShader );
+	};
+
+	let m = new THREE.Mesh( geo, mat );
+	m.name = "Test";
+	App.$( m );
+
+	return true;
+}
+</script><page-layout></page-layout>
