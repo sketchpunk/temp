@@ -140,6 +140,41 @@ class Armature{
 			//this.updated = true;
 			return this;
 		}
+		
+		// Serialize the Bone Data
+		serialize_bones( inc_scale = false ){
+			let out	= new Array( this.bones.length ),
+				i 	= 0,
+				b;
+
+			for( b of this.bones ){
+				out[ i ] = {
+					name	: b.name,
+					len		: b.len,
+					idx		: b.idx,
+					p_idx 	: b.p_idx,
+					pos		: Array.from( b.local.pos ),
+					rot		: Array.from( b.local.rot ),
+				};
+
+				if( inc_scale ) out[ i ].scl = Array.from( b.local.scl );
+				
+				i++;
+			}
+			return out;
+		}
+
+		// Serialize the Bone Data
+		deserialize_bones( ary ){
+			let itm, b;
+			for( itm of ary ){
+				b = this.add_bone( itm.name, itm.len, itm.p_idx );
+				b.position.fromArray( itm.pos );
+				b.quaternion.fromArray( itm.rot );
+				if( b.scl ) b.scale.fromArray( itm.scl );
+			}
+			return this;
+		}
 }
 
 

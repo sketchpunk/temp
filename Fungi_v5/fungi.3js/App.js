@@ -40,12 +40,12 @@ let App = {
 
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	$ : function( o=null ){
+	$ : function( o=null, com_ary=null ){
 		let e;
 		if( typeof o == "string"){
-			e = App.ecs.entity( o, ["Obj"] );
+			e = App.ecs.entity( o, com_ary || ["Obj"] );
 		}else{
-			e = App.ecs.entity( o.name, ["Obj"] );
+			e = App.ecs.entity( o.name, com_ary || ["Obj"] );
 			if( o ) e.Obj.set_ref( o );
 		}
 		return e;

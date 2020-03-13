@@ -1,0 +1,401 @@
+<!DOCTYPE html><script type="module">
+import App, {THREE}	from "../../fungi.3js/App.js";
+import Capsule 		from "../../fungi/geo/Capsule.js";
+import InterleavedFloatArray from "../../fungi/data/InterleavedFloatArray.js";
+
+/*
+https://medium.com/@pailhead011/instancing-with-three-js-36b4b62bc127
+https://medium.com/@pailhead011/instancing-with-three-js-part-2-3be34ae83c57
+
+https://threejs.org/examples/?q=instanc#webgl_instancing_dynamic
+https://github.com/mrdoob/three.js/blob/master/examples/webgl_instancing_dynamic.html
+*/
+
+//#####################################################
+App.builder( true )
+	.init_mod( "./ecs/Armature.js" ) 
+	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+function init(){
+	ProtoRig.init();
+
+
+	ProtoRig.$( "Test", MAXIMO_BONES, MAXIMO_CONFIG, true );
+
+	/*
+			let b = e.Armature.get_root();
+			o.ref.add( b );
+			App.scene.add( new THREE.SkeletonHelper( b ) );
+
+	let g = Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	//console.log( g );
+
+	let geo = new THREE.InstancedBufferGeometry();
+	geo.setIndex( new THREE.BufferAttribute( g.ind, 1 ) );
+	geo.addAttribute( "position", new THREE.BufferAttribute( g.vert, 3 ) );
+	geo.addAttribute( "normal", new THREE.BufferAttribute( g.norm, 3 ) );
+	geo.addAttribute( "a_cfg_top", new THREE.InstancedBufferAttribute( new Float32Array([1,1,1,0.0, 0.7,1,0.7,0.9]), 4 ) );  
+	geo.addAttribute( "a_cfg_bot", new THREE.InstancedBufferAttribute( new Float32Array([1,1,1,-0.0, 1,1,1,0]), 4 ) );
+	geo.addAttribute( "a_cfg_rot", new THREE.InstancedBufferAttribute( new Float32Array([0,0,0,1, 0,0,0,1]), 4 ) );
+	geo.addAttribute( "a_cfg_pos", new THREE.InstancedBufferAttribute( new Float32Array([1,0,0, -1,0,0]), 3 ) );
+	
+
+	geo.maxInstancedCount = 2;
+
+	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
+	mat.onBeforeCompile = (shader)=>{
+		shader.vertexShader = 
+			`attribute vec4 a_cfg_top;
+			attribute vec4 a_cfg_bot;
+			attribute vec4 a_cfg_rot;
+			attribute vec3 a_cfg_pos;
+
+			const int DIV_IDX = 31; // LT = TOP DOME
+			vec3 quat_mul_vec3( vec4 q, vec3 v ){ return v + (2.0 * cross(q.xyz, cross(q.xyz, v) + (q.w * v))); }
+
+			vec4 qmul(vec4 q1, vec4 q2){
+				return vec4(q2.xyz * q1.w + q1.xyz * q2.w + cross(q1.xyz, q2.xyz), q1.w * q2.w - dot(q1.xyz, q2.xyz) );
+			}
+			
+			` + 
+			shader.vertexShader.replace("#include <begin_vertex>",`
+				vec3 pos = position;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Capsule Configuration
+				if( gl_VertexID < DIV_IDX ){
+					pos.xyz	*= a_cfg_top.xyz;	// Scale Dom
+					pos.y	+= a_cfg_top.w;		// Move Dome
+				}else{
+					pos.xyz	*= a_cfg_bot.xyz;	// Scale Dom
+					pos.y	+= a_cfg_bot.w;		// Move Dome
+				}
+				pos = quat_mul_vec3( a_cfg_rot, pos );
+				pos += a_cfg_pos;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				// Transform Instances
+				//pos 		= quat_mul_vec3( a_ins_rot, pos );
+				//pos 		+= a_ins_pos;
+
+
+				vec3 transformed = pos;
+			`);
+		//console.log( shader.vertexShader );
+	};
+
+	let m = new THREE.Mesh( geo, mat );
+	m.name = "Test";
+	App.$( m );
+	*/
+	return true;
+
+}
+
+
+class ProtoRig{
+	static init( priority = 810 ){
+		App.Components.reg( ProtoRig );
+		//App.ecs.sys_add( ProtoRigSys, priority );
+	}
+
+    static $( name, bones, config, use_preview=false ){
+		let grp = new THREE.Group();
+		grp.name = name;
+
+		let e = App.$( grp, [ "Obj", "ProtoRig", "Armature" ] );
+		let p = e.ProtoRig;
+				
+		e.Armature.deserialize_bones( bones ).finalize();
+		p.build( config, e.Armature );
+		
+		if( use_preview ){
+			let b = e.Armature.get_root();
+			grp.add( b );
+			App.scene.add( new THREE.SkeletonHelper( b ) );
+		}
+
+		return e;
+	}
+
+	constructor(){
+		this.bone_buffer = null;
+
+		// Flat Worldspace Transfrom from Armature Bones
+	    this.bone_transform = new InterleavedFloatArray()
+	    	.add_var( "rot", 4 )
+	    	.add_var( "pos", 3 );
+
+	    // Capsule Visual Configuration
+	    this.config = new InterleavedFloatArray()
+	    	.add_var( "top", 4 )	// xyz = scale dome, w translate Y position
+	    	.add_var( "bot", 4 )
+			.add_var( "rot", 4 )	// Quaternion Rotation
+			.add_var( "pos", 3 );	// Quaternion Rotation
+	}
+
+	build( config, arm ){
+		let cnt = config.length,
+			idx;
+
+		let bt  = this.bone_transform;
+		let cfg = this.config;
+
+		bt.expand_by( cnt, true );	// Initialize Bone Transform Buffer, Auto fill with 0s
+        cfg.expand_by( cnt, true ); // Initialize Capsule Config Buffer, Auto fill with 0s
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let ttop, bbot, top = [0,0,0,0], bot = [0,0,0,0];    
+		for( let itm of config ){
+			idx = arm.name_map[ itm.name ];
+			if( idx == undefined ){
+				console.log( "ProtoRig Build - Can Not Find Bone Index of ", itm.name );
+				continue;
+			}
+
+			// Handle Scalar data
+			if( itm.top.length == 2 ){	// Single Scalar
+				top[ 0 ] = top[ 1 ] = top[ 2 ] = itm.top[ 0 ];
+				top[ 3 ] = itm.top[ 1 ];
+				ttop = top;
+			}else ttop = itm.top;		// XYZ Scalar
+
+			if( itm.bot.length == 2 ){	// Single Scalar
+				bot[ 0 ] = bot[ 1 ] = bot[ 2 ] = itm.bot[ 0 ];
+				bot[ 3 ] = itm.bot[ 1 ];
+				bbot = bot;
+			}else bbot = itm.bot;		// XYZ Scalar
+
+			cfg.set( idx, ttop, bbot, ( itm.rot || [0,0,0,1] ), ( itm.pos || [0,0,0] ) );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup Buffer to hold the Flat World Space Transform of the Bones
+		//this.bone_buffer = App.Buf.new_array( bt.buffer, 0, false );
+		//this.bone_buffer.set_interleaved( bt.get_stride_info() );
+
+
+		/*
+        let cnt = ary.length,
+            arm = e.Armature,
+            bt  = this.bone_transform,
+            cfg = this.config;
+
+        bt.expand_by( cnt, true );      // Initialize Bone Transform Buffer, Auto fill with 0s
+        cfg.expand_by( cnt, false );    // Initialize Capsule Config Buffer, Fill in Manually
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Build up armature bones and capsule configurations
+        let itm, ttop, bbot, top = [0,0,0,0], bot = [0,0,0,0];    
+        for( itm of ary ){
+			// Create Bone Entity
+			console.log( itm.name );
+            arm.add_bone( itm.name, itm.len, itm.p_idx )
+            	.Node
+				.set_rot( itm.rot )
+				.set_pos( itm.pos );
+
+			// Save Visual Config
+			if( itm.top.length == 2 ){
+				top[ 0 ] = top[ 1 ] = top[ 2 ] = itm.top[ 0 ];
+				top[ 3 ] = itm.top[ 1 ];
+				ttop = top;
+			}else ttop = itm.top;
+
+			if( itm.bot.length == 2 ){
+				bot[ 0 ] = bot[ 1 ] = bot[ 2 ] = itm.bot[ 0 ];
+				bot[ 3 ] = itm.bot[ 1 ];
+				bbot = bot;
+			}else bbot = itm.bot;
+
+            cfg.push( ttop, bbot, ( itm.rot || [0,0,0,1] ), ( itm.pos || [0,0,0] ) ); 
+		}
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup Buffer to hold the Flat World Space Transform of the Bones
+		this.bone_buffer = App.Buf.new_array( bt.buffer, 0, false );
+		this.bone_buffer.set_interleaved( bt.get_stride_info() );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Build Capsule Mesh
+		// (arc_div-1) * lathe_cnt + 1 == Dome Vert Count
+		let geo 	= Capsule.geo( 10, 4, 0.5, 0 ), //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+			mesh	= new App.Mesh( "Proto" ),
+			vao 	= new App.Vao().bind();
+
+		mesh.buf.idx = App.Buf.new_element( geo.ind, true, false );
+		vao.add_indices( mesh.buf.idx );
+
+		mesh.buf.vert = App.Buf.new_array( geo.vert, 3, true, false );
+		vao.add_buf( mesh.buf.vert, App.Shader.POS_LOC );
+		
+		mesh.buf.norm = App.Buf.new_array( geo.norm, 3, true, false );
+		vao.add_buf( mesh.buf.norm, App.Shader.NORM_LOC );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Instanced Data 
+		
+		// Capsule Configuration
+		mesh.buf.cfg = App.Buf
+			.new_array( cfg.buffer )
+			.set_interleaved( cfg.get_stride_info() );
+		vao.add_interleaved( mesh.buf.cfg, [12,13,14,15], true );
+
+		// Bone Transform ( Instanced )
+		vao.add_interleaved( this.bone_buffer, [10,11], true );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Clean up VAO Building and Get Mesh Ready
+		App.Vao.unbind();
+		App.Buf.unbind_array().unbind_element();
+
+		mesh.set( vao, geo.ind.length, cfg.len );	// Set VAO and Count Values to render mesh
+		arm.finalize();								// Compile Bind Pose
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let mat = SHADER.new_material( "ProtoRigMat" );
+		e.Draw.add( mesh, mat, App.Mesh.TRI );
+		*/
+	}
+
+	update_bone_buffer(){ 
+		this.bone_buffer.update( this.bone_transform.buffer );
+	}
+
+}
+
+import Quat from "../../fungi/maths/Quat.js";
+import Vec3 from "../../fungi/maths/Vec3.js";
+
+const ROTX90 = [0,0,0.7071067690849304,0.7071067690849304];
+const ROTX20 = Quat.axis_angle(Vec3.LEFT, 20*Math.PI/180);
+const ROTXN10 = Quat.axis_angle(Vec3.LEFT, -10*Math.PI/180);
+
+const MAXIMO_BONES = [
+	{ "name":"Hips", "len":0.105, "idx":0,"p_idx":null,"pos":[0,1.039,0.020], "rot":[2.4268916831715615e-7,0,0,1]  },
+	{ "name":"Spine", "len":0.097, "idx":1,"p_idx":0,"pos":[0,0.105,0], "rot":[-0.044645827263593674,-8.692448299794618e-27,-4.453656740259141e-20,0.9990028738975525]},
+
+	{ "name":"Spine1", "len":0.093, "idx":2,"p_idx":1,"pos":[0,0.097,0], "rot":[-0.029409686103463173,-3.2960057599844583e-21,4.441442901526913e-20,0.999567449092865]},
+	{ "name":"Spine2", "len":0.167, "idx":3,"p_idx":2,"pos":[0,0.093,0], "rot":[0.07400670647621155,3.6727628484210417e-28,9.542332680489529e-27,0.9972577691078186]},
+	{ "name":"Neck", "len":0.053, "idx":4, "p_idx":3,"pos":[0,0.1656,-0.0251],"rot":[1.9075930168810373e-8,-1.1470830885815196e-34,-8.605402693567593e-35,1]},
+	{ "name":"Head", "len":0.1, "idx":5, "p_idx":4,"pos":[0,0.053,0],"rot":[-1.3502827300726494e-8,-4.0840682940945415e-35,-6.660796967887298e-36,1]},
+
+	{ "name":"LeftShoulder","len":0.108,"idx":6,"p_idx":3,  "pos":[0.045,0.1084,-0.026],"rot":[0.7071067690849304,0.7071067690849304,5.338507236274381e-8,-5.338507236274381e-8]},
+	{ "name":"LeftArm","len":0.278,"idx":7,"p_idx":6,  "pos":[-0.005,0.105,-0.022],"rot":[-1.495118037678709e-35,-4.519952057080445e-8,1.1566897702458666e-34,1]},
+	{ "name":"LeftForeArm","len":0.283,"idx":8,"p_idx":7,"pos":[0,0.278,0],"rot":[-6.706603130623989e-7,7.00962573318975e-7,0.0000016832213987072464,1]},
+	{ "name":"LeftHand","len":0.039,"idx":9,"p_idx":8,"pos":[0,0.283,0],"rot":[-0.0000016157980553543894,0.000001614453026377305,-9.588043212716002e-7,1]},
+	
+	{ "name":"LeftHandThumb1","len":0.041,"idx":10,"p_idx":9,"pos":[-0.015,0.024,-0.026],"rot":[-0.22191810607910156,-0.059467192739248276,0.25190043449401855,0.9400862455368042]},
+	{ "name":"LeftHandThumb2","len":0.034,"idx":11,"p_idx":10,"pos":[0,0.041,0],"rot":[-0.000019305929527035914,0.00003363657015142962,-0.0000676217969157733,1]},
+	{ "name":"LeftHandThumb3","len":0.03,"idx":12,"p_idx":11,"pos":[0,0.034,0],"rot":[0.011500630527734756,-0.0017704364145174623,0.0036687529645860195,0.9999255537986755]},
+	{ "name":"LeftHandIndex1","len":0.036,"idx":13,"p_idx":9,"pos":[-0.0051,0.087,-0.035],"rot":[0.000002279914497194113,-0.0000023154120754043106,-7.219787789836118e-7,1]},
+	{ "name":"LeftHandIndex2","len":0.028,"idx":14,"p_idx":13,"pos":[0,0.036,0],"rot":[-0.000005065046025265474,0.000005125999450683594,-2.465329940193328e-9,1]},
+	{ "name":"LeftHandIndex3","len":0.02,"idx":15,"p_idx":14,"pos":[0,0.0288,0],"rot":[0.000014023946278030053,-0.00001409131618856918,-0.000004982239261153154,1]},
+	{ "name":"LeftHandMiddle1","len":0.036,"idx":16,"p_idx":9,"pos":[0,0.094,-0.011],"rot":[0.0000022864619495521765,-0.0000023154120754043106,-7.244172479659028e-7,1]},
+	{ "name":"LeftHandMiddle2","len":0.029,"idx":17,"p_idx":16,"pos":[0,0.036,0],"rot":[-0.0000030297826469904976,0.000003099441300946637,-9.861094579788343e-12,1]},
+	{ "name":"LeftHandMiddle3","len":0.02,"idx":18,"p_idx":17,"pos":[0,0.029,0],"rot":[1.3773330920230364e-7,-1.8769137000163028e-7,0.000008413082468905486,1]},
+	{ "name":"LeftHandRing1","len":0.031,"idx":19,"p_idx":9,"pos":[-0.0004,0.091,0.0137],"rot":[0.0000022736619484930998,-0.0000023154120754043106,-7.243664867928601e-7,1]},
+	{ "name":"LeftHandRing2","len":0.029,"idx":20,"p_idx":19,"pos":[0,0.031,0],"rot":[-0.0000017625555983613594,0.000001788139229574881,-5.4141510719141195e-11,1]},
+	{ "name":"LeftHandRing3","len":0.02,"idx":21,"p_idx":20,"pos":[0,0.029,0],"rot":[0.0000031824711186345667,-0.000003104724555669236,0.000009005581887322478,1]},
+	{ "name":"LeftHandPinky1","len":0.036,"idx":22,"p_idx":9,"pos":[-0.0048,0.0807,0.0373],"rot":[0.0000022765411813452374,-0.0000023154120754043106,-7.243598361128534e-7,1]},
+	{ "name":"LeftHandPinky2","len":0.021,"idx":23,"p_idx":22,"pos":[0,0.036,0],"rot":[0.000006353253411361948,-0.000006276305157371098,0.000002819155724864686,1]},
+	{ "name":"LeftHandPinky3","len":0.02,"idx":24,"p_idx":23,"pos":[0,0.021,0],"rot":[-0.000005777703790954547,0.000005574775059358217,-0.000008853048711898737,1]},
+	
+	{ "name":"RightShoulder","len":0.108,"idx":25,"p_idx":3,"pos":[-0.045,0.1084,-0.026],"rot":[1.0185958743136325e-8,-1.0185956966779486e-8,0.7071067690849304,0.7071067690849304]},
+	{ "name":"RightArm","len":0.278,"idx":26,"p_idx":25,"pos":[-0.005,0.105,-0.022],"rot":[3.736904002898115e-35,-1.006445394960507e-15,-5.495755792415194e-35,1]},
+	{ "name":"RightForeArm","len":0.283,"idx":27,"p_idx":26,"pos":[0,0.278,0],"rot":[2.1040301589891897e-7,-2.0325643390606274e-7,6.31208195045474e-7,1]},
+	{ "name":"RightHand","len":0.039,"idx":28,"p_idx":27,"pos":[0,0.283,0],"rot":[0.000003163138671880006,-0.000003194210648871376,-6.312201321634348e-7,1]},
+	
+	{ "name":"RightHandPinky1","len":0.036,"idx":29,"p_idx":28,"pos":[-0.0048,0.0807,-0.0373],"rot":[-0.0000033630744837864768,0.0000033974647521972656,-1.1425927912145362e-11,1]},
+	{ "name":"RightHandPinky2","len":0.021,"idx":30,"p_idx":29,"pos":[0,0.036,0],"rot":[0.000011971213098149747,-0.000011956633898080327,-0.0000056385929383395705,1]},
+	{ "name":"RightHandPinky3","len":0.1,"idx":31,"p_idx":30,"pos":[0,0.021,0],"rot":[-0.00000802205249783583,0.000008068487659329548,-3.9523754935544275e-7,1]},
+	{ "name":"RightHandRing1","len":0.031,"idx":32,"p_idx":28,"pos":[-0.0004,0.091,-0.0137],"rot":[-0.000003366203372934251,0.000003397464979570941,-1.1436558297606148e-11,1]},
+	{ "name":"RightHandRing2","len":0.029,"idx":33,"p_idx":32,"pos":[0,0.031,0],"rot":[0.000008235279892687686,-0.000008292319762404077,-0.000006086941539251711,1]},
+	{ "name":"RightHandRing3","len":0.02,"idx":34,"p_idx":33,"pos":[0,0.029,0],"rot":[-0.000015700450603617355,0.00001574820271343924,0.000015092553439899348,1]},
+	{ "name":"RightHandMiddle1","len":0.036,"idx":35,"p_idx":28,"pos":[0,0.094,0.011],"rot":[-0.000003373543677298585,0.0000033974647521972656,1.1594199558762064e-11,1]},
+	{ "name":"RightHandMiddle2","len":0.029,"idx":36,"p_idx":35,"pos":[0,0.036,0],"rot":[-0.000003787220066442387,0.0000038214084270293824,-0.000002019868361458066,1]},
+	{ "name":"RightHandMiddle3","len":0.02,"idx":37,"p_idx":36,"pos":[0,0.029,0],"rot":[0.000003721492703334661,-0.0000037618035548803164,0.0000020198690435790922,1]},
+	{ "name":"RightHandIndex1","len":0.036,"idx":38,"p_idx":28,"pos":[-0.0051,0.087,0.035],"rot":[-0.0000033692147098918213,0.0000033974647521972656,-1.1446789696667459e-11,1]},
+	{ "name":"RightHandIndex2","len":0.028,"idx":39,"p_idx":38,"pos":[0,0.036,0],"rot":[0.000005616404450847767,-0.000005643691110890359,-0.0000020674101506301668,1]},
+	{ "name":"RightHandIndex3","len":0.02,"idx":40,"p_idx":39,"pos":[0,0.0288,0],"rot":[0.000002786867753457045,-0.000002750003659457434,0.000012031735423079226,1]},
+	{ "name":"RightHandThumb1","len":0.041,"idx":41,"p_idx":28,"pos":[-0.015,0.024,0.026],"rot":[0.22176654636859894,0.05947277694940567,0.25208544731140137,0.9400720596313477]},
+	{ "name":"RightHandThumb2","len":0.034,"idx":42,"p_idx":41,"pos":[0,0.041,0],"rot":[0.00034027191577479243,-0.00019238849927205592,-0.0003856124822050333,0.9999998211860657]},
+	{ "name":"RightHandThumb3","len":0.03,"idx":43,"p_idx":42,"pos":[0,0.034,0],"rot":[-0.011897333897650242,0.00195137073751539,0.004018437582999468,0.9999192357063293]},
+
+	{ "name":"LeftUpLeg","len":0.443,"idx":44,"p_idx":0,"pos":[0.094,-0.067,-0.015],"rot":[-4.371138828673793e-8,0,1,3.406487686135706e-22]},
+	{ "name":"LeftLeg","len":0.445,"idx":45,"p_idx":44,"pos":[0,0.443,0],"rot":[0.003196412930265069,0.0000028676147394435247,-1.5653178309094073e-8,0.9999948740005493]},
+	{ "name":"LeftFoot","len":0.115,"idx":46,"p_idx":45,"pos":[0,0.445,0],"rot":[0.354154109954834,-0.0000027842902454722207,0.0000010277683486492606,0.935187041759491]},
+	{ "name":"LeftToeBase","len":0.1,"idx":47,"p_idx":46,"pos":[0,0.115,0],"rot":[0.4079362452030182,1.7544498120969365e-7,-2.7185055984091377e-8,0.9130104184150696] },
+
+	{ "name":"RightUpLeg","len":0.443,"idx":48,"p_idx":0,"pos":[-0.094,-0.067,-0.015],"rot":[-4.371138828673793e-8,0,1,3.406487686135706e-22]},
+	{ "name":"RightLeg","len":0.445,"idx":49,"p_idx":48,"pos":[0,0.443,0],"rot":[0.003213413991034031,-0.000005006765604775865,-1.5807968267722572e-8,0.9999948143959045] },
+	{ "name":"RightFoot","len":0.115,"idx":50,"p_idx":49,"pos":[0,0.445,0],"rot":[0.3540933132171631,0.000004626839199772803,-0.0000017285617559537059,0.935210108757019] },
+	{ "name":"RightToeBase","len":0.1,"idx":51,"p_idx":50,"pos":[0,0.115,0],"rot":[0.4079799950122833,1.589943821045381e-7,-4.328248692786474e-8,0.9129908680915833] }
+];
+
+const MAXIMO_CONFIG = [
+	{ "name":"Hips", "top":[0.15,0.05], "bot":[0.15,-0.05], "rot":ROTX90 },
+	{ "name":"Spine", "top":[0.16,0.16,0.14, 0 ], "bot":[0.16,0.16,0.14,0] },
+	{ "name":"Spine1", "top":[0.19,0.19,0.16,0.05], "bot":[0.17,0.12,0.14,0] },
+	{ "name":"Spine2", "top":[0.19,0.16,0.19,0.06], "bot":[0.19,0.16,0.19,-0.06], "pos":[0,0.08,0], "rot":ROTX90 },
+	{ "name":"Neck", "top":[0.07,0.04], "bot":[0.1,0.1,0.07,0] },
+	{ "name":"Head", "top":[0.15,0.11], "bot":[0.133,0.15,0.133, 0.05], "pos":[0,0,0.025] },
+
+	{ "name":"LeftShoulder", "top":[0.12,0.07], "bot":[0.145,0]},
+	{ "name":"LeftArm", "top":[0.08,0.23], "bot":[0.10,0] },
+	{ "name":"LeftForeArm", "top":[0.06,0.24], "bot":[0.075,0], "bone_pos":[0,0.278,0] },
+	{ "name":"LeftHand", "top":[0.04,0.03,0.09,0.073], "bot":[0.05,0.03,0.07,-0.015] },
+	
+	{ "name":"LeftHandThumb1", "top":[0.03,0.025], "bot":[0.04,0] },
+	{ "name":"LeftHandThumb2", "top":[0.025,0.018], "bot":[0.025,0] },
+	{ "name":"LeftHandThumb3", "top":[0.020,0.025], "bot":[0.025,0] },
+	{ "name":"LeftHandIndex1", "top":[0.024,0.021], "bot":[0.024,0] },
+	{ "name":"LeftHandIndex2",  "top":[0.024,0.016], "bot":[0.024,0] },
+	{ "name":"LeftHandIndex3", "top":[0.020,0.023], "bot":[0.024,0] },
+	{ "name":"LeftHandMiddle1", "top":[0.024,0.022], "bot":[0.024,0] },
+	{ "name":"LeftHandMiddle2","top":[0.024,0.017], "bot":[0.024,0] },
+	{ "name":"LeftHandMiddle3", "top":[0.020,0.023], "bot":[0.024,0] },
+	{ "name":"LeftHandRing1","top":[0.024,0.021], "bot":[0.024,0] },
+	{ "name":"LeftHandRing2", "top":[0.024,0.016], "bot":[0.024,0] },
+	{ "name":"LeftHandRing3","top":[0.020,0.023], "bot":[0.024,0] },
+	{ "name":"LeftHandPinky1","top":[0.020,0.023], "bot":[0.020,0] },
+	{ "name":"LeftHandPinky2","top":[0.02,0.016], "bot":[0.02,0] },
+	{ "name":"LeftHandPinky3","top":[0.016,0.023], "bot":[0.02,0.005] },
+	
+	{ "name":"RightShoulder","top":[0.12,0.07], "bot":[0.145,0], "bone_pos":[-0.045,0.1084,-0.026] },
+	{ "name":"RightArm","top":[0.08,0.23], "bot":[0.10,0], "bone_pos":[-0.005,0.105,-0.022] },
+	{ "name":"RightForeArm","top":[0.06,0.24], "bot":[0.075,0], "bone_pos":[0,0.278,0] },
+	{ "name":"RightHand","top":[0.04,0.03,0.09,0.073], "bot":[0.05,0.03,0.07,-0.015] },
+	
+	{ "name":"RightHandPinky1", "top":[0.020,0.023], "bot":[0.020,0] },
+	{ "name":"RightHandPinky2", "top":[0.02,0.016], "bot":[0.02,0] },
+	{ "name":"RightHandPinky3", "top":[0.016,0.023], "bot":[0.02,0.005] },
+	{ "name":"RightHandRing1", "top":[0.024,0.021], "bot":[0.024,0] },
+	{ "name":"RightHandRing2", "top":[0.024,0.016], "bot":[0.024,0] },
+	{ "name":"RightHandRing3", "top":[0.020,0.023], "bot":[0.024,0] },
+	{ "name":"RightHandMiddle1", "top":[0.024,0.022], "bot":[0.024,0] },
+	{ "name":"RightHandMiddle2", "top":[0.024,0.017], "bot":[0.024,0] },
+	{ "name":"RightHandMiddle3", "top":[0.020,0.023], "bot":[0.024,0] },
+	{ "name":"RightHandIndex1", "top":[0.024,0.0210], "bot":[0.024,0] },
+	{ "name":"RightHandIndex2", "top":[0.024,0.016], "bot":[0.024,0] },
+	{ "name":"RightHandIndex3", "top":[0.020,0.023], "bot":[0.024,0] },
+	{ "name":"RightHandThumb1", "top":[0.03,0.025], "bot":[0.04,0] },
+	{ "name":"RightHandThumb2", "top":[0.025,0.018], "bot":[0.025,0] },
+	{ "name":"RightHandThumb3", "top":[0.020,0.025], "bot":[0.025,0] },
+
+	{ "name":"LeftUpLeg","top":[0.16,0.36], "bot":[0.16,0]},
+	{ "name":"LeftLeg", "top":[0.10,0.43], "bot":[0.14,0] },
+	{ "name":"LeftFoot", "top":[0.14,0.1,0.1,0.06], "bot":[0.14,0.1,0.17,0],"rot":ROTX20, "pos":[0,0,-0.019] },
+	{ "name":"LeftToeBase", "top":[0.13,0.09,0.06,0.07], "bot":[0.13,0.09,0.09,0.01] ,"rot":ROTXN10 ,"pos":[0,0,0.04] },
+
+	{ "name":"RightUpLeg", "top":[0.16,0.36], "bot":[0.16,0] },
+	{ "name":"RightLeg", "top":[0.10,0.43], "bot":[0.14,0] },
+	{ "name":"RightFoot", "top":[0.14,0.1,0.1,0.06], "bot":[0.14,0.1,0.17,0], "rot":ROTX20, "pos":[0,0,-0.019] },
+	{ "name":"RightToeBase", "top":[0.13,0.09,0.06,0.07], "bot":[0.13,0.09,0.09,0.01], "rot":ROTXN10 ,"pos":[0,0,0.04] }
+];
+
+</script><page-layout></page-layout>
