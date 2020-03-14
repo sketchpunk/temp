@@ -9,6 +9,7 @@ class Armature{
 	}
 
 	constructor(){
+		this.updated		= true;			// Does the armature need to update its buffers
 		this.skeleton 		= null;			// THREE uses skeleton to bind to SkinnedMesh
 		this.bones			= new Array();	// List of bones in the order they are used in the shader.
 		this.name_map		= {};			// Maps Bone names to array index for quick lookups
@@ -137,7 +138,7 @@ class Armature{
 				pb.chg_state = 0;
 			}
 
-			//this.updated = true;
+			this.updated = true;
 			return this;
 		}
 		

@@ -2,6 +2,7 @@
 import App, {THREE}	from "../../fungi.3js/App.js";
 import Capsule 		from "../../fungi/geo/Capsule.js";
 import InterleavedFloatArray from "../../fungi/data/InterleavedFloatArray.js";
+import VecBuffer	from "../../fungi/data/VecBuffer.js";
 
 /*
 https://medium.com/@pailhead011/instancing-with-three-js-36b4b62bc127
@@ -22,34 +23,140 @@ App.builder( true )
 //#####################################################
 function init(){
 	ProtoRig.init();
-
-
 	ProtoRig.$( "Test", MAXIMO_BONES, MAXIMO_CONFIG, true );
+	return true;
+}
 
-	/*
+function ProtoRigSys( ecs ){
+	let ary = ecs.query_comp( "ProtoRig" );
+	if( !ary ) return; // No Componets, skip.
+
+	let b, a, e, rig;
+	let pos = [0,0,0],
+		rot = [0,0,0,1],
+		vpos = new THREE.Vector3(),
+		vrot = new THREE.Quaternion();
+
+	for( a of ary ){
+		e = ecs.entities[ a.entity_id ];
+		if( !e.Armature.updated ) continue;
+
+		rig = e.ProtoRig;
+		for( b of e.Armature.bones ){
+			// 3JS data types are needed to get World Space
+			// plus the data is Structs, Fungi uses Arrays for Vec/Quats
+			b.ref.getWorldPosition( vpos ).toArray( pos );
+			b.ref.getWorldQuaternion( vrot ).toArray( rot );
+			rig.bone_pos.set( b.idx, pos );
+			rig.bone_rot.set( b.idx, rot );
+		}
+
+		rig.update_bone_buffer();
+	}
+}
+
+class ProtoRig{
+	static init( priority = 810 ){
+		App.Components.reg( ProtoRig );
+		App.ecs.sys_add( ProtoRigSys, priority );
+	}
+
+    static $( name, bones, config, use_preview=false ){
+		let grp = new THREE.Group();
+		grp.name = name;
+
+		let e = App.$( grp, [ "Obj", "ProtoRig", "Armature" ] ),
+			p = e.ProtoRig;
+
+		e.Armature.deserialize_bones( bones ).finalize();
+		p.build( config, e.Armature );
+		
+		if( use_preview ){
 			let b = e.Armature.get_root();
-			o.ref.add( b );
+			grp.add( b );
 			App.scene.add( new THREE.SkeletonHelper( b ) );
+		}
 
-	let g = Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
-	//console.log( g );
+		return e;
+	}
 
-	let geo = new THREE.InstancedBufferGeometry();
-	geo.setIndex( new THREE.BufferAttribute( g.ind, 1 ) );
-	geo.addAttribute( "position", new THREE.BufferAttribute( g.vert, 3 ) );
-	geo.addAttribute( "normal", new THREE.BufferAttribute( g.norm, 3 ) );
-	geo.addAttribute( "a_cfg_top", new THREE.InstancedBufferAttribute( new Float32Array([1,1,1,0.0, 0.7,1,0.7,0.9]), 4 ) );  
-	geo.addAttribute( "a_cfg_bot", new THREE.InstancedBufferAttribute( new Float32Array([1,1,1,-0.0, 1,1,1,0]), 4 ) );
-	geo.addAttribute( "a_cfg_rot", new THREE.InstancedBufferAttribute( new Float32Array([0,0,0,1, 0,0,0,1]), 4 ) );
-	geo.addAttribute( "a_cfg_pos", new THREE.InstancedBufferAttribute( new Float32Array([1,0,0, -1,0,0]), 3 ) );
-	
+	constructor(){
+		this.bone_rot		= null;
+		this.bone_rot_buf	= null;
+		this.bone_pos		= null;
+		this.bone_pos_buf	= null;
+		this.mesh			= null;
+	}
 
-	geo.maxInstancedCount = 2;
+	build( config, arm ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let cnt		= config.length,
+			cfg_top	= new VecBuffer( cnt, 4, true ),
+			cfg_bot	= new VecBuffer( cnt, 4, true ),
+			cfg_rot	= new VecBuffer( cnt, 4, true ),
+			cfg_pos	= new VecBuffer( cnt, 3, true ),
+			idx, itm;
 
+		for( itm of config ){
+			//--------------------------------
+			if( (idx = arm.name_map[ itm.name ]) == undefined ){
+				console.log( "ProtoRig Build - Can Not Find Bone Index of ", itm.name );
+				continue;
+			}
+
+			//--------------------------------
+			if( itm.top.length == 2 )	cfg_top.set_raw( idx, itm.top[ 0 ],itm.top[ 0 ], itm.top[ 0 ], itm.top[ 1 ] );
+			else						cfg_top.set( idx, itm.top );
+
+			if( itm.bot.length == 2 )	cfg_bot.set_raw( idx, itm.bot[ 0 ], itm.bot[ 0 ], itm.bot[ 0 ], itm.bot[ 1 ] );
+			else						cfg_bot.set( idx, itm.bot );
+
+			cfg_rot.set( idx, ( itm.rot || [0,0,0,1] ) );
+			cfg_pos.set( idx, ( itm.pos || [0,0,0] ) );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup Buffer to hold the Flat World Space Transform of the Bones
+		this.bone_rot 		= new VecBuffer( cnt, 4, true );
+		this.bone_pos 		= new VecBuffer( cnt, 3, true );
+		this.bone_rot_buf 	= new THREE.InstancedBufferAttribute( this.bone_rot.buffer, this.bone_rot.comp_len );
+		this.bone_pos_buf 	= new THREE.InstancedBufferAttribute( this.bone_pos.buffer, this.bone_pos.comp_len );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let g	= Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+		let geo	= new THREE.InstancedBufferGeometry();
+		geo.maxInstancedCount = cnt;
+
+		geo.setIndex( new THREE.BufferAttribute( g.ind, 1 ) );
+		geo.addAttribute( "position",	new THREE.BufferAttribute( g.vert, 3 ) );
+		geo.addAttribute( "normal",		new THREE.BufferAttribute( g.norm, 3 ) );
+		geo.addAttribute( "a_cfg_top",	new THREE.InstancedBufferAttribute( cfg_top.buffer, cfg_top.comp_len ) );  
+		geo.addAttribute( "a_cfg_bot",	new THREE.InstancedBufferAttribute( cfg_bot.buffer, cfg_bot.comp_len ) );
+		geo.addAttribute( "a_cfg_rot",	new THREE.InstancedBufferAttribute( cfg_rot.buffer, cfg_rot.comp_len ) );
+		geo.addAttribute( "a_cfg_pos",	new THREE.InstancedBufferAttribute( cfg_pos.buffer, cfg_pos.comp_len ) );
+		geo.addAttribute( "a_ins_rot",	this.bone_rot_buf );
+		geo.addAttribute( "a_ins_pos",	this.bone_pos_buf );
+
+		this.mesh 		= new THREE.Mesh( geo, get_material() );
+		this.mesh.name 	= "ProtoRig";
+		App.scene.add( this.mesh );
+	}
+
+	update_bone_buffer(){ 
+		this.bone_rot_buf.needsUpdate = true;
+		this.bone_pos_buf.needsUpdate = true;
+	}
+}
+
+function get_material(){
 	let mat = new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } );
 	mat.onBeforeCompile = (shader)=>{
 		shader.vertexShader = 
-			`attribute vec4 a_cfg_top;
+			`
+			attribute vec4 a_ins_rot;
+			attribute vec3 a_ins_pos;
+
+			attribute vec4 a_cfg_top;
 			attribute vec4 a_cfg_bot;
 			attribute vec4 a_cfg_rot;
 			attribute vec3 a_cfg_pos;
@@ -60,7 +167,6 @@ function init(){
 			vec4 qmul(vec4 q1, vec4 q2){
 				return vec4(q2.xyz * q1.w + q1.xyz * q2.w + cross(q1.xyz, q2.xyz), q1.w * q2.w - dot(q1.xyz, q2.xyz) );
 			}
-			
 			` + 
 			shader.vertexShader.replace("#include <begin_vertex>",`
 				vec3 pos = position;
@@ -79,194 +185,16 @@ function init(){
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				// Transform Instances
-				//pos 		= quat_mul_vec3( a_ins_rot, pos );
-				//pos 		+= a_ins_pos;
-
-
+				pos	= quat_mul_vec3( a_ins_rot, pos );
+				pos	+= a_ins_pos;
 				vec3 transformed = pos;
 			`);
 		//console.log( shader.vertexShader );
 	};
 
-	let m = new THREE.Mesh( geo, mat );
-	m.name = "Test";
-	App.$( m );
-	*/
-	return true;
-
+	return mat;
 }
 
-
-class ProtoRig{
-	static init( priority = 810 ){
-		App.Components.reg( ProtoRig );
-		//App.ecs.sys_add( ProtoRigSys, priority );
-	}
-
-    static $( name, bones, config, use_preview=false ){
-		let grp = new THREE.Group();
-		grp.name = name;
-
-		let e = App.$( grp, [ "Obj", "ProtoRig", "Armature" ] );
-		let p = e.ProtoRig;
-				
-		e.Armature.deserialize_bones( bones ).finalize();
-		p.build( config, e.Armature );
-		
-		if( use_preview ){
-			let b = e.Armature.get_root();
-			grp.add( b );
-			App.scene.add( new THREE.SkeletonHelper( b ) );
-		}
-
-		return e;
-	}
-
-	constructor(){
-		this.bone_buffer = null;
-
-		// Flat Worldspace Transfrom from Armature Bones
-	    this.bone_transform = new InterleavedFloatArray()
-	    	.add_var( "rot", 4 )
-	    	.add_var( "pos", 3 );
-
-	    // Capsule Visual Configuration
-	    this.config = new InterleavedFloatArray()
-	    	.add_var( "top", 4 )	// xyz = scale dome, w translate Y position
-	    	.add_var( "bot", 4 )
-			.add_var( "rot", 4 )	// Quaternion Rotation
-			.add_var( "pos", 3 );	// Quaternion Rotation
-	}
-
-	build( config, arm ){
-		let cnt = config.length,
-			idx;
-
-		let bt  = this.bone_transform;
-		let cfg = this.config;
-
-		bt.expand_by( cnt, true );	// Initialize Bone Transform Buffer, Auto fill with 0s
-        cfg.expand_by( cnt, true ); // Initialize Capsule Config Buffer, Auto fill with 0s
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let ttop, bbot, top = [0,0,0,0], bot = [0,0,0,0];    
-		for( let itm of config ){
-			idx = arm.name_map[ itm.name ];
-			if( idx == undefined ){
-				console.log( "ProtoRig Build - Can Not Find Bone Index of ", itm.name );
-				continue;
-			}
-
-			// Handle Scalar data
-			if( itm.top.length == 2 ){	// Single Scalar
-				top[ 0 ] = top[ 1 ] = top[ 2 ] = itm.top[ 0 ];
-				top[ 3 ] = itm.top[ 1 ];
-				ttop = top;
-			}else ttop = itm.top;		// XYZ Scalar
-
-			if( itm.bot.length == 2 ){	// Single Scalar
-				bot[ 0 ] = bot[ 1 ] = bot[ 2 ] = itm.bot[ 0 ];
-				bot[ 3 ] = itm.bot[ 1 ];
-				bbot = bot;
-			}else bbot = itm.bot;		// XYZ Scalar
-
-			cfg.set( idx, ttop, bbot, ( itm.rot || [0,0,0,1] ), ( itm.pos || [0,0,0] ) );
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Setup Buffer to hold the Flat World Space Transform of the Bones
-		//this.bone_buffer = App.Buf.new_array( bt.buffer, 0, false );
-		//this.bone_buffer.set_interleaved( bt.get_stride_info() );
-
-
-		/*
-        let cnt = ary.length,
-            arm = e.Armature,
-            bt  = this.bone_transform,
-            cfg = this.config;
-
-        bt.expand_by( cnt, true );      // Initialize Bone Transform Buffer, Auto fill with 0s
-        cfg.expand_by( cnt, false );    // Initialize Capsule Config Buffer, Fill in Manually
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Build up armature bones and capsule configurations
-        let itm, ttop, bbot, top = [0,0,0,0], bot = [0,0,0,0];    
-        for( itm of ary ){
-			// Create Bone Entity
-			console.log( itm.name );
-            arm.add_bone( itm.name, itm.len, itm.p_idx )
-            	.Node
-				.set_rot( itm.rot )
-				.set_pos( itm.pos );
-
-			// Save Visual Config
-			if( itm.top.length == 2 ){
-				top[ 0 ] = top[ 1 ] = top[ 2 ] = itm.top[ 0 ];
-				top[ 3 ] = itm.top[ 1 ];
-				ttop = top;
-			}else ttop = itm.top;
-
-			if( itm.bot.length == 2 ){
-				bot[ 0 ] = bot[ 1 ] = bot[ 2 ] = itm.bot[ 0 ];
-				bot[ 3 ] = itm.bot[ 1 ];
-				bbot = bot;
-			}else bbot = itm.bot;
-
-            cfg.push( ttop, bbot, ( itm.rot || [0,0,0,1] ), ( itm.pos || [0,0,0] ) ); 
-		}
-		
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Setup Buffer to hold the Flat World Space Transform of the Bones
-		this.bone_buffer = App.Buf.new_array( bt.buffer, 0, false );
-		this.bone_buffer.set_interleaved( bt.get_stride_info() );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Build Capsule Mesh
-		// (arc_div-1) * lathe_cnt + 1 == Dome Vert Count
-		let geo 	= Capsule.geo( 10, 4, 0.5, 0 ), //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
-			mesh	= new App.Mesh( "Proto" ),
-			vao 	= new App.Vao().bind();
-
-		mesh.buf.idx = App.Buf.new_element( geo.ind, true, false );
-		vao.add_indices( mesh.buf.idx );
-
-		mesh.buf.vert = App.Buf.new_array( geo.vert, 3, true, false );
-		vao.add_buf( mesh.buf.vert, App.Shader.POS_LOC );
-		
-		mesh.buf.norm = App.Buf.new_array( geo.norm, 3, true, false );
-		vao.add_buf( mesh.buf.norm, App.Shader.NORM_LOC );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Instanced Data 
-		
-		// Capsule Configuration
-		mesh.buf.cfg = App.Buf
-			.new_array( cfg.buffer )
-			.set_interleaved( cfg.get_stride_info() );
-		vao.add_interleaved( mesh.buf.cfg, [12,13,14,15], true );
-
-		// Bone Transform ( Instanced )
-		vao.add_interleaved( this.bone_buffer, [10,11], true );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Clean up VAO Building and Get Mesh Ready
-		App.Vao.unbind();
-		App.Buf.unbind_array().unbind_element();
-
-		mesh.set( vao, geo.ind.length, cfg.len );	// Set VAO and Count Values to render mesh
-		arm.finalize();								// Compile Bind Pose
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let mat = SHADER.new_material( "ProtoRigMat" );
-		e.Draw.add( mesh, mat, App.Mesh.TRI );
-		*/
-	}
-
-	update_bone_buffer(){ 
-		this.bone_buffer.update( this.bone_transform.buffer );
-	}
-
-}
 
 import Quat from "../../fungi/maths/Quat.js";
 import Vec3 from "../../fungi/maths/Vec3.js";
