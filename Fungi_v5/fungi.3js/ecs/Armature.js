@@ -6,6 +6,8 @@ import Pose					from "../../fungi.armature/Pose.js";
 class Armature{
 	static init( priority = 801 ){
 		App.Components.reg( Armature );
+		App.ecs
+			.sys_add( ArmatureCleanupSys, 1000 );	// Final Cleanup at the end of a frame
 	}
 
 	constructor(){
@@ -178,6 +180,14 @@ class Armature{
 		}
 }
 
+
+
+/** System to handle cleanup like setting updated to false */
+function ArmatureCleanupSys( ecs ){
+	let a, ary = ecs.query_comp( "Armature" );
+	if( ary == null ) return; // No Bones Loaded
+	for( a of ary ) if( a.updated ) a.updated = false;
+}
 
 //#################################################################
 export default Armature;

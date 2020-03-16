@@ -46,7 +46,7 @@ let App = {
 			e = App.ecs.entity( o, com_ary || ["Obj"] );
 		}else{
 			e = App.ecs.entity( o.name, com_ary || ["Obj"] );
-			if( o ) e.Obj.set_ref( o );
+			if( o && e.Obj ) e.Obj.set_ref( o );
 		}
 		return e;
 	},

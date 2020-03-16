@@ -48,6 +48,7 @@ class Quat extends Float32Array{
 		//-------------------------------------------
 		
 		from_struct( o ){ this[0] = o.x; this[1] = o.y; this[2] = o.z; this[3] = o.w; return this; }
+		to_struct( o ){ o.x = this[0]; o.y = this[1]; o.z = this[2]; o.w = this[3]; return this; }
 
 		from_buf( ary, i ){
 			this[0] = ary[i];
