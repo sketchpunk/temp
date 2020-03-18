@@ -22,7 +22,7 @@ App.builder( true )
 	.build();
 
 //#####################################################
-let gEntitySrc, gAnimate, gModelA, gModelB, gIKPose;
+let gEntitySrc, gAnimate, gModelA, gModelB, gModelC, gModelD, gIKPose;
 
 function on_draw( dt, ss ){
 	gAnimate( dt * 0.9 ); // * 0.1
@@ -32,6 +32,9 @@ async function init(){
 	let dl = await XhrQueue.url( "../../_tmp/" )
 		.grp( "src", "walking.gltf", "json", "walking.bin", "bin" )
 		//.grp( "src", "cat_walk.gltf", "json", "cat_walk.bin", "bin" )
+		.grp( "rex", "robo_trex.gltf", "json", "robo_trex.bin", "bin" )
+		.url( "../../files/models/" )
+		.grp( "veg", "vegeta.gltf", "json", "vegeta.bin", "bin" )
 		.then();
 
 	if( dl.src ) gAnimate = load_src( dl.src.json, dl.src.bin );
@@ -39,6 +42,8 @@ async function init(){
 
 	load_mesh_a();
 	load_mesh_b();
+	load_mesh_c( dl.veg.json, dl.veg.bin );
+	load_mesh_d( dl.rex.json, dl.rex.bin );
 
 	gIKPose = new IKPose();
 	gAnimate( 0.2 );
@@ -74,6 +79,16 @@ function load_src( json, bin ){
 			gIKPose.apply_rig( gModelB.IKRig );
 			gModelB.IKRig.apply_pose();
 		}
+
+		if( gModelC ){
+			gIKPose.apply_rig( gModelC.IKRig );
+			gModelC.IKRig.apply_pose();
+		}
+
+		if( gModelD ){
+			gIKPose.apply_rig( gModelD.IKRig );
+			gModelD.IKRig.apply_pose();
+		}
 		/**/
 	}
 	return null;
@@ -83,7 +98,7 @@ function load_mesh_a( json, bin ){
 	let e = ProtoRig.$( "ProtoMan", MAXIMO_BONES, MAXIMO_CONFIG, true );
 	e.add_com( "IKRig" ).init( null, false );
 	gModelA = e;
-	e.Obj.set_pos( 1, 0, 0 );
+	e.Obj.set_pos( 2, 0, 0 );
 }
 
 function load_mesh_b( json, bin ){
@@ -116,7 +131,58 @@ function load_mesh_b( json, bin ){
 	;
 
 	gModelB = e;
-	e.Obj.set_pos( -1.5, 0, 0 );
+	e.Obj.set_pos( -3.0, 0, 0 );
+}
+
+function load_mesh_c( json, bin ){
+	let e 		= GltfUtil.get_debug_view( "target_a", json, bin, new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } ) );
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
+	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+
+	tpose.apply();
+
+	rig.points.head.idx = rig.points.neck.idx; // Lil hack cause Head Isn't Skinned Well.
+	e.Obj.set_pos( 1.0, 0, 0 );
+
+	gModelC = e;
+}
+
+function load_mesh_d( json, bin ){
+	let e 		= GltfUtil.get_debug_view( "target_b", json, bin, new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } ) );
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );	
+	let rig 	= e
+		.add_com( "IKRig" )
+		.init( tpose, false, 0 )
+
+		.add_point( "hip", "hip" )
+		.add_point( "head", "face_joint" )
+		.add_point( "foot_l", "LeftFoot" )
+		.add_point( "foot_r", "RightFoot" )
+
+		.add_point( "wing_l", "left_wing" )
+		.add_point( "wing_r", "right_wing" )
+
+		.add_chain( "leg_r", [ "RightUpLeg", "RightKnee", "RightShin" ], "RightFoot", "three_bone" ) //"z", 
+		.add_chain( "leg_l", [ "LeftUpLeg", "LeftKnee", "LeftShin" ], "LeftFoot", "three_bone" ) // "z", 
+		.add_chain( "spine", [ "Spine", "Spine1" ] )
+		.add_chain( "tail", ["tail_1","tail_2","tail_3","tail_4","tail_5","tail_6","tail_7"] )
+		.set_leg_lmt( null, -0.1 )
+	;
+
+	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	/**/
+
+	tpose.apply();
+
+	// Add some Spring Movement to specific bones
+	e.add_com( "BoneSpring" )
+		.add( rig.get_chain_indices( "tail" ), 2.9, 0.9, -0.1 )
+		.add( rig.points.wing_l.idx, 5.0, 0.9 )
+		.add( rig.points.wing_r.idx, 5.0, 0.9 );
+
+	e.Obj.set_pos( -1.0, 0, 0 );
+	gModelD = e;
 }
 
 //#####################################################
