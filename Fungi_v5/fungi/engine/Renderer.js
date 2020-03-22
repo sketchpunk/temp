@@ -93,10 +93,10 @@ class Renderer{
 				if(this.options[k] && this.options[k].state != v){
 					this.options[k].state = v;
 
-					switch(k){
-						case "blendMode":	gl.blendMode( v ); break;
-						case "depthMask":	gl.ctx.depthMask( v ); break;
-						case "cullDir":		gl.ctx.cullFace( v ); break;
+					switch( k ){
+						case "blendMode"	: gl.blendMode( v ); break;
+						case "depthMask"	: gl.ctx.depthMask( v ); break;
+						case "cullDir"		: gl.ctx.cullFace( v ); break;
 						default:
 							gl.ctx[ (this.options[k].state)? "enable" : "disable" ]( this.options[k].id );
 						break;
@@ -108,7 +108,7 @@ class Renderer{
 			return this;
 		}
 
-		load_entity( e ){			
+		load_entity( e ){	
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			this.ubo_model
 				.set_var( "view_matrix", e.Node.model_matrix )

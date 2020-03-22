@@ -267,16 +267,15 @@ let App = {
 	async function init_scene(){
 		let mods = await Promise.all([
 			//import( "../shaders/CircleGrid.js" ),
-			import( "./shaders/MetricGrid.js" ),
+			//import( "./shaders/MetricGrid.js" ),
+			import( "./shaders/GridFloor.js" ),
 			import( "./geo/Quad.js" ),
 		]);
 
-		let mat = mods[0].default.new_material(),	// Floor Shader
+		let mat = mods[0].default.new_material().opt_cullface( false ),	// Floor Shader
 			e 	= mods[1].default( "floor", mat );	// Quad
 
-		mat.options.cullFace = false;
-
-		e.Draw.priority = 100;
+		e.Draw.priority = 900;
 		e.Node.set_rot_axis( [1,0,0], -90 * Math.PI / 180 );
 		e.Node.set_scl( 10 );
 

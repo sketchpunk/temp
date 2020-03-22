@@ -34,3 +34,14 @@ https://en.wikipedia.org/wiki/T-tree
 
 ORTHOGRAPHIC CAMERA
 https://github.com/mrdoob/three.js/blob/master/src/cameras/OrthographicCamera.js
+
+
+LOTS OF CURVE FUNCTIONS
+http://www.iquilezles.org/www/articles/functions/functions.htm
+https://thebookofshaders.com/05/  //Really Cool stuff here.
+
+
+SHAPES GLSL
+https://discourse.threejs.org/t/shader-to-create-an-offset-inward-growing-stroke/6060/18
+https://codepen.io/prisoner849/pen/rNBXVmb - Square, triangle, Circle, Etc, Pretty awesome
+https://codepen.io/prisoner849/pen/YzKmQqE  - Same, but better anti alias

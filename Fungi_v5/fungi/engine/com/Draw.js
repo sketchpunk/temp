@@ -43,7 +43,7 @@ class DrawSys{
 			// If entity isn't active Or there are no VAOs in the draw component
 			// then continue to the next entity for rendering.
 			if( !e.info.active || e.Draw.items.length == 0 ) continue;
-			
+			//console.log( e.info.name, e.Draw.priority );
 			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			//d = e.Draw;
 			//if( !d.onDraw ){ // No Custom Manual Control Over Rendering

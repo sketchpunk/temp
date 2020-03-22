@@ -68,6 +68,9 @@ class Shader{
 			return this;
 		}	
 
+		opt_blend( b ){ this.options.blend = b; return this; }
+		opt_cullface( b ){ this.options.cullFace = b; return this; }
+
 	///////////////////////////////////////////////////////
 	// 
 	///////////////////////////////////////////////////////
@@ -339,6 +342,7 @@ class Material{
 		}
 
 		opt_blend( b ){ this.options.blend = b; return this; }
+		opt_cullface( b ){ this.options.cullFace = b; return this; }
 
 		/*
 		static clone( mat, name ){

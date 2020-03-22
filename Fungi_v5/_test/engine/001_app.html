@@ -6,7 +6,7 @@ import FacedCube from "../../fungi/geo/FacedCube.js";
 //#####################################################
 App.builder()
 	//.load_shaders( "../shaders/BaseColor.js" )
-	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.set_camera( 0, 10, 4, 0, 0.75, 0 )
 	.add( init )
 	//.render_loop()
 	.render_on_mouse()
@@ -17,11 +17,13 @@ App.builder()
 function init( x ){
 	let mat	= App.ShaderBuilder({ base_color : "#ff0000ff", cull_face:false }),
 		e	= Quad( "Quad", mat );
-
-	e.Node.set_pos( 0, 0.6, 0 );
+	e.Node.set_scl( 0.5 );
+	//e.Node.set_pos( 0, 0.6, 0 );
 
 	e = FacedCube();
-	e.Node.set_pos( 0, 0.5, -2 );
+	e.Node.set_pos( 0.5, 0.5, -2 );
+
+	//App.render();
 	return true;
 }
 </script><page-layout></page-layout>

@@ -152,7 +152,6 @@ const vert_src = `#version 300 es
 const frag_src = `#version 300 es
 	precision mediump float;
 	
-
 	in vec3 frag_pos;
 	out	vec4 out_color;
 
@@ -181,9 +180,9 @@ const frag_src = `#version 300 es
 
 		/*=================== */
         vec2 coord = frag_pos.xz;
-        vec4 u_plateColor = vec4(0.3, 0.3, 0.3, 1.0);
-        vec4 u_gridColor1 = vec4(0.36, 0.36, 0.36, 1.0);
-        vec4 u_gridColor0 = vec4(0.45, 0.45, 0.45, 1.0);
+        vec4 u_plateColor = vec4(0.1, 0.1, 0.1, 0.0);
+        vec4 u_gridColor1 = vec4(0.30, 0.30, 0.30, 1.0);
+        vec4 u_gridColor0 = vec4(0.48, 0.48, 0.48, 1.0);
 
         // Compute anti-aliased world-space minor grid lines
         vec2 minorGrid = abs(fract(coord / 0.2 - 0.5) - 0.5) / fwidth(coord / 0.2);
@@ -198,9 +197,6 @@ const frag_src = `#version 300 es
         out_color = mix(minorGridColor, u_gridColor0, 1.0 - min(majorLine, 1.0));
    
 
-
-
-    
 
 		//float x = frag_pos.x;
 		//float y = frag_pos.z;
@@ -225,7 +221,8 @@ const frag_src = `#version 300 es
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 let sh = App.Shader.from_src( "MetricGrid", vert_src, frag_src )
-	.add_uniform_blocks( ["Global","Model"] );
+    .add_uniform_blocks( ["Global","Model"] )
+    .opt_blend( true );
 
 	//.add_uniform( "color_a", "rgba", "#000000FF" )
 	//.add_uniform( "color_b", "rgba", "#FFFFFFFF" )

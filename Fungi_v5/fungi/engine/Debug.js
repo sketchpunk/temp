@@ -20,6 +20,11 @@ class Debug{
 	}
 
 		static set_pnt_size( s ){ this.Pnt.use_size = s; return this; }
+		static set_depth_test( s ){
+			this.ePnt.Draw.items[0].material.options.depthTest	= s;
+			this.eLn.Draw.items[0].material.options.depthTest	= s;
+			return this;
+		}
 
 	////////////////////////////////////////////////////////////////////
 	// POINTS
