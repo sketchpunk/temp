@@ -277,24 +277,26 @@ class Ray{
 		}
 		*/
 
-		in_aabb( box, out ){
+		in_aabb( box, out=null ){ return this.in_bound( box.worldBounds, out ); }
+
+		in_bound( bounds, out=null ){
 			let tMin, tMax, min, max, minAxis = 0;//, maxAxis = 0;
 
 			//X Axis ---------------------------
-			tMin = (box.worldBounds[	this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
-			tMax = (box.worldBounds[1 - this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
+			tMin = (bounds[		this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
+			tMax = (bounds[1 -	this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
 
 			//Y Axis ---------------------------
-			min = (box.worldBounds[		this.aabb[1]].y - this.origin.y) * this.vec_len_inv.y;
-			max = (box.worldBounds[1 - 	this.aabb[1]].y - this.origin.y) * this.vec_len_inv.y;
+			min = (bounds[		this.aabb[1]].y - this.origin.y) * this.vec_len_inv.y;
+			max = (bounds[1 - 	this.aabb[1]].y - this.origin.y) * this.vec_len_inv.y;
 
 			if(max < tMin || min > tMax) return false;	// if it criss crosses, its a miss
 			if(min > tMin){ tMin = min; minAxis = 1; }	// Get the greatest min
 			if(max < tMax){ tMax = max; }				// Get the smallest max
 
 			//Z Axis ---------------------------
-			min = (box.worldBounds[		this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
-			max = (box.worldBounds[1 - 	this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
+			min = (bounds[		this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
+			max = (bounds[1 - 	this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
 
 			if(max < tMin || min > tMax) return false;	// if criss crosses, its a miss
 			if(min > tMin){ tMin = min; minAxis = 2; }	// Get the greatest min
@@ -302,7 +304,7 @@ class Ray{
 
 			//Finish ------------------------------
 			//var ipos = dir.clone().scale(tMin).add(ray.start); //with the shortist distance from start of ray, calc intersection
-			if(out !== undefined){
+			if( out ){
 				out.min		= tMin;
 				out.max		= tMax;
 				out.nAxis	= minAxis; // 0 : X, 1 : Y, 2 : Z

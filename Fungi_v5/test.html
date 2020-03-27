@@ -24,8 +24,8 @@ function init( x ){
 	let la		= box_a.Node.local;	// Reference to Local Transform A
 	box_a.Node.set_scl( 0.6 ).set_pos( -1.2, 0.6, 0 );
 
-	box_a.Node.rot_by( 90 ).rot_by( 90, "z" ); // 200 to test negative
-	//box_a.Node.rot_by( 60 ).rot_by( -45, "x" ).rot_by( -45, "z" ); 
+	//box_a.Node.rot_by( 90 ).rot_by( 90, "z" ); // 200 to test negative
+	box_a.Node.rot_by( 60 ).rot_by( -45, "x" ).rot_by( -45, "z" ); 
 
 	//------------------------
 	// Target Item
@@ -39,7 +39,7 @@ function init( x ){
 	let fwd_a	= Vec3.transform_quat( Vec3.FORWARD, la.rot );	// Get the Current FWD Dir of our Source
 	let fwd_b	= Vec3.transform_quat( Vec3.FORWARD, lb.rot );	// Get the Current FWD Dir of our Target
 	let swing	= Quat.unit_vecs( fwd_b, fwd_a );				// Create rotation that goes from Our Target to Source.
-	lb.rot.pmul( swing );										// PreMultiply our swing rotation to our target's current rotation.
+	//lb.rot.pmul( swing );										// PreMultiply our swing rotation to our target's current rotation.
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Step 2 - Figure out Twist Rotation
@@ -61,7 +61,7 @@ function init( x ){
 	console.log( ang );
 	
 	let twist = Quat.axis_angle( fwd_a, ang );
-	lb.rot.pmul( twist );
+	//lb.rot.pmul( twist );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Visualize Direction

@@ -1,12 +1,12 @@
 <!DOCTYPE html><script type="module">
 import App		from "../../fungi/App.js";
 import Ray		from "../../fungi.ray/Ray.js";
-import { Vec3 } from "../../fungi/maths/Maths.js";
+import Maths, { Vec3 } from "../../fungi/maths/Maths.js";
 
 
 //#####################################################
 App.builder( true )
-	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.set_camera( 45, 20, 4, 0, 0.75, 0 )
 	.add( init )
 	.render_on_mouse( on_draw )
 	.build();
@@ -20,7 +20,7 @@ function on_draw( dt, ss ){
 
 let eGizmo;
 function init(){
-	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+	App.gl.canvas.addEventListener( "mousedown", onRightClick );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -30,9 +30,11 @@ function init(){
 	let e	= App.$Draw( "gizmo" );
 
 	e.Draw.add( ary[0].mesh, mat, ary[0].draw_mode );
-	e.Draw.add( ary[1].mesh, mat, ary[1].draw_mode );
+	//e.Draw.add( ary[1].mesh, mat, ary[1].draw_mode );
 
 	eGizmo = e;
+
+	e.Node.set_pos( 0.0, 1.0, 0.0 );
 
 	return true;
 }
@@ -197,13 +199,17 @@ function onRightClick( e ){
 
 	let pos = App.input.toCoord( e );
 
-	gRay.set_screen_mouse( pos[0], pos[1] );
+	gRay.set_screen_mouse( pos[0], pos[1] ).prepare_aabb();
 
-	App.Debug.ln( gRay.origin, gRay.end, "red" );
+	App.Debug.reset().ln( gRay.origin, gRay.end, "red" );
 
-	ray_to_axis( gRay, eGizmo.Node.local );
-
-	console.log( gRay );
+	if( ray_to_bound( gRay, eGizmo.Node.local ) ){
+		let info = {};
+		if( ray_to_axis( gRay, eGizmo.Node.local, info ) ){
+			console.log("HIT");
+			start_axis_drag( eGizmo.Node.local.pos, info.axis, info.hit_point );
+		}
+	}
 }
 
 const CAMERA_SCALE	= 8;
@@ -220,43 +226,121 @@ function gizmo_camera_adjust( e, cam ){
 	if( Vec3.dot( eye_dir, Vec3.FORWARD )	< MIN_ADJUST )	scl.z *= -1;
 	if( Vec3.dot( eye_dir, Vec3.UP )		< MIN_ADJUST )	scl.y *= -1;
 	
+	//App.Debug.reset().box_at( e.Node.local.pos, scl.x, scl.y, scl.z );
+
 	e.Node.updated = true;
 }
 
 
-const AXIS_MIN_RNG	= 0.001;
-const UNIT_AXIS		= [ Vec3.FORWARD, Vec3.LEFT, Vec3.UP ];
+let gbound = [ new Vec3(), new Vec3() ];
+function ray_to_bound( ray, wt ){
+	let x1 = wt.pos[0],
+		y1 = wt.pos[1],
+		z1 = wt.pos[2],
+		x2 = x1 + wt.scl[0],
+		y2 = y1 + wt.scl[1],
+		z2 = z1 + wt.scl[2],
+		a = gbound[ 0 ],
+		b = gbound[ 1 ],
+		t;
+	
+	// Compute Cube Bounds
+	if( x1 > x2 ){ t=x1; x1=x2; x2=t; }
+	if( y1 > y2 ){ t=y1; y1=y2; y2=t; }
+	if( z1 > z2 ){ t=z1; z1=z2; z2=t; }
+	a.set( x1, y1, z1 ); // Lower Bound
+	b.set( x2, y2, z2 ); // Upper Bound
 
-function ray_to_axis( ray, wt ){
+	let info = {};
+	if( ray.in_bound( gbound, info ) ){
+		App.Debug.box( a, b );
+		//App.Debug
+		//	.pnt( gRay.get_pos( info.min ), "green", 0.05, 1 )
+		//	.pnt( gRay.get_pos( info.max ), "red", 0.05, 1 );
+		return true;
+	}
+
+	return false;
+}
+
+const AXIS_MIN_RNG	= 0.0015;
+const UNIT_AXIS		= [ Vec3.FORWARD, Vec3.LEFT, Vec3.UP ];
+function ray_to_axis( ray, wt, info=null ){
 	let p			= new Vec3(),
 		min_len		= Infinity,
 		min_axis	= -1,
 		len, pnt, i;
 
 	for( i=0; i < 3; i++ ){
+		// Scale the Axis, then add position
 		p.from_mul( UNIT_AXIS[ i ], wt.scl ).add( wt.pos );
 
+		// Check if ray is near any of the axis lines.
 		pnt = ray.near_segment( wt.pos, p );
 		if( pnt ){
 			len = Vec3.len_sqr( pnt[0], pnt[1] );
 
 			if( len <= AXIS_MIN_RNG && len < min_len ){
-				min_len		= len;
-				min_axis	= i;
-
+				if( info ){
+					info.len		= len;
+					info.axis_idx	= i;
+					info.axis 		= UNIT_AXIS[ i ];
+					info.hit_point 	= pnt[ 0 ];
+				}
+				/*
 				App.Debug
 					.pnt( pnt[0], "green" )
 					.pnt( pnt[1], "red" );
-				console.log( len, UNIT_AXIS[ i ] );
+				console.log( len, i, UNIT_AXIS[ i ] );
+				*/
+
+				return true;
 			}
 			
 		}
 	}
+
+	return false;
+}
+
+
+let axis_drag = {
+	a		: new Vec3(),
+	b		: new Vec3(),
+	offset 	: new Vec3(),
+}
+function start_axis_drag( pos, axis, pnt ){
+	axis_drag.a.copy( axis ).add( pos );
+	axis_drag.b.copy( axis ).invert().add( pos );
+	axis_drag.offset.from_sub( pos, pnt );
+
+	App.Debug.ln( axis_drag.a, axis_drag.b );
+
+	App.gl.canvas.addEventListener( "mousemove", move_axis_drag );
+	App.gl.canvas.addEventListener( "mouseup", end_axis_drag );
+}
+
+function move_axis_drag( e ){
+	//console.log( "move" );
+
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1] ).prepare_aabb();
+
+	let ary = Maths.closest_points_from_lines( gRay.origin, gRay.end, axis_drag.a, axis_drag.b );
+	//console.log( ary );
+	App.Debug.reset().pnt( ary[1], "orange" );
+
+	eGizmo.Node.set_pos( ary[1].add( axis_drag.offset ) );
+}
+
+function end_axis_drag( e ){
+	App.gl.canvas.removeEventListener( "mousemove", move_axis_drag );
+	App.gl.canvas.removeEventListener( "mouseup", end_axis_drag );
+
+	console.log(  )
 }
 
 /*
-
-
 		static rayToAxisSegments( ray, wt ){
 			let p 		= new Vec3(),
 				minLen	= Infinity,

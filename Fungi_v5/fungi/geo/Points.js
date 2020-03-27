@@ -58,6 +58,7 @@ class Points{
 
 	update(){
 		if( !this.updated ) return this;
+
 		this.mesh.instance_cnt	= this.byte_buf.len;
 		this.updated			= false;
 
@@ -69,7 +70,7 @@ class Points{
 
 	reset(){
 		this.byte_buf.reset();
-		this.updated = false;
+		this.updated = true;
 	}
 } App.Components.reg( Points );
 
@@ -204,6 +205,14 @@ let f_src = `#version 300 es
 		return smoothstep( 0.90 + dxdy, 0.90 - dxdy, radius );
 	}
 
+	float ring(){ 
+		vec2 coord		= v_uv * 2.0 - 1.0;
+		float radius	= dot( coord, coord );
+		float dxdy 		= fwidth( radius );
+		return	smoothstep( 0.2 - dxdy, 0.2 + dxdy, radius ) - 
+				smoothstep( 1.0 - dxdy, 1.0 + dxdy, radius );
+	}
+
 	float diamond(){
 		// http://www.numb3r23.net/2015/08/17/using-fwidth-for-distance-based-anti-aliasing/
 		const float radius = 0.5;
@@ -238,6 +247,7 @@ let f_src = `#version 300 es
 		if( v_shape == 3 ) alpha = poly( 3, 0.2, 1.0 );		// Triangle
 		if( v_shape == 4 ) alpha = poly( 5, 0.0, 0.65 ); 	// Pentagram
 		if( v_shape == 5 ) alpha = poly( 6, 0.0, 0.65 );	// Hexagon
+		if( v_shape == 6 ) alpha = ring();
 
 		out_color = vec4( v_color, alpha );
 	}`;

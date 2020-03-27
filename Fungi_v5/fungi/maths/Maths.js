@@ -274,6 +274,33 @@ class Maths{
 			return t;
 		}
 
+		//Return back the two points that are closes on two infinite lines
+		static closest_points_from_lines( A0, A1, B0, B1 ){ //http://geomalgorithms.com/a07-_distance.html
+			var u = A1.clone().sub(A0),
+				v = B1.clone().sub(B0),
+				w = A0.clone().sub(B0),
+				a = Vec3.dot(u,u),         // always >= 0
+				b = Vec3.dot(u,v),
+				c = Vec3.dot(v,v),         // always >= 0
+				d = Vec3.dot(u,w),
+				e = Vec3.dot(v,w),
+				D = a*c - b*b,        // always >= 0
+				tU, tV;
+			//compute the line parameters of the two closest points
+			if(D < 0.000001){	// the lines are almost parallel
+				tU = 0.0;
+				tV = (b>c ? d/b : e/c);    // use the largest denominator
+			}else{
+				tU = (b*e - c*d) / D;
+				tV = (a*e - b*d) / D;
+			}
+			//Calc Length
+			//Vector   vLen = w + (uT * u) - (vT * v);  // =  L1(sc) - L2(tc)
+			//Float len = sqrt( dot(vLen,vLen) );
+			return [ u.scale(tU).add(A0), v.scale(tV).add(B0) ];
+		}
+
+
 	static newtons_method( x, f, fd=null ){
 		// without derivitive, use th following:
 		// x = x - f(x) / ( (f(x+i) - f(x-1)) / (2*i) )

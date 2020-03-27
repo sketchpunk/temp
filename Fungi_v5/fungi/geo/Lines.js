@@ -2,7 +2,7 @@ import App		from "../App.js";
 import Colour	from "../core/Colour.js";
 import InterleavedFloatArray from "../data/InterleavedFloatArray.js";
 
-const	INITAL_CNT	= 10;
+const	INITAL_CNT	= 2;
 const	DASH_SEG	= 1 / 0.07;
 const	DASH_DIV 	= 0.4;
 let 	SHADER		= null, 
@@ -48,7 +48,7 @@ class Lines{
 			.set_interleaved( i_info );
 	}
 
-	add( a, b, col_a=null, col_b=null, is_dash=true ){
+	add( a, b, col_a=null, col_b=null, is_dash=false ){
 		let alen = -1, blen	= -1;
 		this.updated = true;
 
@@ -82,7 +82,7 @@ class Lines{
 
 	reset(){
 		this.byte_buf.reset();
-		this.updated = false;
+		this.updated = true;
 	}
 } App.Components.reg( Lines );
 

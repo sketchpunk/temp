@@ -53,23 +53,23 @@ const frag_src = `#version 300 es
 	}
 
 	void main(void){
-		vec4 base_color		= vec4( vec3(0.29), 0.0);
-        vec4 grid_min_color	= vec4( vec3(0.29), 1.0);
-		vec4 grid_max_color	= vec4( vec3(0.35), 1.0);
-		vec4 ring_color		= vec4( vec3(0.35), 1.0);
+		vec4 base_color		= vec4( vec3(0.24), 0.0);
+        vec4 grid_min_color	= vec4( vec3(0.24), 1.0);
+		vec4 grid_max_color	= vec4( vec3(0.29), 1.0);
+		vec4 ring_color		= vec4( vec3(0.29), 1.0);
 
 		// Inner Grid
 		float a = pixel_thin( frag_pos.xz / 0.2 );
 		out_color = mix( base_color, grid_min_color, a );
 
 		// Outer Grid
-		float b = grad_thick2( frag_pos.xz, 0.015 );
+		float b = grad_thick2( frag_pos.xz, 0.01 );
 		out_color = mix( out_color, grid_max_color, b*b*b*b );
 		
 		// Color Axis Lines
 		float px_z = fwidth( frag_pos.z );
-		if( abs( frag_pos.z ) <= 0.015 + px_z ) out_color.rgb = vec3(0.50,0.2,0.2);
-		if( abs( frag_pos.x ) <= 0.015  ) out_color.rgb = vec3(0.2,0.5,0.2);
+		if( abs( frag_pos.z ) <= 0.01 + px_z ) out_color.rgb = vec3(0.58823529411,0.25490196078,0.30588235294); //#96414E
+		if( abs( frag_pos.x ) <= 0.01  ) out_color.rgb = vec3( 0.42745098039,0.58431372549,0.16078431372); //#6D9529
 
 		// Draw Ring
 		float c = ring( frag_pos.xz, 0.40, 0.5 );

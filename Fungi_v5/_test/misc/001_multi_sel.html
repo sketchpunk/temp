@@ -1,0 +1,153 @@
+<!DOCTYPE html><script type="module">
+import App from "../../fungi/App.js";
+
+//#####################################################
+App.builder( true )
+	.set_camera( 90, 15, 4, 0, 0.0, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+let gDot, gRaySys;
+
+function init(){
+	App.ecs.sys_add( DragPointSys, 800 );
+	gDot = DragPoints.$( "Drag" );
+
+	let dp = gDot.DragPoints;
+	dp
+		.add( [0,0,0] )
+		.add( [1,1,0] )
+		.add( [-1,1,0] );
+
+	gRaySys = new RaySystem();
+	gRaySys.on( dp.ray_bind );
+
+	return true;
+}
+
+/*
+- list of points
+- Add Points
+- Delete Points
+- Ray Intersect
+*/
+
+import Vec3		from "../../fungi/maths/Vec3.js";
+import Points	from "../../fungi/geo/Points.js";
+import Ray		from "../../fungi.ray/Ray.js";
+import Events	from "../../fungi/lib/Events.js";
+
+class DragPoints{
+	static $( name, e=null ){
+		e = Points.$( e );
+		e.add_com( "DragPoints" );
+		e.Points.use_size 	= 0.07;
+		e.Points.use_shape 	= 1;
+		return e;
+	}
+
+	points		= new Array();
+	updated		= true;
+	sel_idx 	= null;
+	ray_bind	= this.on_ray.bind( this );
+
+	constructor(){
+		
+	}
+
+	on_ray( e ){
+		const range = 0.05;
+		let i, p, t,
+			ray 	= e.detail,
+			idx		= null,
+			t_min	= Infinity;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Find A Point that the ray touches
+		for( i=0; i < this.points.length; i++ ){
+			p = this.points[ i ];
+			t = ray.near_point( p.pos, range );
+
+			if( t != null && t < t_min ){
+				t_min	= t;
+				idx		= i;
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Deselect Previous Item
+		if( this.sel_idx != null ){
+			this.points[ this.sel_idx ].color = "red";
+			this.sel_idx = null;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Select Point
+		if( idx != null ){
+			p = this.points[ idx ];
+			p.color = "green";
+			this.sel_idx = idx;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.updated = true;
+	}
+
+	add( pos ){
+		let o = {
+			pos		: new Vec3( pos ),
+			color 	: "red",
+			data	: null,
+		};
+		this.points.push( o );
+		return this;
+	}
+
+	update(){
+		let e 		= App.ecs.entities[ this.entity_id ];
+		let pnts	= e.Points;
+
+		pnts.reset();
+		for( let p of this.points ){
+			pnts.add( p.pos, p.color );
+		}
+
+		this.updated = false;
+	}
+} App.Components.reg( DragPoints );
+
+function DragPointSys( ecs ){
+	let c, ary = ecs.query_comp( "DragPoints" );
+	if( !ary ) return;
+	for( c of ary ) if( c.updated ) c.update();
+}
+
+
+class RaySystem{
+	constructor(){
+		this.ray 		= new Ray();
+		this.evts 		= new Events();
+		this.click_bind	= this.on_click.bind( this );
+
+		App.gl.canvas.addEventListener( "mouseup", this.click_bind );
+	}
+
+	on( func ){ this.evts.on( "ray", func ); return this; }
+
+	on_click( e ){
+		if( e.button != 2 ) return;	//if Not right click exit
+		e.preventDefault(); e.stopPropagation();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute the ray from the screen space mouse position into 3d space
+		let pos = App.input.toCoord( e );
+		this.ray.set_screen_mouse( pos[0], pos[1] );
+		App.Debug.reset().ln( this.ray.origin, this.ray.end, "red" );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.evts.emit( "ray", this.ray );
+	}
+}
+</script><page-layout pg_title="Test"></page-layout>

@@ -8,9 +8,9 @@ class Debug{
 		this.eLn	= Lines.$( "debug_ln" );
 
 		this.ePnt.Draw.priority	= 1001;
-		this.ePnt.Draw.items[0].material.options.depthTest = false;
+		//this.ePnt.Draw.items[0].material.options.depthTest = false;
 		this.eLn.Draw.priority	= 1000;
-		this.eLn.Draw.items[0].material.options.depthTest = false;
+		//this.eLn.Draw.items[0].material.options.depthTest = false;
 
 		this.Pnt 	= this.ePnt.Points;
 		this.Ln 	= this.eLn.Lines;
@@ -57,6 +57,10 @@ class Debug{
 			o.add( [x2,y1,z2], [x2,y2,z2], col, null, is_dash );
 			o.add( [x2,y1,z1], [x2,y2,z1], col, null, is_dash );
 			return this;
+		}
+
+		static box_at( pos, x=1, y=1, z=1, col="red", is_dash=false ){
+			return this.box( pos, [ pos[0] + x, pos[1] + y, pos[2] + z ], col, is_dash )
 		}
 
 	////////////////////////////////////////////////////////////////////
