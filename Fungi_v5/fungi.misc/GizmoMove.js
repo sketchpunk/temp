@@ -1,11 +1,11 @@
-import App, { Maths, Vec3 }	from "../App.js";
-import Ray					from "../../fungi.ray/Ray.js";
-import Lines 				from "../../fungi/geo/Lines.js";
+import App, { Maths, Vec3 }	from "../fungi/App.js";
+import Ray					from "../fungi.ray/Ray.js";
+import Lines 				from "../fungi/geo/Lines.js";
 
 let SHADER;
 const CAMERA_SCALE	= 8;		// Scale Factor from Camera Distance
 const MIN_ADJUST	= -0.02;	// Dot Angle minimum to flip Gizmo
-const AXIS_MIN_RNG	= 0.0015;	// Range away from axis line to count as clicked.
+const AXIS_MIN_RNG	= 0.002;	// Range away from axis line to count as clicked.
 const UNIT_AXIS		= [ Vec3.FORWARD.clone(), Vec3.LEFT.clone(), Vec3.UP.clone() ];	// Array of Axis for Ray Intersection Checking
 
 class GizmoMove{
@@ -42,6 +42,7 @@ class GizmoMove{
 		this.drag_pnt_b		= new Vec3();
 		this.drag_offset	= new Vec3();
 		this.is_drag		= false;
+		this.on_drag 		= null;
 
 		// Function Binding
 		this.move_bind		= this.drag_move.bind( this );
@@ -98,9 +99,14 @@ class GizmoMove{
 		// Find Closest point on the drag line, apply offset and save back to node.
 		let pnts = Maths.closest_points_from_lines( this.ray.origin, this.ray.end, this.drag_pnt_a, this.drag_pnt_b );
 		this.ent.Node.set_pos( pnts[ 1 ].add( this.drag_offset ) );
+
+		// Pass Drag Value
+		if( this.on_drag ) this.on_drag( pnts[ 1 ] );
 	}
 
 	drag_end( e ){
+		this.drag_move( e ); // Execute one final drag event on mouse up event.
+
 		this.is_drag = false;
 		App.gl.canvas.removeEventListener( "mousemove",	this.move_bind );
 		App.gl.canvas.removeEventListener( "mouseup",	this.end_bind );
@@ -165,11 +171,11 @@ function ray_to_bound( ray, wt, bound ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Run Test
 	return ray.in_bound( bound );
-	
 	/*
+	App.Debug.reset().box( bound[ 0 ], bound[ 1 ] );
+	
 	let info = {};
 	if( ray.in_bound( bound, info ) ){
-		App.Debug.reset().box( bound[ 0 ], bound[ 1 ] );
 		//App.Debug
 		//	.pnt( gRay.get_pos( info.min ), "green", 0.05, 1 )
 		//	.pnt( gRay.get_pos( info.max ), "red", 0.05, 1 );

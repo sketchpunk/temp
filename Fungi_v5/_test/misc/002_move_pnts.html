@@ -1,0 +1,130 @@
+<!DOCTYPE html><script type="module">
+import App, {Vec3}	from "../../fungi/App.js";
+import RaySystem	from "../../fungi.ray/RaySystem.js";
+import DragPoints 	from "../../fungi.misc/DragPoints.js";
+import GizmoMove	from "../../fungi.misc/GizmoMove.js";
+
+import Spline		from "../../fungi/maths/Spline.js";
+
+//#####################################################
+App.builder( true )
+	.set_camera( 0, 15, 4, 0, 0.5, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+let ePoints, eGizmo, gRaySys, gSpline;
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Initialize 
+	gRaySys = new RaySystem();
+	//gRaySys.debug_ray = true;
+	gRaySys.on( on_ray );
+
+	GizmoMove.init();
+	eGizmo = GizmoMove.$();
+	eGizmo.info.active = false;
+	eGizmo.GizmoMove.on_drag = on_gizmo_move;
+
+	DragPoints.init();
+	ePoints = DragPoints.$( "Drag" );
+
+	gSpline = Spline.from_hermite( true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	let dp = ePoints.DragPoints;
+	dp
+		.add( [0,0,0] )
+		.add( [0.5,0.5,0] )
+		.add( [0,1.0,0] )
+		.add( [-0.5,0.5,0] );
+
+	spline_load();
+	spline_draw();
+
+	return true;
+}
+
+function on_ray( e ){
+	let ray = e.detail;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// If gizmo is active, check if its a hit. if not, hide it.
+	if( eGizmo.info.active ){
+		if( eGizmo.GizmoMove.is_hit( ray ) )	return;
+		else 									eGizmo.info.active = false;
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// If not hit the gizmo, check if there is a point that
+	if( ePoints.DragPoints.is_hit( ray ) ){
+		let pos = ePoints.DragPoints.get_sel_pos();
+		eGizmo.Node.set_pos( pos );
+		eGizmo.info.active = true;
+	}	
+}
+
+function on_gizmo_move( pos ){ 
+	ePoints.DragPoints.set_sel_pos( pos );
+	spline_load();
+	spline_draw();
+}
+
+
+function spline_load(){
+	let dp = ePoints.DragPoints;
+
+	gSpline.clear();
+	for( let i=0; i < dp.points.length; i++ ){
+		gSpline.add( dp.points[ i ].pos );
+	}
+}
+
+function spline_draw(){
+	App.Debug.reset();
+
+	let t, v0 = new Vec3(), v1 = new Vec3();
+
+	gSpline.at_curve( 0, 0, v0 );
+	for( let c = 0; c < gSpline.curve_count(); c++ ){
+		for( let i=1; i <= 5; i++ ){
+			t = i / 5;
+			gSpline.at_curve( c, t, v1 );
+			App.Debug.ln( v0, v1, "yellow" );
+			v0.copy( v1 );
+		}
+	}
+}
+
+window.Add = ()=>{
+	let rnd =  x=>{ return (Math.random() * 2 - 1) * x; };
+	let p = [
+		rnd( 2 ),
+		Math.random() * 2,
+		rnd( 2 ),
+	];
+	ePoints.DragPoints.add( p );
+	eGizmo.info.active = false;
+
+	spline_load();
+	spline_draw();
+
+	App.render();
+}
+
+window.Remove = ()=>{
+	ePoints.DragPoints.rm_last();
+	eGizmo.info.active = false;
+	App.render();
+}
+
+
+
+</script><page-layout>
+	<a href="javascript:void(0)" slot="nav_a" title="Add" onClick="Add();">&#10010;</a>
+	<a href="javascript:void(0)" slot="nav_a" title="Remove" onClick="Remove();">&#9866;</a>
+	<a href="javascript:void(0)" slot="nav_a" title="Save">&#10004;</a>
+</page-layout>

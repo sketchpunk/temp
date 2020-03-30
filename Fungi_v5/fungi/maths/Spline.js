@@ -18,6 +18,8 @@ class Spline{
 		this.is_loop	= is_loop;
 	}
 
+	clear(){ this.points.splice( 0, this.points.length ); return this; }
+
 	add( p, data=null ){
 		this.points.push({
 			pos 	: new Vec3( p ),
@@ -71,8 +73,8 @@ class Spline{
     static debug_points( d, s ){ for( let p of s.points ) d.pnt( p.pos, 0x00ffff, 2, 15 ); return this; }
     static debug_path( d, s, samp=10 ){
         let t, v0 = new Vec3(), v1 = new Vec3();
-        s.at( 0, v0 );
-        d.pnt( v0, 0xff0000, 2, 5 );
+		s.at( 0, v0 );
+		d.pnt( v0, 0xff0000, 2, 5 );
         for( let i=1; i <= samp; i++ ){
             t = i / samp;
             s.at( t, v1 );

@@ -1,6 +1,7 @@
 <!DOCTYPE html><script type="module">
 import App		from "../../fungi/App.js";
 import Torus	from "../../fungi/geo/Torus.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
 import Quad		from "../../fungi/geo/Quad.js";
 import Points 	from "../../fungi/geo/Points.js";
 import Motion 	from "../../fungi.test/Motion.js";
@@ -28,31 +29,31 @@ function on_draw( dt, ss ){
 function init( x ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Shader and Meshes
-
 	let e, mat;
 	init_shader();
-		
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	mat = gShader.new_material( "mat_floor", { "base_color":"#ff7f7fff"} );
 	e = Torus.knot( "shape", mat );
 	e.Node.set_pos( 0, 1.8, 0 );
 
-	mat = gShader.new_material( "mat_floor", { "base_color":"#404040ff"} );
-	mat.options.cullFace = false;
+	e = Capsule( "capsule", mat, 8, 5, 0.5, 0.25 );
+	e.Node.set_pos( 3, 1.8, 0 );
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	mat = gShader.new_material( "mat_floor", { "base_color":"#404040ff"} ).opt_cullface( false );
 	e = Quad( "floor", mat );
 	e.Node.rot_by( -90, "x" ).set_scl( 20 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Show Light Location
-
 	gPnt = Points.$( "light" );
 	gPnt.Points.add( [0,0,0], "#ffffff", 0.3, 1 );
 	gPnt.Node.set_pos( 3, 1, 0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Motion Closure for Point
-
-	gMotion = Motion.circle( gPnt, 0.3, 3, 2 );
+	gMotion = Motion.circle( gPnt, 0.3, 5, 2 );
 
 	return true;
 }

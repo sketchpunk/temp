@@ -220,10 +220,10 @@ class Gltf{
 
 	////////////////////////////////////////////////////////
 	// SKIN
+	// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#skins
+	// https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_020_Skins.md
 	////////////////////////////////////////////////////////
-		
-		// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#skins
-		// https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_020_Skins.md
+				
 		// This one uses the Inverted Bind Matrices in the bin file then converts
 		// to local space transforms.
 		static get_skin( json, bin, name=null, node_info=null ){
@@ -350,6 +350,111 @@ class Gltf{
 			return bones;
 		}
 
+		// Uses the nodes to get the local space bind pose transform. But the real bind pose
+		// isn't always available there, blender export has a habit of using the current pose/frame in nodes.
+		static get_skin_by_nodes( json, name=null, node_info=null ){
+			if( !json.skins ){
+				console.error( "There is no skin in the GLTF file." );
+				return null;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Skin Checking
+			let ji, skin = null;
+			if( name != null ){
+				for( ji of json.skins ) if( ji.name == name ){ skin = ji; break; }
+				if( !skin ){ console.error( "skin not found", name ); return null; }
+			}else{
+				// Not requesting one, Use the first one available
+				for( ji of json.skins ){ 
+					skin = ji;
+					name = ji.name; // Need name to fill in node_info
+					break;
+				}
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Create Bone Items
+			let boneCnt = skin.joints.length,
+				bones 	= new Array(boneCnt),
+				n2j 	= {},			// Lookup table to link Parent-Child (Node to Joint Indexes)
+				n, 						// Node
+				ni, 					// Node Index
+				itm;					// Bone Item
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Create Bone Array and Loopup Table.
+			for(ji=0; ji < boneCnt; ji++ ){
+				ni				= skin.joints[ ji ];
+				n2j[ "n"+ni ] 	= ji;
+
+				bones[ ji ] = {
+					idx : ji, p_idx : null, lvl : 0, name : null,
+					pos : null, rot : null, scl : null };
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Collect bone information, inc
+			for( ji=0; ji < boneCnt; ji++){
+				n				= json.nodes[ skin.joints[ ji ] ];
+				itm 			= bones[ ji ];
+
+				// Get Transform Data if Available
+				if( n.translation ) 	itm.pos = n.translation.slice(0);
+				if( n.rotation ) 		itm.rot = n.rotation.slice(0);
+				
+				// Each Bone Needs a Name, create one if one does not exist.
+				if( n.name === undefined || n.name == "" )	itm.name = "bone_" + ji;
+				else{
+					itm.name = n.name.replace("mixamorig:", "");
+				} 										
+
+				// Scale isn't always available
+				if( n.scale ){
+					// Near Zero Testing, Clean up the data because of Floating point issues.
+					itm.scl		= n.scale.slice(0);
+					if( Math.abs( 1 - itm.scl[0] ) <= 0.000001 ) itm.scl[0] = 1;
+					if( Math.abs( 1 - itm.scl[1] ) <= 0.000001 ) itm.scl[1] = 1;
+					if( Math.abs( 1 - itm.scl[2] ) <= 0.000001 ) itm.scl[2] = 1;
+				}
+
+				// Set Children who the parent is.
+				if( n.children && n.children.length > 0 ){
+					for( ni of n.children ) bones[ n2j["n"+ni] ].p_idx = ji;
+				}
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Set the Hierarchy Level for each bone
+			let lvl;
+			for( ji=0; ji < boneCnt; ji++){
+				// Check for Root Bones
+				itm = bones[ ji ];
+				if( itm.p_idx == null ){ itm.lvl = 0; continue; }
+
+				// Traverse up the tree to count how far down the bone is
+				lvl = 0;
+				while( itm.p_idx != null ){ lvl++; itm = bones[ itm.p_idx ]; }
+
+				bones[ ji ].lvl = lvl;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Set the Hierarchy Level for each bone
+			if( node_info ){
+				for( ji of json.nodes ){ 
+					if( ji.name == name ){ 
+						if( ji.rotation )	node_info["rot"] = ji.rotation;
+						if( ji.scale )		node_info["scl"] = ji.scale;
+						if( ji.position )	node_info["pos"] = ji.position;
+						break;
+					}
+				}
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			return bones;
+		}
 
 	////////////////////////////////////////////////////////
 	// ANIMATION

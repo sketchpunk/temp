@@ -12,6 +12,7 @@ class PageLayout extends HTMLElement{
 		this.appendChild( document.importNode( PageLayout.Template.content, true ) );
 		//this.appendChild( PageLayout.Template.content.cloneNode( true ) );
 
+		this.classList.add( "top" );
 		document.title = this.getAttribute( "pg_title" ) || "Fungi";
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -19,16 +20,18 @@ class PageLayout extends HTMLElement{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Slot Injection
-		/*
-		let s, ss, slots = this.querySelectorAll("*[slot]");
+		let s, ss, cont={}, slots=this.querySelectorAll("*[slot]");
 		for( s of slots ){
-			ss = this.querySelector( "*[name="+s.slot+"]" );
-			if( !ss ) continue;
+			if( !(ss = cont[ s.slot ]) ) cont[ s.slot ] = ss = this.querySelector( "*[name="+s.slot+"]" );
+			if( !ss ){ console.log("SLOT NOT FOUND : ", s.slot ); continue; }
 
-			if( ss.tagName == "SLOT" )	ss.parentNode.replaceChild( s, ss );
-			else 						ss.appendChild( s );
+			if( ss.tagName == "SLOT" )	ss.parentNode.replaceChild( s, ss );	// replace slot
+			else 						ss.appendChild( s );					// append to element
 		}
-		*/
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Turn On Containers
+		if( cont.nav_a || cont.nav_a ) this.querySelector( ":scope > nav" ).classList.remove( "off" )
 	}
 } 
 
@@ -89,24 +92,18 @@ page-layout > footer a:hover,
 page-layout > footer label:hover{ background-color:#008DEDaa; color:#eeeeee; }
 </style></head><body class="Page top">
 <canvas style="width:100vw; height:100vh;" id="pg_canvas"></canvas>
-<nav class="off">
-	<header>
+<nav class="">
+	<header name="nav_a"><!--
 		<a href="javascript:void(0)">&#10033;</a>
 		<a href="javascript:void(0)">&#10010;</a>
 		<a href="javascript:void(0)">&starf;</a>
-	</header>
-	<footer>
-		<a href="javascript:void(0)" class="on">&#9776;</a>
-	</footer>
+	--></header>
+	<footer name="nav_b"><!--<a href="javascript:void(0)" class="on">&#9776;</a>--></footer>
 </nav>
 <section class="off"></section>
 <footer class="off">
-	<header>
-		<a href="https://www.github.com/sketchpunk/fungi" target="_blank">Fungi</a>
-	</header>
-	<footer>
-		<label>FPS : 0</label>
-	</footer>
+	<header><a href="https://www.github.com/sketchpunk/fungi" target="_blank">Fungi</a></header>
+	<footer><label>FPS : 0</label></footer>
 </footer>`;
 
 //######################################################################################

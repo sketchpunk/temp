@@ -107,109 +107,101 @@ let App = {
 			if( use_debug ) this.add( init_debug );
 		}
 
-		///////////////////////////////////////////////////////
-		//
-		///////////////////////////////////////////////////////
-			add( f ){ this.task_queue.push( f ); return this; }
-			
-			build(){ 
-				return new Promise( ( r , e )=>this.run( r, e ) )
-					.catch( err=>console.error( "PromiseError :", err ) ); }
-			
-			async run( r, e ){
-				let task, ok;
-				for( task of this.task_queue ){
-					if( task instanceof Promise )
-						ok = await task;
-					else if( task.constructor.name == "AsyncFunction" )
-						ok = await task( this );
-					else
-						ok = task( this );	
-
-					if( !ok ){ e("Error running tasks"); return; }
-				}
-
-				r( "done" );
-			}
-
-		///////////////////////////////////////////////////////
-		//
-		///////////////////////////////////////////////////////
-			set_camera( ox=-15, oy=15, od=2.5, tx=0, ty=0.75, tz=0 ){
-				this.add( ()=>{
-					//App.cameraCtrl.setTarget( tx, ty, tz ).setOrbit( ox, oy, od );
-					//App.camera.Node.set_pos( ox, oy, od );
-
-					App.cam_ctrl
-						.set_target( tx, ty, tz )
-						.set_orbit( ox, oy, od );
-
-					return true;
-				});
-				return this;
-			}
-
-			render_loop( cb=null ){
-				App.on_render = cb;
-				this.add( async()=>{
-					await import( "./engine/RenderLoop.js").then( mod=>{ App.loop = new mod.default( App.render, 0, App ) });
-					App.loop.start();
-					return true;
-				});
-				return this;
-			}
-
-			render_on_mouse( cb=null ){
-				App.on_render = cb;
-				this.add(()=>{
-					App.input.on_input = ()=>{ window.requestAnimationFrame( App.render ); }
-					App.render();
-					return true;
-				});
-				return this;
-			}
-
-			load_shaders(){
-				let args = arguments;
-				this.add( async()=>{
-					let i, ary = new Array( args.length );
-
-					for( i=0; i < args.length; i++ ) ary[ i ] = import( args[i] );
+		// #region HELPER
+		add( f ){ this.task_queue.push( f ); return this; }
 		
-					await Promise.all( ary );
-					return true;
-				})
-				return this;
-			}
-
-			init_mod(){
-				let args = arguments;
-				this.add( async()=>{
-					let i, ary = new Array( args.length );
-
-					for( i=0; i < args.length; i++ ) ary[ i ] = import( args[i] ).then( run_module_init );
+		build(){ 
+			return new Promise( ( r , e )=>this.run( r, e ) )
+				.catch( err=>console.error( "PromiseError :", err ) ); }
 		
-					await Promise.all( ary );
-					return true;
-				})
-				return this;
-			}
+		async run( r, e ){
+			let task, ok;
+			for( task of this.task_queue ){
+				if( task instanceof Promise )
+					ok = await task;
+				else if( task.constructor.name == "AsyncFunction" )
+					ok = await task( this );
+				else
+					ok = task( this );	
 
-		///////////////////////////////////////////////////////
-		//
-		///////////////////////////////////////////////////////
-			
-			use_armature(){
-				this.using_armature = true;
-				this.init_mod( "../fungi.armature/Armature.js", "../fungi.armature/BoneView.js" );
-				return this;
+				if( !ok ){ e("Error running tasks"); return; }
 			}
+			r( "done" );
+		}
+		// #endregion ///////////////////////////////////////////////////////
 
+		// #region BUILDER FUNCTIONS
+		set_camera( ox=-15, oy=15, od=2.5, tx=0, ty=0.75, tz=0 ){
+			this.add( ()=>{
+				//App.cameraCtrl.setTarget( tx, ty, tz ).setOrbit( ox, oy, od );
+				//App.camera.Node.set_pos( ox, oy, od );
+
+				App.cam_ctrl
+					.set_target( tx, ty, tz )
+					.set_orbit( ox, oy, od );
+
+				return true;
+			});
+			return this;
+		}
+
+		render_loop( cb=null ){
+			App.on_render = cb;
+			this.add( async()=>{
+				await import( "./engine/RenderLoop.js").then( mod=>{ App.loop = new mod.default( App.render, 0, App ) });
+				App.loop.start();
+				return true;
+			});
+			return this;
+		}
+
+		render_on_mouse( cb=null ){
+			App.on_render = cb;
+			this.add(()=>{
+				App.input.on_input = ()=>{ window.requestAnimationFrame( App.render ); }
+				App.render();
+				return true;
+			});
+			return this;
+		}
+
+		load_shaders(){
+			let args = arguments;
+			this.add( async()=>{
+				let i, ary = new Array( args.length );
+
+				for( i=0; i < args.length; i++ ) ary[ i ] = import( args[i] );
+	
+				await Promise.all( ary );
+				return true;
+			})
+			return this;
+		}
+
+		init_mod(){
+			let args = arguments;
+			this.add( async()=>{
+				let i, ary = new Array( args.length );
+
+				for( i=0; i < args.length; i++ ) ary[ i ] = import( args[i] ).then( run_module_init );
+	
+				await Promise.all( ary );
+				return true;
+			})
+			return this;
+		}
+		// #endregion ///////////////////////////////////////////////////////
+
+		// #region EXTRA BUILDER FUNCTIONS
+		use_armature(){
+			this.using_armature = true;
+			this.init_mod( "../fungi.armature/Armature.js", "../fungi.armature/BoneView.js" );
+			return this;
+		}
+		// #endregion ///////////////////////////////////////////////////////
 	}
 
 	function run_module_init( mod ){ if( mod.default.init ) mod.default.init(); }
-
-
 
 //////////////////////////////////////////////////////////////////
 //

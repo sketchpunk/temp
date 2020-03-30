@@ -28,3 +28,8 @@ https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shade
 https://www.clicktorelease.com/code/spherical-normal-mapping/#
 
 https://www.clicktorelease.com/code/cross-hatching/
+
+
+// TOON SHADING
+https://alexanderameye.github.io/simple-toon.html
+https://twitter.com/csims314/status/1244391593127424002
