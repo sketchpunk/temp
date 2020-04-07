@@ -140,10 +140,10 @@ class Renderer{
 
 			//...............................
 			if( !m.is_instanced ){
-				if( m.buf.idx ) gl.ctx.drawElements( d.mode, m.elm_cnt, gl.ctx.UNSIGNED_SHORT, 0 );
+				if( m.buf.idx ) gl.ctx.drawElements( d.mode, m.elm_cnt, m.elm_type, 0 );
 				else		 	gl.ctx.drawArrays( d.mode, 0, m.elm_cnt );
 			}else{
-				if( m.buf.idx )	gl.ctx.drawElementsInstanced( d.mode, m.elm_cnt, gl.ctx.UNSIGNED_SHORT, 0, m.instance_cnt ); 
+				if( m.buf.idx )	gl.ctx.drawElementsInstanced( d.mode, m.elm_cnt, m.elm_type, 0, m.instance_cnt ); 
 				else			gl.ctx.drawArraysInstanced( d.mode, 0, m.elm_cnt, m.instance_cnt );
 			}
 

@@ -9,6 +9,7 @@ class Mesh{
 		this.name			= name;
 		this.vao 			= null;
 		this.elm_cnt 		= 0;
+		this.elm_type		= gl.ctx.UNSIGNED_SHORT; //UNSIGNED_INT
 		this.instance_cnt	= 0;
 		this.is_instanced	= false;
 
@@ -44,6 +45,9 @@ class Mesh{
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			if( idx ){
+				if( idx instanceof Uint16Array ) 		m.elm_type = gl.ctx.UNSIGNED_SHORT;
+				else if( idx instanceof Uint32Array ) 	m.elm_type = gl.ctx.UNSIGNED_INT;
+
 				m.buf.idx = Buf.new_element( idx, true, false );
 				vao.add_indices( m.buf.idx );
 			}
@@ -123,6 +127,14 @@ class Mesh{
 			// INDICES
 			if( json.indices ){
 				o = json.indices;
+
+				// Indices can be imported as different Int types.
+				switch( o.array_type ){
+					case "Uint16": m.elm_type = gl.ctx.UNSIGNED_SHORT; break;
+					case "Uint32": m.elm_type = gl.ctx.UNSIGNED_INT; break;
+					default: console.log("Unknown Array Type when Adding Indices", o.array_type ); break;
+				}
+
 				m.buf.idx = Buf.new_element_bin( dv, o.byte_start, o.byte_cnt, true, false );
 				vao.add_indices( m.buf.idx );
 			}

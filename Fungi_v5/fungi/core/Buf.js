@@ -104,8 +104,8 @@ class Buf{
 	///////////////////////////////////////////////////////////////
 	// Element Array Buffer
 	///////////////////////////////////////////////////////////////
-		static new_element( data, is_static=true, unbind=true ) {
-			let ary	= ( data instanceof Uint16Array )? data : new Uint16Array( data ),
+		static new_element( data, is_static=true, unbind=true ){
+			let ary	= ( data instanceof Uint16Array || data instanceof Uint32Array )? data : new Uint16Array( data ),
 				b 	= new Buf( Buf.ELEMENT, is_static ).bind().from_data( ary );
 			if( unbind ) b.unbind();
 			return b;

@@ -1,0 +1,248 @@
+<!DOCTYPE html><script type="module">
+import App		from "../../fungi/App.js";
+import Torus	from "../../fungi/geo/Torus.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
+//import Quad		from "../../fungi/geo/Quad.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+
+App.builder( true, true )
+	//.load_shaders( "./shaders/BaseColor.js" )
+	.set_camera( 0, 5, 2, 0, 0.55, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse( )
+	.build();
+
+let gPnt, gMotion, gUbo;
+
+//#####################################################
+
+function on_draw( dt, ss ){
+	gMotion( dt );											// Move Point
+	gUbo.set_var( "pos", gPnt.Node.local.pos ).update();
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader and Meshes
+	let e, mat;
+    init_shader();
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+    let dl = await XhrQueue.url( "../../files/models/" )
+        //.grp( "mesh", "suzanne_hpoly.gltf", "json", "suzanne_hpoly.bin", "bin" )
+		.add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		//.add( "stitch.gltf" ).add( "stitch.bin" )
+		//.add( "munny.gltf" ).add( "munny.bin" )
+		//.add( "gobslayer_helmet.gltf" ).add( "gobslayer_helmet.bin" )
+		//.add( "test_sphere.gltf" ).add( "test_sphere.bin" )
+		//.add( "warcraft_statue.gltf" ).add( "warcraft_statue.bin" )
+		//.add( "fionna_statue.gltf" ).add( "fionna_statue.bin" )
+		//.add( "jronn_sphere.gltf" ).add( "jronn_sphere.bin" )
+		//.add( "pbg_statue.gltf" ).add( "pbg_statue.bin" )
+		.then();
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//mat = gShader.new_material( "mat_floor", { "base_color":"#ff7f7fff"} );
+	mat = gShader.new_material( "mat_floor" );
+	//mat	= App.new_mat( "BaseColor" );
+	
+	e = GltfUtil.get_mesh( "suzanne", dl[0], dl[1], mat );
+	e.Node.set_pos( 0, 0.5, 0 );
+
+    //e = GltfUtil.get_mesh( "suzanne", dl[0], dl[1], mat, ["Ball"]  );
+	//e.Node.set_pos( 0, 0.56, 0 );
+
+	//e = GltfUtil.get_mesh( "suzanne", dl[0], dl[1], mat, ["Base"]  );
+	
+	
+	//e.Draw.items[0].mode = 0;
+
+    //e_name, json, bin, mat, m_names
+    //e = Torus.knot( "shape", mat );
+	//e.Node.set_pos( 0, 1.8, 0 );
+
+	//e = Capsule( "capsule", mat, 8, 5, 0.5, 0.25 );
+	//e.Node.set_pos( 3, 1.8, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//mat = gShader.new_material( "mat_floor", { "base_color":"#404040ff"} ).opt_cullface( false );
+	//e = Quad( "floor", mat );
+	//e.Node.rot_by( -90, "x" ).set_scl( 20 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.$( "light" );
+	gPnt.Points.add( [0,0,0], "#ffffff", 0.3, 1 );
+    gPnt.Node.set_pos( 4, 1.8, 5 );
+    gUbo.set_var( "pos", gPnt.Node.local.pos ).update();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.3, 5, 2 );
+
+	return true;
+}
+
+//#####################################################
+
+let gShader = null;
+function init_shader(){
+	gUbo = App.Ubo.build( "Light", 10, [
+		{ name:"pos", type:"vec3" },
+		{ name:"color", type:"vec3" },
+	]);
+
+	gUbo.set_var( "pos", [0,5,0] )
+		.set_var( "color", App.Colour.rgb("#ffffff") )
+		.update();
+
+	gShader = App.Shader.from_src( "SH_TESTER", vert_src, frag_src )
+		.add_uniform_blocks( ["Global","Model","Light"] )
+		.add_uniform( "base_color", "rgba", "#203F65ff" )
+		.add_uniform( "other_color", "rgba", "#84D6FDff" )
+		.add_uniform( "specular_color", "rgb", "#A6F6FF" )
+	;
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec4 base_color;
+	uniform vec4 other_color;
+	uniform vec3 specular_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	
+	//-------------------------
+
+	const vec3 ambient = vec3( 0.4 );
+
+	//-------------------------
+
+	float fgradient( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
+		if( grad >= ramp_pos[ cnt-1 ] ) return ramp[ cnt-1 ]; // Greater ten final check.
+
+		for( int i=1; i < cnt; i++ ){
+			if( ramp_pos[ i ] > grad ) return ramp[ i-1 ];
+		}
+		return ramp[ 0 ];
+	}
+
+	// https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Posterize-Node.html
+	float Posterize( float In, float Steps ){
+		//return floor( In / ( 1.0 / Steps ) ) * ( 1.0 / Steps ); // WHY UNITY??? To much divisions.
+		return floor( In * Steps ) / Steps;
+	}
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 1 - Calculate Light Intensity
+		float intensity = clamp( dot( norm, dir_light ), 0.0, 1.0 ); // Saturate == Clamp(0,1);
+		//out_color.rgb = base_color.rgb * intensity;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 2 - Posterize and Lerp between shaded and lit.
+		float steps = 3.0; // CAN BE A UNIFORM VALUE
+		float post = Posterize( intensity, steps );
+		out_color = mix( base_color, other_color, post );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 3 - Calculate Halfway Vector
+		vec3 half_dir = normalize( dir_frag_cam + dir_light );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 4 - Use Halfway vector to calculate highlight
+		float highlight = dot( half_dir, norm );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 5 - Hard Cutoff
+		float edge = 0.985; // CAN BE UNIFORM VALUE
+		float cutoff = step( edge, highlight );
+		//out_color.rgb = vec3( cutoff );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 6 - Add Highlight color
+		out_color.rgb = mix( out_color.rgb, specular_color, cutoff );
+	}`;
+
+</script><page-layout footer="on">	
+	<a href="https://alexanderameye.github.io/simple-toon" target="_blank" slot="footer_r">BASE ON : https://alexanderameye.github.io/simple-toon</a>
+</page-layout>
+
+<!--
+https://twitter.com/alexanderameye/status/1229730976697376769?s=03
+https://halisavakis.com/my-take-on-shaders-cel-shading/
+https://alvarber.gitlab.io/toon-shader-survey.html
+https://www.gamedev.net/articles/programming/graphics/toon-shader-using-unity-r5095/
+https://www.blendernation.com/2018/12/17/how-to-make-a-realtime-toon-shader-and-outline-with-blender-2-8-eevee/
+https://www.youtube.com/watch?v=t91X4eukZY4&feature=emb_rel_pause
+https://www.youtube.com/watch?v=J4cuuNGid7g&feature=emb_rel_pause
+https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
+https://threejs.org/examples/#webgl_materials_variations_toon
+https://webgl-shaders.com/toon-example.html
+http://www.mclelun.com/2016/11/blender3d-toon-shader.html
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+
+https://webgl-shaders.com/dots-example.html
+https://webgl-shaders.com/pencil-example.html
+
+https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/
+-->

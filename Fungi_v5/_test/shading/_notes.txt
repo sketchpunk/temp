@@ -1,35 +1,16 @@
-https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading
-https://www.scratchapixel.com/lessons/3d-basic-rendering/phong-shader-BRDF
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Posterize-Node.html
 
-https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
+void Unity_Posterize_float4(float4 In, float4 Steps, out float4 Out){
+    Out = floor(In / (1 / Steps)) * (1 / Steps);
+}
 
-
-https://alain.xyz/blog/advances-in-material-models
-
-https://gamedev.stackexchange.com/questions/129139/how-do-i-calculate-uv-space-from-world-space-in-the-fragment-shader
-
-// PERFECT, WORLD SPACE TEXTURES
-https://forum.unity.com/threads/mapping-texture-to-world-position-instead-of-object-position.94766/
-
-https://blog.selfshadow.com/sandbox/ltc.html square light
-
-https://gist.github.com/galek/53557375251e1a942dfa  PBR in GLSL
-
-//--------------------------------------
-https://www.youtube.com/watch?v=TpWI2rU8iF0  TOON SHADER, multi parts. Even has shiny TOON
-
-https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/diffuse.html
-https://www.learnopengles.com/tag/lambertian-reflectance/
-
-
-https://threejs.org/docs/index.html#api/en/materials/MeshPhysicalMaterial
-https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
-
-https://www.clicktorelease.com/code/spherical-normal-mapping/#
-
-https://www.clicktorelease.com/code/cross-hatching/
-
-
-// TOON SHADING
-https://alexanderameye.github.io/simple-toon.html
-https://twitter.com/csims314/status/1244391593127424002
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+BLENDER LAYER WEIGHT
+https://blenderartists.org/t/what-is-it-that-layer-weight-nodes-facing-output-is-supposed-to-be/691884/32
+if blend in [0.0, 0.5[:
+	result = 1 - pow(dot(N,I), 2*blend)
+if blend == 0.5:
+	result = 1 - dot(N,I)
+if blend in ]0.5, 1.0[:
+	result = 1 - pow(dot(N,I), 0.5/(1-blend))

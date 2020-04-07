@@ -1,0 +1,244 @@
+<!DOCTYPE html><script type="module">
+import App		from "../../fungi/App.js";
+//import Torus	from "../../fungi/geo/Torus.js";
+//import Capsule	from "../../fungi/geo/Capsule.js";
+//import Quad		from "../../fungi/geo/Quad.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+
+App.builder( true, true )
+	.set_camera( 0, 5, 2, 0, 0.55, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse( )
+	.build();
+
+let gPnt, gMotion, gUbo;
+
+//#####################################################
+
+function on_draw( dt, ss ){
+	gMotion( dt );											// Move Point
+	gUbo.set_var( "pos", gPnt.Node.local.pos ).update();
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader and Meshes
+	let e, mat;
+    init_shader();
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+    let dl = await XhrQueue.url( "../../files/models/" )
+        //.grp( "mesh", "suzanne_hpoly.gltf", "json", "suzanne_hpoly.bin", "bin" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//mat = gShader.new_material( "mat_floor", { "base_color":"#ff7f7fff"} );
+	mat = gShader.new_material( "mat_floor", { "base_color":"#DB00FFff", "other_color":"#86F0FFff" } );
+    
+    e = GltfUtil.get_mesh( "suzanne", dl[0], dl[1], mat );
+    e.Node.set_pos( 0, 0.6, 0 );
+    //e_name, json, bin, mat, m_names
+    //e = Torus.knot( "shape", mat );
+	//e.Node.set_pos( 0, 1.8, 0 );
+
+	//e = Capsule( "capsule", mat, 8, 5, 0.5, 0.25 );
+	//e.Node.set_pos( 3, 1.8, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//mat = gShader.new_material( "mat_floor", { "base_color":"#404040ff"} ).opt_cullface( false );
+	//e = Quad( "floor", mat );
+	//e.Node.rot_by( -90, "x" ).set_scl( 20 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.$( "light" );
+	gPnt.Points.add( [0,0,0], "#ffffff", 0.3, 1 );
+    gPnt.Node.set_pos( 4, 1.8, 5 );
+    gUbo.set_var( "pos", gPnt.Node.local.pos ).update();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.3, 5, 2 );
+
+	return true;
+}
+
+//#####################################################
+
+let gShader = null;
+function init_shader(){
+	gUbo = App.Ubo.build( "Light", 10, [
+		{ name:"pos", type:"vec3" },
+		{ name:"color", type:"vec3" },
+	]);
+
+	gUbo.set_var( "pos", [0,5,0] )
+		.set_var( "color", App.Colour.rgb("#ffffff") )
+		.update();
+
+	gShader = App.Shader.from_src( "SH_TESTER", vert_src, frag_src )
+		.add_uniform_blocks( ["Global","Model","Light"] )
+		.add_uniform( "base_color", "rgba", "#b0b0b0ff" )
+		.add_uniform( "other_color", "rgba", "#b0b0b0ff" )
+		.add_uniform( "specular_color", "rgb", "#ffffff" )
+	;
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec4 base_color;
+	uniform vec4 other_color;
+	uniform vec3 specular_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	
+	//-------------------------
+
+	const vec3 ambient = vec3( 0.4 );
+
+	//-------------------------
+
+	float fgradient( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
+		if( grad >= ramp_pos[ cnt-1 ] ) return ramp[ cnt-1 ]; // Greater ten final check.
+
+		for( int i=1; i < cnt; i++ ){
+			if( ramp_pos[ i ] > grad ) return ramp[ i-1 ];
+		}
+		return ramp[ 0 ];
+	}
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 			= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+		vec3 dir_light		= normalize( light.pos - frag_wpos );	// Direction of light from fragment
+		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_wpos );	
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// DIFFUSE LIGHT
+		float diff		= max( dot( norm, dir_light ), 0.0 ); 	// Angle between Frag Normal and Light Direction ( 0 to 1 )
+
+		float[] gray_ramp		= float[4]( 0.045174, 0.528885, 0.796753, 1.0 );
+		float[] gray_ramp_pos	= float[4]( 0.0, 0.05, 0.109092, 0.190909 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SEPARATE XYZ
+		float y_grad = frag_lpos.y * 0.9 + 0.55; // clamp( , 0.0, 1.0 );
+		
+		// Color Ramp Node ( Main Color )
+		vec3 ramp_c = mix( base_color.rgb, other_color.rgb, y_grad ); 
+		
+		// Diffuse BSDF
+		float dif_grad = fgradient( diff, gray_ramp, gray_ramp_pos, 4 );
+		vec3 diff_c = ramp_c * diff; // Main Color with Diffuse Lighting.
+
+		// Color Ramp GrayScale
+		vec3 grad_c = vec3(
+			fgradient( diff_c.r, gray_ramp, gray_ramp_pos, 4 ),
+			fgradient( diff_c.g, gray_ramp, gray_ramp_pos, 4 ),
+			fgradient( diff_c.b, gray_ramp, gray_ramp_pos, 4 )
+		);
+
+		float min = min( min( grad_c.r, grad_c.g ), grad_c.b ); // Smallist Value
+
+		// Multiple
+		//out_color.rgb = grad_c * ramp_c;
+		out_color.rgb = min * ramp_c;
+
+		// Layer Weight
+		float blend	= 0.13;
+		float wgt	= 1.0 - pow( dot( norm, dir_frag_cam ), 2.0 * blend );
+
+		float wgt_scale = step( wgt, 0.313637 ); // same ( wgt < 0.313637 )? 1.0 : 0.0;
+		
+		out_color.rgb *= wgt_scale;
+	}`;
+
+	/*
+	LAYER WEIGHT
+	https://blenderartists.org/t/what-is-it-that-layer-weight-nodes-facing-output-is-supposed-to-be/691884/32
+	if blend in [0.0, 0.5[:
+		result = 1 - pow(dot(N,I), 2*blend)
+	if blend == 0.5:
+		result = 1 - dot(N,I)
+	if blend in ]0.5, 1.0[:
+		result = 1 - pow(dot(N,I), 0.5/(1-blend))
+	*/
+</script><page-layout footer="on">	
+	<a href="https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/" target="_blank" slot="footer_r">BASE ON : https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/</a>
+</page-layout>
+
+<!--
+https://twitter.com/alexanderameye/status/1229730976697376769?s=03
+https://halisavakis.com/my-take-on-shaders-cel-shading/
+https://alvarber.gitlab.io/toon-shader-survey.html
+https://www.gamedev.net/articles/programming/graphics/toon-shader-using-unity-r5095/
+https://www.blendernation.com/2018/12/17/how-to-make-a-realtime-toon-shader-and-outline-with-blender-2-8-eevee/
+https://www.youtube.com/watch?v=t91X4eukZY4&feature=emb_rel_pause
+https://www.youtube.com/watch?v=J4cuuNGid7g&feature=emb_rel_pause
+https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
+https://threejs.org/examples/#webgl_materials_variations_toon
+https://webgl-shaders.com/toon-example.html
+http://www.mclelun.com/2016/11/blender3d-toon-shader.html
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+
+https://webgl-shaders.com/dots-example.html
+https://webgl-shaders.com/pencil-example.html
+
+https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/
+-->

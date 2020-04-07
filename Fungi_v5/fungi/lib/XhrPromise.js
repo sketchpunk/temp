@@ -58,6 +58,14 @@ class XhrPromise{
 		this.xhr.open( "GET", this.url, true );
 		this.xhr.responseType = this.res_type || "text";
 
+		/*
+		this.xhr.setRequestHeader( "cache-control", "no-cache, must-revalidate, post-check=0, pre-check=0" );
+		this.xhr.setRequestHeader( "cache-control", "max-age=0" );
+		this.xhr.setRequestHeader( "expires", "0" );
+		this.xhr.setRequestHeader( "expires", "Tue, 01 Jan 1980 1:00:00 GMT" );
+		this.xhr.setRequestHeader( "pragma", "no-cache" );
+		*/
+
 		try{
 			this.xhr.send();
 		}catch(err){

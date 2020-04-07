@@ -92,7 +92,7 @@ page-layout > footer a:hover,
 page-layout > footer label:hover{ background-color:#008DEDaa; color:#eeeeee; }
 </style></head><body class="Page top">
 <canvas style="width:100vw; height:100vh;" id="pg_canvas"></canvas>
-<nav class="">
+<nav class="off">
 	<header name="nav_a"><!--
 		<a href="javascript:void(0)">&#10033;</a>
 		<a href="javascript:void(0)">&#10010;</a>
@@ -102,8 +102,8 @@ page-layout > footer label:hover{ background-color:#008DEDaa; color:#eeeeee; }
 </nav>
 <section class="off"></section>
 <footer class="off">
-	<header><a href="https://www.github.com/sketchpunk/fungi" target="_blank">Fungi</a></header>
-	<footer><label>FPS : 0</label></footer>
+	<header name="footer_l"><a href="https://www.github.com/sketchpunk/fungi" target="_blank">Fungi</a></header>
+	<footer name="footer_r"><!--<label>FPS : 0</label>--></footer>
 </footer>`;
 
 //######################################################################################

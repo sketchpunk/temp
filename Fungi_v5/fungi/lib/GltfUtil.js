@@ -58,7 +58,6 @@ class GltfUtil{
 			for( g of geo_ary ){
 				m = App.Mesh.from_bin( n, g, bin, is_skinned );
 				e.Draw.add( m, mat, g.mode );
-
 				if( g.rotation )	e.Node.set_rot( g.rotation );
 				if( g.position )	e.Node.set_pos( g.position );
 				if( g.scale ) 		e.Node.set_scl( g.scale );

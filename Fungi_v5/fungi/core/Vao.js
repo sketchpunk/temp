@@ -9,7 +9,10 @@ class Vao{
 	///////////////////////////////////////////////////////////////
 	// Buffers
 	///////////////////////////////////////////////////////////////
-		add_indices( buf ){ gl.ctx.bindBuffer( buf.type, buf.ref ); return this; }
+		add_indices( buf ){
+			gl.ctx.bindBuffer( buf.type, buf.ref );
+			return this;
+		}
 
 		add_buf( buf, attrib_loc, is_instance=false ){
 			gl.ctx.bindBuffer( buf.type, buf.ref );

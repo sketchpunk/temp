@@ -203,7 +203,7 @@ class Gltf{
 				//.......................................
 				// Parse out all the raw Geometry Data from the Bin file
 				itm.vertices = Gltf.parse_accessor( attr.POSITION, json, bin, spec_only );
-				if( prim.indices != undefined ) 		itm.indices	= Gltf.parse_accessor( prim.indices,		json, bin, spec_only );
+				if( prim.indices != undefined ) 		itm.indices	= Gltf.parse_accessor( prim.indices,	json, bin, spec_only );
 				if( attr.NORMAL != undefined )			itm.normal	= Gltf.parse_accessor( attr.NORMAL,		json, bin, spec_only );
 				if( attr.TEXCOORD_0 != undefined )		itm.uv		= Gltf.parse_accessor( attr.TEXCOORD_0,	json, bin, spec_only );
 				if( attr.WEIGHTS_0 != undefined )		itm.weights	= Gltf.parse_accessor( attr.WEIGHTS_0,	json, bin, spec_only ); 

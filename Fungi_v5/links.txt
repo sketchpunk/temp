@@ -45,3 +45,7 @@ SHAPES GLSL
 https://discourse.threejs.org/t/shader-to-create-an-offset-inward-growing-stroke/6060/18
 https://codepen.io/prisoner849/pen/rNBXVmb - Square, triangle, Circle, Etc, Pretty awesome
 https://codepen.io/prisoner849/pen/YzKmQqE  - Same, but better anti alias
+
+
+SHADOWS
+https://github.com/Konstantin84UKR/WebGL_tutorials
