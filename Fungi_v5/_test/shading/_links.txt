@@ -17,6 +17,7 @@ https://gist.github.com/galek/53557375251e1a942dfa  PBR in GLSL
 
 //--------------------------------------
 https://www.youtube.com/watch?v=TpWI2rU8iF0  TOON SHADER, multi parts. Even has shiny TOON
+https://www.youtube.com/watch?v=kxWWBmIUxbc  AWESOME TOON HAIR SHADER
 
 https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/diffuse.html
 https://www.learnopengles.com/tag/lambertian-reflectance/

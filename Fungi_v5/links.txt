@@ -10,6 +10,10 @@ https://ebruneton.github.io/precomputed_atmospheric_scattering/ WebGL example
 
 https://github.com/spacejack/terra grass terrain + skydome, VERY VERY COOL
 
+https://csherratt.github.io/blog/posts/specs-and-legion/
+
+https://github.com/unity3d-jp/NVIDIAHairWorksIntegration/tree/master/HairWorksIntegration/Assets/Standard%20Assets/Effects/ImageEffects/Textures
+
 VERY AWSOME Way to bring down meshes into movable Voxels
 https://www.gamasutra.com/blogs/PhiDinh/20180523/318444/Game_Design_Deep_Dive_Rendering_the_player_as_a_form_of_pure_energy_in_Recompile.php
 
@@ -32,6 +36,10 @@ http://en.wikipedia.org/wiki/Heap_(data_structure)
 https://en.wikipedia.org/wiki/T-tree
 
 
+GLSL VOXEL RAY INTERSECT
+https://www.shadertoy.com/view/ld3fDs
+
+
 ORTHOGRAPHIC CAMERA
 https://github.com/mrdoob/three.js/blob/master/src/cameras/OrthographicCamera.js
 
@@ -49,3 +57,7 @@ https://codepen.io/prisoner849/pen/YzKmQqE  - Same, but better anti alias
 
 SHADOWS
 https://github.com/Konstantin84UKR/WebGL_tutorials
+
+
+STATE MACHINE
+https://gameprogrammingpatterns.com/state.html
