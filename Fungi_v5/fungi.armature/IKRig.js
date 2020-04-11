@@ -109,8 +109,9 @@ class IKRig{
 
 	// #region SPECIAL METHODS
 	recompute_from_tpose(){
-		console.log("Recompute");
-
+		// Recompute the Length of the bones for each chain. Most often this
+		// is a result of scale being applied to the armature object that can
+		// only be computed after the rig is setup
 		this.chains.leg_l.compute_len_from_bones( this.tpose.bones );
 		this.chains.leg_r.compute_len_from_bones( this.tpose.bones );
 		this.chains.arm_l.compute_len_from_bones( this.tpose.bones );
@@ -157,6 +158,7 @@ class Chain{
 		return this;
 	}
 
+	// Get Skeleton Index of Bones
 	first(){ return this.bones[0].idx; }
 	last(){ return this.bones[ this.cnt-1 ].idx; }
 	idx( i ){ return this.bones[ i ].idx; }
@@ -182,7 +184,6 @@ class Chain{
 			this.alt_fwd.copy( fwd );
 			this.alt_up.copy( up );
 		}
-
 		return this;
 	}
 	// #endregion ////////////////////////////////////////////////

@@ -1,5 +1,5 @@
 <!DOCTYPE html><script type="module">
-import App,{ Quat }			from "../../fungi/App.js";
+import App,{ Quat }		from "../../fungi/App.js";
 import XhrPromise		from "../../fungi/lib/XhrPromise.js";
 import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 import Animation		from "../../fungi/lib/Animation.js";
@@ -7,12 +7,12 @@ import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
 
 //#####################################################
 App.builder()
-	.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
+	//.load_shaders( "../fungi.armature/LowPolySkin.js" ) //"./shaders/LowPoly.js"
 	.use_armature()
-	.set_camera( 0, 20, 3, 0, 0.75, 0 )
+	.set_camera( 45, 20, 5, 0, 0.75, 0 )
 	.add( init )
 	.render_loop( on_draw )
-	//.render_on_mouse( on_draw )
+	//.render_on_mouse(  )
 	.build();
 
 let gAnimator, gAnim, gPose;
@@ -23,42 +23,25 @@ function on_draw( dt, ss ){
 	/**/
 	gAnimator.tick( dt ).update( gAnim, gPose );
 	gPose.apply();
-	
 }
 
 async function init(){
 	let dl = await XhrPromise.get( 
 		//"../../_tmp/walking.gltf", "json", 
 		//"../../_tmp/walking.bin", "arraybuffer",
-		"../../_tmp/anim/walking.gltf", "json", 
-		"../../_tmp/anim/walking.bin", "arraybuffer",
-		//"../../_tmp/anim/test.gltf", "json", 
-		//"../../_tmp/anim/test.bin", "arraybuffer",
+		"../../_tmp/anim/Running.gltf", "json", 
+		"../../_tmp/anim/Running.bin", "arraybuffer",
 	);
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 	//let mat	= App.new_mat( "LowPoly", { color:"white" } );
-	let mat	= App.new_mat( "LowPolySkin" );
+	//let mat	= App.new_mat( "LowPolySkin" );
 	//let e 	= GltfUtil.get_debug_view( "Skeleton", dl[0], dl[1], mat );
 	let e 	= GltfUtil.get_bone_view( "src", dl[0], dl[1] );
-
 	//e.Node.local.rot.reset();
 	//e.Node.local.scl.set( 1, 1, 1 );
 
-	//console.log( "x", e.Node.local );
-	//console.log( e.Node.world );
-	//console.log( e.Armature.bones );
-
-	let qa = new Quat(-0.7079761028289795, 0.03356180340051651, -0.09067380428314209, 0.699586808681488 ); // Hip Rot
-	let qb = new Quat( 0.7071068286895752, 0, 0, 0.7071067094802856 ); // Armature Rot
-
-	//console.log( "a", Quat.mul( qb, qa ) );
-
-
-
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	
 	gAnim 		= new Animation( Gltf.get_animation( dl[0], dl[1] ), true );
 	gPose 		= e.Armature.new_pose();
 	gAnimator	= new PoseAnimator();
@@ -66,7 +49,6 @@ async function init(){
 	gAnimator.tick( 0.01 ).update( gAnim, gPose );
 	gPose.apply();
 	*/
-
 	return true;
 }
 
