@@ -1,0 +1,62 @@
+<!DOCTYPE html><script type="module">
+import App, { THREE }	from "../../fungi.3js/App.js";
+import { GLTFLoader }	from "../../fungi.3js/GLTFLoader.js";
+
+//#####################################################
+App.builder()
+	.set_camera( 0, 20, 2.5, 0, 0.75, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+
+async function init(){
+	let loader = new GLTFLoader();
+
+	// Load a glTF resource
+	loader.load(
+		'./3js_tester.gltf',
+		// called when the resource is loaded
+		function ( gltf ) {
+			App.scene.add( gltf.scene );
+			gltf.animations; // Array<THREE.AnimationClip>
+			gltf.scene; // THREE.Group
+			gltf.scenes; // Array<THREE.Group>
+			gltf.cameras; // Array<THREE.Camera>
+			gltf.asset; // Object
+		},
+		// called while loading is progressing
+		function ( xhr ) { console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' ); },
+		// called when loading has errors
+		function ( error ) { console.log( 'An error happened' ); }
+	);
+
+
+/*
+var loader = new GLTFLoader().setPath( 'models/gltf/DamagedHelmet/glTF/' );
+						loader.load( 'DamagedHelmet.gltf', function ( gltf ) {
+
+							gltf.scene.traverse( function ( child ) {
+
+								if ( child.isMesh ) {
+
+									roughnessMipmapper.generateMipmaps( child.material );
+
+								}
+
+							} );
+
+							scene.add( gltf.scene );
+
+							roughnessMipmapper.dispose();
+
+							render();
+
+						} );
+
+*/
+
+	return true;
+}
+</script><page-layout></page-layout>
