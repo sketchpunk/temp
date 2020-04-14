@@ -20,18 +20,6 @@ App.builder( true )
 	//.render_on_mouse()
 	.build();
 
-/* NOTES
-1.
-	First we need an object manage groups of bones ( Chains ). IK
-	Tends to be applied to bones that are connected in a Parent-Child relationship
-	in groups called Chains. We can look at an arm as a chain of 2 Bones.
-	( Look Over the IK Rig Component )
-
-2. Rig consists of Chains and Single Bone Points. Points are like Hands, Feet, Head, etc.
-3. IK Target. Normally  the target for IK tends to be a point called the End Effector. 
-	Maybe go threw this with limbs
-*/
-
 // #region INITIALIZE
 
 let gSrc, gModelA, gModelB, gAnimate, gIKPose;
@@ -57,7 +45,7 @@ async function init(){
 	gIKPose = new IKPose();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	gAnimate( 0.5 );
+	gAnimate( 0.01 );
 	//IKCompute.run( gSrc, gIKPose );
 	return true;
 }
@@ -172,15 +160,31 @@ function load_mesh_b( json, bin ){
 
 // Hold the IK Information, then apply it to a Rig
 class IKPose{
+	target = new IKTarget();		// IK Solvers
+
 	hip = {
-		bind_height	: 0,            // Use to help Scale movement.
-		movement 	: new Vec3(),   // How Much Movement the Hip did in world space
+		bind_height	: 0,			// Use to help Scale movement.
+		movement	: new Vec3(),	// How Much Movement the Hip did in world space
 		dir			: new Vec3(),   
 		twist		: 0,
 	};
 
+	// IK Data for limbs is first the Direction toward the End Effector,
+	// The scaled length to the end effector, plus the direction that
+	// the KNEE or ELBOW is pointing. For IK Targeting, Dir is FORWARD and
+	// joint dir is UP
+	leg_l = { len_scale:0,	dir:new Vec3(),	joint_dir:new Vec3() };
+	leg_r = { len_scale:0,	dir:new Vec3(), joint_dir:new Vec3() };
+	arm_l = { len_scale:0,	dir:new Vec3(),	joint_dir:new Vec3() };
+	arm_r = { len_scale:0,	dir:new Vec3(), joint_dir:new Vec3() };
+
 	apply_rig( rig ){
 		this.apply_hip( rig );
+		this.apply_limb( rig, rig.chains.leg_l, this.leg_l );
+		this.apply_limb( rig, rig.chains.leg_r, this.leg_r );
+
+		if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
+		if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
 	}
 
 	apply_hip( rig ){
@@ -205,7 +209,7 @@ class IKPose{
 		// If There is a Twist Value, Apply that as a PreMultiplication.
 		if( this.hip.twist != 0 ) q.pmul_axis_angle( this.hip.dir, this.hip.twist );
 
-		// In the end, we need to conver to local space. Simply premul by the inverse of the parent
+		// In the end, we need to convert to local space. Simply premul by the inverse of the parent
 		q.pmul_invert( p_rot );
 
 		rig.pose.set_bone( b_info.idx, q ); // Save LS rotation to pose
@@ -226,6 +230,38 @@ class IKPose{
 
 		rig.pose.set_bone( b_info.idx, null, pos );	// Save Position to Pose
 	}
+
+	apply_limb( rig, chain, limb ){
+		// The IK Solvers I put together takes transforms as input, not rotations.
+		// The first thing we need is the WS Transform of the start of the chain
+		// plus the parent's WS Transform. When are are building a full body IK
+		// We need to do things in a certain order to build things correctly.
+		// So before we can do legs, we need the hip/root to be moved to where it needs to go
+		// The issue is that when people walk, you are actually falling forward, you catch
+		// yourself when your front foot touches the floor, in the process you lift yourself 
+		// up a bit. During a whole walk, or run cycle, a person's hip is always moving up and down
+		// Because of that, the distance from the Hip to the floor is constantly changing
+		// which is important if we want to have the legs stretch correctly since each IK leg
+		// length scale is based on the hip being at a certain height at the time.
+		let p_tran = new Transform(),	
+			c_tran = new Transform();
+
+		rig.pose.get_parent_world( chain.first(), p_tran, c_tran );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// How much of the Chain length to use to calc End Effector
+		let len = ( rig.leg_len_lmt || chain.len ) * limb.len_scale;
+
+		// Next we pass our into to the Target which does a some pre computations that solvers may need.
+		this.target.from_pos_dir( c_tran.pos, limb.dir, limb.joint_dir, len );	// Setup IK Target
+
+		// Each Chain is assigned a IK Solver that will bend the bones to the right places
+		let solver = chain.ik_solver || "limb";
+
+		// The IK Solver will update the pose with the results of the operation. We pass in the
+		// parent for it to use it to return things back into local space.
+		this.target[ solver ]( chain, rig.tpose, rig.pose, p_tran );
+	}
 }
 
 // Read the current pose of a Rig then compute data to be saved to IK Pose.
@@ -237,6 +273,11 @@ class IKCompute{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.hip( rig, ik_pose );
+
+		this.limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
+		this.limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
+		this.limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
+		this.limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
 	}
 
 	static hip( rig, ik_pose ){
@@ -309,6 +350,46 @@ class IKCompute{
 		ik_pose.hip.dir.copy( pose_fwd );	// Pose Forward is the direction we want the Hip to Point to.
 		ik_pose.hip.twist = twist;	// How Much Twisting to Apply after pointing in the correct direction.
 	}
+
+	static limb( pose, chain, ik_limb  ){
+		// Limb IK tends to be fairly easy to determine. What you need is the direction the end effector is in
+		// relation to the beginning of the limb chain, like the Shoulder for an arm chain. After you have the
+		// direction, you can use it to get the distance. Distance is important to create a scale value based on
+		// the length of the chain. Since an arm or leg's length can vary between models, if you normalize the 
+		// distance, it becomes easy to translate it to other models. The last bit of info is we need the direction
+		// that the joint needs to point. In this example, we precompute the Quaternion Inverse Dir for each chain
+		// based on the bind pose. We can transform that direction with the Animated rotation to give us where the
+		// joint direction has moved to.
+
+		let boneA	= pose.bones[ chain.first() ],	// First Bone
+			boneB	= pose.bones[ chain.end_idx ],	// END Bone, which is not part of the chain (Hand,Foot)
+			ab_dir	= Vec3.sub( boneB.world.pos, boneA.world.pos ),	// Direction from First Bone to Final Bone ( IK Direction )
+			ab_len	= ab_dir.len();									// Distance from First Bone to Final Bone 
+
+		/* VISUAL DEBUG CHAIN POINTS 
+		App.Debug.pnt( boneA.world.pos, "green", 0.06, 6 );
+		App.Debug.pnt( boneB.world.pos, "red", 0.06, 6 );
+		App.Debug.ln( boneA.world.pos, boneB.world.pos, "green", "red", true );
+		*/
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute the final IK Information needed for the Limb
+		ik_limb.len_scale = ab_len / chain.len;	// Normalize the distance base on the length of the Chain.
+		ik_limb.dir.copy( ab_dir.norm() );		// We also normalize the direction to the end effector.
+
+		// We use the first bone of the chain plus the Pre computed ALT UP to easily get the direction of the joint
+		let j_dir	= Vec3.transform_quat( chain.alt_up, boneA.world.rot );
+		let lft_dir	= Vec3.cross( j_dir, ab_dir );					// We need left to realign up
+		ik_limb.joint_dir.from_cross( ab_dir, lft_dir ).norm(); 	// Recalc Up, make it orthogonal to LEFT and FWD
+
+		/* VISUAL DEBUG THE DIRECTIONS BEING COMPUTED 
+		App.Debug.ln( boneA.world.pos, Vec3.scale( j_dir, 0.5 ).add( boneA.world.pos ), "white" ); 				// The actual Direction the first bone is pointing too (UP)
+		App.Debug.ln( boneA.world.pos, Vec3.scale( lft_dir, 0.5 ).add( boneA.world.pos ), "orange" );			// the Cross of UP and FWD
+		App.Debug.ln( boneA.world.pos, Vec3.scale( ab_dir, 0.5 ).add( boneA.world.pos ), "orange" );			// Dir to End Effector
+		App.Debug.ln( boneA.world.pos, Vec3.scale( ik_limb.joint_dir, 0.5 ).add( boneA.world.pos ), "orange" );	// Recalc UP to make it orthogonal
+		*/
+	}
+
 }
 
 // How to visualize the IK Pose Informaation to get an Idea of what we're looking at.
@@ -316,13 +397,30 @@ class IKVisualize{
 	static run( e, ik ){
 		let rig = e.IKRig;
 		this.hip( rig, ik );
+		this.limb( rig.pose, rig.chains.leg_l, ik.leg_l );
+		this.limb( rig.pose, rig.chains.leg_r, ik.leg_r );
+		this.limb( rig.pose, rig.chains.arm_l, ik.arm_l );
+		this.limb( rig.pose, rig.chains.arm_r, ik.arm_r );
 	}
 
 	static hip( rig, ik ){
 		let ws = rig.pose.bones[ rig.points.hip.idx ].world;
 		App.Debug
-			.pnt( ws.pos, "orange", 0.07, 6 )
+			.pnt( ws.pos, "orange", 0.09, 6 )
 			.ln( ws.pos, Vec3.scale( ik.hip.dir, 0.20 ).add( ws.pos ), "cyan", null, true );
+	}
+
+	static limb( pose, chain, ik ){
+		let len		= chain.len * ik.len_scale,
+			posA	= pose.bones[ chain.first() ].world.pos,		// Starting Point in Limb
+			posB	= Vec3.scale( ik.dir, len ).add( posA ),		// Direction + Length to End Effector
+			posC	= Vec3.scale( ik.joint_dir, 0.2 ).add( posA );	// Direction of Joint
+
+		App.Debug
+			.pnt( posA, "yellow", 0.05, 6 )
+			.pnt( posB, "orange", 0.05, 6 )
+			.ln( posA, posB, "yellow", "orange", true )
+			.ln( posA, posC, "yellow", null, true );
 	}
 }
 
