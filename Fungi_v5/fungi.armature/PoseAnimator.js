@@ -2,7 +2,10 @@ import { AnimUtil } from "../fungi/lib/Animation.js";
 
 class PoseAnimator{
 	constructor(){
-		this.clock = 0;
+		this.clock 		= 0;
+		this.root_idx 	= null;
+		this.root_x 	= 0;
+		this.root_z 	= 2;
 	}
 
 	/////////////////////////////////////////////////////////////////
@@ -69,6 +72,12 @@ class PoseAnimator{
 							case "STEP"	: AnimUtil.vec3_buf_copy( track.data, v, ft.a_idx*3 ); break;
 							default		: AnimUtil.vec3_buf_lerp( track.data, ft.a_idx*3, ft.b_idx*3, ft.time, v ); break;
 						}
+
+						if( this.root_idx == track.joint_idx ){
+							v[ this.root_x ] = 0;
+							v[ this.root_z ] = 0;
+						}
+
 						pose.set_bone( track.joint_idx, null, v );
 						break;
 				}

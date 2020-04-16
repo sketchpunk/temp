@@ -840,6 +840,16 @@ class Quat extends Float32Array{
 	// INTERPOLATION
 	////////////////////////////////////////////////////////////////////
 		
+		/*TODO, Fix lerp to check for Neighborhood
+		inline quat Interpolate(const quat& a, const quat& b, float t) {
+		quat result = mix(a, b, t);
+		if (dot(a, b) < 0) { // Neighborhood
+		result = mix(a, -b, t);
+		}
+		return normalized(result); //NLerp, not slerp
+		}
+		*/
+
 		static lerp( a, b, t, out=null ){
 			var tm1 = 1 - t;
 			out		= out || new Quat();

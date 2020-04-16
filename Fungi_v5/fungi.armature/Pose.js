@@ -102,6 +102,29 @@ class Pose{
 			return pt;
 		}
 
+		get_parent_rot( b_idx, q=null ){
+			let cbone = this.bones[ b_idx ];
+			q = q || new Quat();
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Child is a Root Bone, just reset since there is no parent.
+			if( cbone.p_idx == null ) q.reset();
+			else{
+				// Parents Exist, loop till reaching the root
+				let b = this.bones[ cbone.p_idx ];
+				q.copy( b.local.rot );
+
+				while( b.p_idx != null ){
+					b = this.bones[ b.p_idx ];
+					q.pmul( b.local.rot );
+				}
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			q.pmul( this.root_offset.rot ); // Add Starting Offset
+			return q;
+		}
+
 		/*
 		get_parent_world_OLD( b_idx, pt, ct=null, t_offset=null ){
 			let b	= this.bones[ b_idx ],

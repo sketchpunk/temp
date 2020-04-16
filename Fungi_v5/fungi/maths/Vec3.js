@@ -447,11 +447,10 @@ class Vec3 extends Float32Array{
 				c = this.cross( v0, v1 );
 			return Math.atan2( c.len(), d ); 
 
-			 //let cosine = this.dot( v0, v1 );
-			  //if(cosine > 1.0) return 0;
-			  //else if(cosine < -1.0) return Math.PI;
-			  //else return Math.acos( cosine / ( Math.sqrt( v0.len_sqr() * v1.len_sqr() ) ) );
-		
+			//let cosine = this.dot( v0, v1 );
+			//if(cosine > 1.0) return 0;
+			//else if(cosine < -1.0) return Math.PI;
+			//else return Math.acos( cosine / ( Math.sqrt( v0.len_sqr() * v1.len_sqr() ) ) );
 		}
 
 		//-------------------------------------------
