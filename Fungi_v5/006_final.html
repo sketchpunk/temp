@@ -11,18 +11,15 @@ import IKTarget 					from "../../fungi.armature/IKTarget.js";
 import IKRig						from "../../fungi.armature/IKRig.js";
 
 /* NOTES
-- The hips tend to sway from side to side when people walk. This means
-that the first bone of the spine is very important to get right, since if you
-have something like a cat walk the hips sway greatly and its the first bone
-in the spine that goes against it to try to keep the upper body steady.
-
-- With the Spine, We flip our Look&Twist direction, It works better for the spine
-if the look direction is up and twist direction is forward.
+- Finish things up by Applying some Movement to the head
+- Also introduce a few extra dynamic movement to give RoboRex more life even though
+specific parts of it has no animation data coming from the source.
 */
 
 //#####################################################
 App.builder( true, true )
-	.use_armature()
+    .use_armature()
+    .init_mod( "../fungi.armature/BoneSpring.js" )
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	.set_camera( 0, 10, 4, 0, 0.75, 0 )
 	.add( init )
@@ -39,8 +36,11 @@ async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Download Resources
 	let dl = await XhrQueue.url( "../../files/" )
-		.grp( "src", "anim/Walking.gltf", "json", "anim/Walking.bin", "bin" )
-		//.grp( "src", "anim/Catwalk.gltf", "json", "anim/Catwalk.bin", "bin" )
+		//.grp( "src", "anim/Walking.gltf", "json", "anim/Walking.bin", "bin" )
+        //.grp( "src", "anim/Catwalk.gltf", "json", "anim/Catwalk.bin", "bin" )
+        //.grp( "src", "anim/Running.gltf", "json", "anim/Running.bin", "bin" )
+        //.grp( "src", "anim/Standing.gltf", "json", "anim/Standing.bin", "bin" )
+        .grp( "src", "anim/Ready.gltf", "json", "anim/Ready.bin", "bin" )
 		.grp( "ma", "models/vegeta.gltf", "json", "models/vegeta.bin", "bin" )
 		.grp( "mb", "models/robo_trex.gltf", "json", "models/robo_trex.bin", "bin" )
 		.then();
@@ -164,6 +164,19 @@ function load_mesh_b( json, bin ){
 	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
 	tpose.apply();
 
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Add some Spring Movement to specific bones
+    // The source animation was made for Human types, but Rex is an animal rig that includes
+    // extra bits like a tail, so using Jiggle / Spring Bone types of functionality can bring
+    // life to extra parts of our rig even if there is no animation data available for it.
+	e.add_com( "BoneSpring" )
+		.add( rig.get_chain_indices( "tail" ), 2.9, 0.9, -0.1 )
+		.add( rig.points.wing_l.idx, 3.0, 0.9 )
+        .add( rig.points.wing_r.idx, 3.0, 0.9 )
+        //.add( rig.points.wing_l.idx, 5.0, 0.9 )
+        //.add( rig.points.wing_r.idx, 5.0, 0.9 )
+        ;
+
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Misc Settings
 	e.Node.set_pos( -1.0, 0, 0 ); // Move it to the Left, So it doesn't block src.
@@ -202,6 +215,8 @@ class IKPose{
 		{ look_dir: new Vec3(), twist_dir: new Vec3() },
 	];
 
+	head = { look_dir: new Vec3(), twist_dir: new Vec3() };
+
 	apply_rig( rig ){
 		this.apply_hip( rig );
 
@@ -215,6 +230,8 @@ class IKPose{
 
 		if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
 		if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
+
+		this.apply_look_twist( rig, rig.points.head, this.head, Vec3.FORWARD, Vec3.UP );
 	}
 
 	apply_hip( rig ){
@@ -502,7 +519,9 @@ class IKCompute{
 		this.spine( rig, rig.chains.spine, ik_pose, Vec3.UP, Vec3.FORWARD );
 
 		this.limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
-		this.limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
+        this.limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
+        
+        this.look_twist( rig, rig.points.head, ik_pose.head, Vec3.FORWARD, Vec3.UP );
 	}
 
 	static hip( rig, ik_pose ){
@@ -700,10 +719,12 @@ class IKVisualize{
 		this.limb( rig.pose, rig.chains.arm_l, ik.arm_l );
         this.limb( rig.pose, rig.chains.arm_r, ik.arm_r );
         
-		this.foot( rig, rig.points.foot_l, ik.foot_l, Vec3.FORWARD, Vec3.UP );
-		this.foot( rig, rig.points.foot_r, ik.foot_r, Vec3.FORWARD, Vec3.UP );
+		this.look_twist( rig, rig.points.foot_l, ik.foot_l, Vec3.FORWARD, Vec3.UP );
+		this.look_twist( rig, rig.points.foot_r, ik.foot_r, Vec3.FORWARD, Vec3.UP );
 
-		this.spine( rig, rig.chains.spine, ik.spine );
+        this.spine( rig, rig.chains.spine, ik.spine );
+        
+        this.look_twist( rig, rig.points.head, ik.head, Vec3.FORWARD, Vec3.UP );
 	}
 
 	static hip( rig, ik ){
@@ -726,10 +747,11 @@ class IKVisualize{
 			.ln( posA, posC, "yellow", null, true );
     }
     
-	static foot( rig, b_info, ik, look_dir, twist_dir ){
+    // Was Originally called Foot.
+	static look_twist( rig, b_info, ik, look_dir, twist_dir ){
 		let pos = rig.pose.bones[ b_info.idx ].world.pos;
 		App.Debug
-            .pnt( pos, "cyan", 0.03, 1 )											// Foot Position
+            .pnt( pos, "cyan", 0.03, 1 )											    // Foot Position
 			.ln( pos, Vec3.scale( ik.look_dir, 0.2 ).add( pos ), "cyan", null, true )	// IK.DIR
 			.ln( pos, Vec3.scale( ik.twist_dir, 0.2 ).add( pos ), "cyan", null, true );	// RESULT OF IK.TWIST
 	}

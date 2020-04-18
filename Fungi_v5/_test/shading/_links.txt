@@ -3,6 +3,7 @@ https://www.scratchapixel.com/lessons/3d-basic-rendering/phong-shader-BRDF
 
 https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
 
+https://www.gsn-lib.org/docs/gallery.php?projectName=RaymarchingSDF&graphName=SignedDistanceField3D
 
 https://alain.xyz/blog/advances-in-material-models
 

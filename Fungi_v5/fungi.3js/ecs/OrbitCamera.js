@@ -17,6 +17,8 @@ class OrbitCamera{
 	}
 
 	constructor(){
+		this.active 		= true;
+
 		this.target_pos 	= new Vec3();
 		this.init_tar_pos 	= new Vec3();
 		this.init_cam_pos	= new Vec3();
@@ -33,6 +35,8 @@ class OrbitCamera{
 	}
 
 	run( ecs ){
+		if( !this.active ) return;
+
 		let c = App.input.coord;
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

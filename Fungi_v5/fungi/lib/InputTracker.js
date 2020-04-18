@@ -156,7 +156,7 @@ class InputTracker{
 		}
 
 		onMouseDown(e){
-			e.preventDefault(); e.stopPropagation();
+			//e.preventDefault(); e.stopPropagation();
 
 			this.coord.ix = this.coord.px = this.coord.x = e.pageX - this.offsetX;
 			this.coord.iy = this.coord.py = this.coord.y = e.pageY - this.offsetY;
@@ -181,14 +181,14 @@ class InputTracker{
 		}
 
 		onMouseMove(e){
-			e.preventDefault(); e.stopPropagation();
+			//e.preventDefault(); e.stopPropagation();
 			this.updateCoords(e);
 
 			if( this.on_input ) this.on_input();
 		}
 
 		onMouseUp(e){
-			e.preventDefault(); e.stopPropagation();
+			//e.preventDefault(); e.stopPropagation();
 			this.updateCoords(e);
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

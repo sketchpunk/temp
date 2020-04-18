@@ -14,6 +14,7 @@ class Debug{
 	static reset(){
 		this.p.reset();
 		this.l.reset();
+		return this;
 	}
 
 	static pnt( p, hex=0xff0000, shape=null, size=null ){ this.p.add( p, hex, shape, size ); return this; }

@@ -19,16 +19,16 @@ class Lines{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// BUFFERS
         this.buf_pos = new THREE.BufferAttribute( new Float32Array( max_len * 4 * 2 ), 4 );
-		this.buf_pos.setDynamic( true );
+		this.buf_pos.setUsage( THREE.DynamicDrawUsage );
 
 		this.buf_clr = new THREE.BufferAttribute( new Float32Array( max_len * 3 * 2 ), 3 );
-		this.buf_clr.setDynamic( true );
+		this.buf_clr.setUsage( THREE.DynamicDrawUsage );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// GEOMETRY
         this.geo = new THREE.BufferGeometry();
-		this.geo.addAttribute( "position",	this.buf_pos );
-		this.geo.addAttribute( "color",		this.buf_clr );
+		this.geo.setAttribute( "position",	this.buf_pos );
+		this.geo.setAttribute( "color",		this.buf_clr );
 		this.geo.setDrawRange( 0, 0 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

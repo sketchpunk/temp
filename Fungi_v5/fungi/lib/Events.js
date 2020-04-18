@@ -30,7 +30,8 @@ class Events{
 	emit( eName, detail=null ){
         if( !this.events[ eName ] ){ console.log("Event Name Not Found: ", eName ); return this; }
         if( this.events[ eName ].length > 0 ){
-            this.elm.dispatchEvent( new CustomEvent( eName, { detail, bubbles:true, cancelable:true, composed:false } ) ); 
+			this.elm.dispatchEvent( new CustomEvent( eName, { detail, bubbles:true, cancelable:true, composed:false } ) ); 
+			//dispatch returns if event has been cancelled.
         }
 		return this;
 	}

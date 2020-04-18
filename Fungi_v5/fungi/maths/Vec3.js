@@ -499,6 +499,8 @@ class Vec3 extends Float32Array{
 	// MISC
 	////////////////////////////////////////////////////////////////////
 
+		static struct( o ){ return new Vec3( o.x, o.y, o.z ); }
+
 		// From a point in space, closest spot to a 3D line
 		static point_to_line( a, b, p, out=null ){
 			let dx	= b[0] - a[0],
