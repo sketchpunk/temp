@@ -1,569 +1,98 @@
 <!DOCTYPE html><script type="module">
-import App, {THREE} from "../../fungi.3js/App.js";
-import { TransformControls, TransformControlsGizmo, TransformControlsPlane } from "../../fungi.3js/TransformControls.js";
+import App, {THREE,Vec3} from "../../fungi.3js/App.js";
+
+import Gizmo		from "../../fungi.3js/ecs/Gizmo.js";
+import DragPoints	from "../../fungi.3js/ecs/DragPoints.js";
+import RaySystem	from "../../fungi.3js/lib/RaySystem.js";
+
+import Spline		from "../../fungi/maths/Spline.js";
 
 //#####################################################
 App.builder( true )
-	.set_camera( 0, 20, 4, 0, 0.75, 0 )
+	.use_events()
+	.set_camera( 0, 20, 5, 0, 0.75, 0 )
 	.add( init )
     //.render_loop()
     .render_on_mouse()
 	.build();
 
-
-/*
-User clicks on Screen
-- Check if hits a Dot
--- If it hits, select it and turn on Gizmo and Move it to where the dot is.
-
-When Gizmo Moves
--- Alert Dot of New Location
-
-??? Send Event on Gizmo Move?
-??? Should Dots send Event when selected OR delelected?
-
-~~~~~~~~~~~~~~~~~
-RaySystem
-- User Clicks on the Scene and Creates a onRay Event
---- Should only allow 1 Item to be queued at a time, so if one exists, it Overrides.
---- Should Sent it to all Registered Listeners
-Event.evt( "ray", ray );
-Event.on( "ray", (r)=>{} );
-
-Next
-
-DragPoints
-- Listens for Ray Event, Object doesn't have too, can be a Glue Object.
---- Checks if Ray Hit a Point
---- Sends Event on DragPoint_Selection, 
-Event.evt( "DragPoint_Selection", { status:N, index:0 } );
-
-DragPoint_Selection{
-	if Selected, Turn on Grizmo
-	if not, Turn off Gizmo.
-}
-
-Event.Gizmo_Move, Vec3
-
-What do I want
-- Single Item, every time its sent, it just replaces the data, Draing just clears out that Item.
-- RingQueue, limited amount of Items.
-- Have Listeners for each event
-- Can access Queue and Manually Drain it.
-- Can set queue to auto broadcast, or instant broadcast.
-
-EvtQueue.reg( evt_name, size, allow_listeners )
-if Size = 0, Instant Broadcast.
-if Size = 1, Single Item, Frame Broadcast if allow_listeners
-if Size > 1, RingQueue, Frame Broadcast if allow_listeners
-
-EvtQueue.on( evt_name, func );
-EvtQueue.emit( evt_name, data );
-
-*/
-
 //#####################################################
-let gDot, gRaySys, gGizmo;
-function init(){
-	App.ecs.sys_add( DragPointSys, 800 );
 
-    gDot = DragPoints.$( "Drag" );
-	let dp = gDot.DragPoints;
-	dp
+function init(){
+	RaySystem.init();
+	DragPoints.init();
+	Gizmo.init();
+	App.events
+		.on( "mouse_ray", on_mouse_ray )
+		.on( "dragpoint_selection", on_dragpoint_selection )
+		.on( "gizmo_drag_state", on_gizmo_drag_state )
+		.on( "gizmo_drag_move", on_gizmo_drag_move )
+	;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gSpline	= Spline.from_hermite( true );
+	gGizmo	= Gizmo.$();
+	gDot	= DragPoints.$( "Drag" );
+	gDot.DragPoints
 		.add( [0,0,0] )
 		.add( [1,1,0] )
-        .add( [-1,1,0] );
+		.add( [0,2,0] )
+		.add( [-1,1,0] );
 
-	gRaySys = new RaySystem();
-	gRaySys.on( dp.ray_bind );
-
-
-	/*
-	let geo 		= new THREE.BoxGeometry( 0.5, 0.5, 0.5 ),
-		mat_line 	= new THREE.LineBasicMaterial( { color: 0xffffff, transparent: true, opacity: 0.5 } ),
-		mat_mesh 	= new THREE.MeshPhongMaterial( { color: 0x156289, emissive: 0x072534, side: THREE.DoubleSide, flatShading: true } ),
-		grp 		= new THREE.Group();
-	//grp.add( new THREE.Mesh( geo, mat_mesh )  );
-	//grp.add( new THREE.LineSegments( geo, mat_line ) );
-	App.scene.add( grp );
-
-	gGizmo = new TransformControls( App.camera, App.renderer.domElement );
-	gGizmo.addEventListener( 'dragging-changed', function ( event ) {
-		console.log( "GIZ", event );
-		App.cam_ctrl.active = !event.value;
-	} );
-	gGizmo.setMode( "translate" );
-	gGizmo.enabled = true;
-	gGizmo.attach( grp );
-
-	App.scene.add( gGizmo );
-	*/
-
-	//console.log( new Gizmo().is_dragging );
+	spline_load();
+	spline_draw();
 
 	return true;
 }
 
-function test( ecs ){
-	let o, list = ecs.query_comp( "Obj" );
-	for( o of list ) o.ref.rotation.y += 0.5 * App.delta_time;
-}
+//#####################################################
 
-function ray_cast( e ){
-	if( e.button != 2 ) return;	// if Not right click exit
-	e.preventDefault(); e.stopPropagation();
+let gDot, gGizmo, gSpline;
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Figure out where the mouse in in 2D Space
-	let size 	= App.renderer.getSize( new THREE.Vector2() ); 	// Size of Canvas
-	let mouse   = App.input.toCoord( e );	// Mouse Coord in Relation to Canvas
-	let nds		= {							// Convert to Normalized Device Space
-		x : ( mouse[0] / size.x ) * 2 - 1,
-		y : -( mouse[1] / size.y ) * 2 + 1,
-	};
+function on_mouse_ray( info ){ gDot.DragPoints.ray_hit( info ); }
 
-	// Create and Set Ray
-    let caster  = new THREE.Raycaster();
-	caster.setFromCamera( nds, App.camera );
-
-	// See the Ray on Screen
-	let posA = Vec3.struct( caster.ray.origin );
-	let posB = Vec3.struct( caster.ray.direction ).scale( 1000 ).add( posA );
-    App.Debug.ln( posA, posB, 0xff0000 );
-}
-
-import Vec3		    from "../../fungi/maths/Vec3.js";
-import Points		from "../../fungi.3js/ecs/Points.js";
-
-class DragPoints{
-	static $( name, e=null ){
-		e = Points.$( name  );
-		e.add_com( "DragPoints" );
-		e.Points.use_size 	= 8;
-		e.Points.use_shape 	= 1;
-		return e;
-	}
-
-	static DESELECTED		= 0;
-	static NEW_SELECTION	= 1;
-	static SELECTION		= 2;
-
-	points		= new Array();
-	updated		= true;
-	sel_idx 	= null;
-	ray_bind	= this.on_ray.bind( this );
-
-	on_ray( e ){
-		const range = 0.06;
-		let i, p, len,
-			ray 	= e.detail,
-			idx		= null,
-			len_min	= Infinity;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Find A Point that the ray touches
-		for( i=0; i < this.points.length; i++ ){
-			p = this.points[ i ];
-			len = line_near_point( ray, p.pos, range );
-
-			if( len != null && len < len_min ){
-				len_min	= len;
-				idx		= i;
-			}
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Deselect Previous Item
-		let was_selected = false;
-		if( this.sel_idx != null ){
-			this.points[ this.sel_idx ].color = 0xff0000;
-			this.sel_idx = null;
-			was_selected = true;
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Select Point
-		if( idx != null ){
-			p = this.points[ idx ];
-			p.color = 0x00ff00;
-			this.sel_idx = idx;
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Event Handling
-		let evt = null;
-		if( idx == null && was_selected )		evt = DragPoints.DESELECTED;
-		else if( idx != null && was_selected )	evt = DragPoints.SELECTION;
-		else if( idx != null && !was_selected )	evt = DragPoints.NEW_SELECTION;
-
-		//if( evt != null ) emit( "drag_state", { state:evt, index:idx } );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.updated = ( idx != null || was_selected ); // Only update if there is a reason too.
-	}
-
-	add( pos ){
-		let o = {
-			pos		: new Vec3( pos ),
-			color 	: 0xff0000,
-			data	: null,
-		};
-		this.points.push( o );
-		return this;
-	}
-
-	update(){
-		let e 		= App.ecs.entities[ this.entity_id ];
-		let pnts	= e.Points;
-
-		pnts.reset();
-		for( let p of this.points ){
-			pnts.add( p.pos, p.color );
-		}
-
-		this.updated = false;
-	}
-} App.Components.reg( DragPoints );
-
-function line_near_point( info, p, rng=0.1 ){
-	/* closest_point_to_line3D
-	let dx	= bx - ax,
-		dy	= by - ay,
-		dz	= bz - az,
-		t	= ( (px-ax)*dx + (py-ay)*dy + (pz-az)*dz ) / ( dx*dx + dy*dy + dz*dz ) ; */
-	let dist	= Vec3.sub( p, info.ray_origin ).mul( info.ray_len ),
-		t		= ( dist[0] + dist[1] + dist[2] ) / info.len_sqr;
-
-	if( t < 0 || t > 1 ) return null; 	// Over / Under shoots the Ray Segment
-
-	// Get Position on Ray, Subtract from P, get length.
-	let len_sqr = dist.from_lerp( info.ray_origin, info.ray_end, t ).sub( p ).len_sqr(); // Distance from point to nearest point on ray.
-	return ( len_sqr <= (rng*rng) )? len_sqr : null;
-}
-
-function DragPointSys( ecs ){
-	let c, ary = ecs.query_comp( "DragPoints" );
-	if( !ary ) return;
-	for( c of ary ) if( c.updated ) c.update();
-}
-
-
-import Events	from "../../fungi/lib/Events.js";
-class RaySystem{
-	constructor(){
-		this.click_bind		= this.on_click.bind( this );
-		this.caster 		= new THREE.Raycaster();
-		this.evts 			= new Events();
-		this.info 			= {
-			ray_origin	: new Vec3(),
-			ray_end 	: new Vec3(),
-			ray_len		: new Vec3(),
-			len 		: 0,
-			len_sqr 	: 0,
-		};
-
-		this.canvas_size	= new THREE.Vector2();
-		this.nds 			= { x:0, y:0 };
-
-		App.canvas.addEventListener( "mouseup", this.click_bind );
-	}
-
-	on( func ){ this.evts.on( "ray", func ); return this; }
-
-	on_click( e ){
-		if( e.button != 2 ) return;	//if Not right click exit
-		e.preventDefault(); e.stopPropagation();
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Figure out where the mouse in in 2D Space
-		let mouse = App.input.toCoord( e );	// Mouse Coord in Relation to Canvas
-		App.renderer.getSize( this.canvas_size );
-		
-		// Convert to Normalized Device Space
-		this.nds.x = ( mouse[0] / this.canvas_size.x ) * 2 - 1;
-		this.nds.y = -( mouse[1] / this.canvas_size.y ) * 2 + 1;
-		
-		this.caster.setFromCamera( this.nds, App.camera );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.info.ray_origin.from_struct( this.caster.ray.origin );
-		this.info.ray_len.from_struct( this.caster.ray.direction ).scale( 100 );
-		this.info.ray_end.from_add( this.info.ray_origin, this.info.ray_len );
-		this.info.len_sqr	= this.info.ray_len.len_sqr();
-		this.info.len		= Math.sqrt( this.info.len_sqr );
-		
-    	App.Debug.reset().ln( this.info.ray_origin, this.info.ray_end, 0xff0000 );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.evts.emit( "ray", this.info );
+function on_dragpoint_selection( info ){
+	if( info.state == null || info.state == DragPoints.DESELECTED ){ 
+		gGizmo.Gizmo.hide();
+	}else{
+		gGizmo.Gizmo.show( info.pos );
 	}
 }
 
+function on_gizmo_drag_state( is_drag ){
+	App.cam_ctrl.active = !is_drag;
+}
 
-//https://threejs.org/docs/#examples/en/controls/TransformControls
-class Gizmo{
-	////////////////////////////////////////////////////
-	#ctrl		= null;
-	#grp 		= null;
-	#dragging	= false;
-	#drag_bind	= this.on_drag_change.bind( this );
-
-	////////////////////////////////////////////////////
-	static $( name ){
-		let e = App.$( name );
-		e.add_com( "Gizmo" ).init( name, max_len );
-	}
-
-	////////////////////////////////////////////////////
-	constructor(){
-		this.#grp	= new THREE.Group();
-		this.#ctrl	= new TransformControls( App.camera, App.renderer.domElement );
-		this.#ctrl.addEventListener( 'dragging-changed', this.#drag_bind );
-		App.scene.add( this.#ctrl );
-	}
-
-	////////////////////////////////////////////////////
-	get is_dragging(){ return this.#dragging; }
-	get is_visible(){ return ( this.#ctrl.object ); }
-
-	show(){ this.#ctrl.attach( this.#grp ); return this; }
-	hide(){ this.#ctrl.detach(); return this; }
-
-	////////////////////////////////////////////////////
-	on_drag_change( e ){ this.#dragging = !e.value; }
-
-} App.Components.reg( Gizmo );
-
-// NEED SYSTEM TO CHECK IF gizmo is active, then alert
-// whatever the new location of the gizmo, ideally updat the dots position.
-//App.ecs.sys_add( BoneSpringSys, priority )
-function GizmoSys( ecs ){
-	let n, ary = ecs.query_comp( "Gizmo" );
-	for( n of ary ){
-		if( n.do_reset )	n.reset_all();
-		else 				n.update( App.delta_time );
+function on_gizmo_drag_move( pos ){
+	if( gDot.DragPoints.sel_idx != null ){
+		gDot.DragPoints.move( pos );
+		spline_load();
+		spline_draw();
 	}
 }
 
+function spline_load(){
+	let dp = gDot.DragPoints;
 
-/*
-What do I want
-- Single Item, every time its sent, it just replaces the data, Draing just clears out that Item.
-- RingQueue, limited amount of Items.
-- Have Listeners for each event
-- Can access Queue and Manually Drain it.
-- Can set queue to auto broadcast, or instant broadcast.
-
-EvtQueue.reg( evt_name, size, allow_listeners )
-if Size = 0, Instant Broadcast.
-if Size = 1, Single Item, Frame Broadcast if allow_listeners
-if Size > 1, RingQueue, Frame Broadcast if allow_listeners
-
-EvtQueue.on( evt_name, func );
-EvtQueue.emit( evt_name, data );
-*/
-
-class SingleBuffer{
-	#data = null;
-	length(){ return ( this.#data == null)? 0:1; }
-	push( v ){ this.#data = v; return true; }
-	next(){
-		if( this.#data == null ) return null;
-		let d = this.#data;
-		this.#data = null;
-		return d;
+	gSpline.clear();
+	for( let i=0; i < dp.points.length; i++ ){
+		gSpline.add( dp.points[ i ].pos );
 	}
 }
 
-// https://gameprogrammingpatterns.com/event-queue.html
-class EventManager{
-	#items	= new Map();
+function spline_draw(){
+	App.Debug.reset();
 
-	constructor(){}
+	let t, v0 = new Vec3(), v1 = new Vec3();
 
-	// Register Events
-	reg( evt_name, size=10, allow_listeners=true ){
-		if( this.#items.has( evt_name ) ){ console.error(`Event already has been registered : ${evt_name}`); return this; }
-
-		let o = {
-			queue		: null,
-			listeners	: (allow_listeners)? new Array() : null,
-		};
-
-		if( size == 1 ) o.queue = new SingleBuffer();
-		
-		this.#items.set( evt_name, o );
-		return this;
-	}
-
-	// Assign a Listener to an Event
-	on( evt_name, func ){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Validation
-		let o = this.#items.get( evt_name );
-		if( !o ){ console.error(`Event does not exist, unable to add listener: ${evt_name}`); return this; }
-		if( !o.listeners ){ console.error(`Event does not allow listeners: ${evt_name}`); return this; }
-
-		let idx = o.listeners.indexOf( func );
-		if( idx != -1 ){ console.error(`Listener already exists for event: ${evt_name}`); return this; }
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		o.listeners.push( func );
-		return this;
-	}
-
-	// Remove a Listener to an Event
-	off( evt_name, func ){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Validation
-		let o = this.#items.get( evt_name );
-		if( !o ){ console.error(`Event does not exist, unable to add listener: ${evt_name}`); return this; }
-		if( !o.listeners ){ console.error(`Event does not allow listeners: ${evt_name}`); return this; }
-
-		let idx = o.listeners.indexOf( func );
-		if( idx == -1 ){ console.error(`Listener not found for event: ${evt_name}`); return this; }
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		o.listeners.splice( idx, 1 );
-		return this
-	}
-
-	// Send an Event, Depending on the config, it can be sent right away
-	// or its queued and will be broadcasted at a later date or consumed
-	// by a System if not allowed listeners.
-	emit( evt_name, data ){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Validation
-		let o = this.#items.get( evt_name );
-		if( !o ){ console.error(`Event does not exist, unable to add listener: ${evt_name}`); return this; }
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Instant Broadcast
-		if( !o.queue && o.listeners ){
-			let itm;
-			for( itm of o.listeners ) itm( data );
-			return this;
+	gSpline.at_curve( 0, 0, v0 );
+	for( let c = 0; c < gSpline.curve_count(); c++ ){
+		for( let i=1; i <= 5; i++ ){
+			t = i / 5;
+			gSpline.at_curve( c, t, v1 );
+			App.Debug.ln( v0, v1, 0xbbbb00 );
+			v0.copy( v1 );
 		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Queued
-		if( o.queue ){
-			o.queue.push( data );
-			return this;
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Unhandled
-		console.error(`Event dispatched not handled from emit: ${evt_name}`);
-		return this;
-	}
-
-	broadcast_all(){
-		let data, listener;
-		for (const [ evt_name, o ] of this.#items.entries()) {
-			// Listeners Allowed, Listeners Exist, Queue Allowed and Has Data in it.
-			if( o.listeners && o.listeners.length > 0 && o.queue && o.queue.length() > 0 ){
-				while( (data = o.queue.next()) != null ){				// For every Queued Data for the event
-					for( listener of o.listeners ) listener( data );	// pass it to all the listeners.
-				}
-			}
-		}
-		return this;
-	}
-
-	broadcast( evt_name ){
-		let o = this.#items.get( evt_name );
-		if( !o ){ console.error(`Event does not exist, unable to broadcast: ${evt_name}`); return this; }
-
-		let data, listener;
-		if( o.listeners && o.listeners.length > 0 && o.queue && o.queue.length() > 0 ){
-			while( (data = o.queue.next()) != null ){				// For every Queued Data for the event
-				for( listener of o.listeners ) listener( data );	// pass it to all the listeners.
-			}
-		}
-
-		return true;
-	}
-
-	// Incase a system wants to handle the event queue on its own, it
-	// can get reference to it and drain it as it sees fit.
-	get_queue( evt_name ){
-		let o = this.#items.get( evt_name );
-		return ( o )? o.queue || null : null;
-	}
-}
-
-let e = new EventManager();
-let xxx = (x)=>console.log("x",x);
-
-// EVENT NAME, SIZE, ALLOW_LISTENERS
-// Size = 0, Event will broadcast instantly
-// Size = 1, Single Item Event Queue, Manaual Broadcast
-// Size > 1, Ring Event Queue, Manual Broadcast
-e.reg( "test", 1, true );	
-
-// Assign Listeners
-e.on( "test", (v)=>console.log("a",v) );
-e.on( "test", (v)=>console.log("b",v) );
-e.on( "test", xxx );
-e.on( "test", xxx ); // Errors, will check if listener already exists.
-
-// Send an Event
-e.emit( "test", "woot" );
-
-// Manually Broadcast Events
-//e.broadcast_all();	// Execute All
-e.broadcast( "test" );	// Broadcast Specific Event Queue.
-
-
-class RingBuffer{
-	#buf		= null;		// Just a Plain Array
-	#read_idx	= 0;		// Index to Read on "Next"
-	#write_idx	= 0;		// Index to write to on "Push"
-	#size		= 0;		// Size of the Buffer
-
-	constructor( b_size=10 ){
-		this.#buf	= new Array( b_size );
-		this.#size	= b_size;
-	}
-
-	push( v ){
-		// Using this "Next Check" method, means we can not fill the buffer to max to start with
-		// But doing so keeps the index checks very simple. If thats an issues, increase size of buffer.
-		let next = (this.#write_idx + 1) % this.#size;
-		if( next == this.#read_idx ){
-			console.error( "RingBuffer out of space to write. Write has caught up to Read.");
-			return false;
-		}
-
-		this.#buf[ this.#write_idx ] = v;
-		this.#write_idx = next; // Loop Around
-		return true;
-	}
-
-	next(){
-		// If read has caught up to write, then the buffer is empty.
-		if( this.#read_idx == this.#write_idx ) return null;		
-
-		let v = this.#buf[ this.#read_idx ];
-		this.#read_idx = (this.#read_idx + 1) % this.#size; // Loop Around
-		return v;
-	}
-
-	length(){
-		return  ( this.#read_idx == this.#write_idx ) ? 0 :				// If Equal, Non Left
-				( this.#read_idx < this.#write_idx )? 					
-					this.#write_idx - this.#read_idx :					// If Read under Write
-					( this.#size - this.#read_idx ) + this.#write_idx;  // If Write Under Read
-	}
-
-	for_each( func ){
-		for( let i = this.#read_idx; i != this.#write_idx; i = (i+1) % this.#size ){
-			func( this.#buf[ i ] );
-		}
-		this.#read_idx	= 0;
-		this.#write_idx	= 0;
-		return this;
 	}
 }
 

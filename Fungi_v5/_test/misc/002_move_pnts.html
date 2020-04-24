@@ -8,33 +8,28 @@ import Spline		from "../../fungi/maths/Spline.js";
 
 //#####################################################
 App.builder( true )
+	.use_events()
 	.set_camera( 0, 15, 4, 0, 0.5, 0 )
 	.add( init )
 	.render_on_mouse()
 	.build();
 
 //#####################################################
-let ePoints, eGizmo, gRaySys, gSpline;
+let ePoints, eGizmo, gSpline;
 
 function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Initialize 
-	gRaySys = new RaySystem();
-	//gRaySys.debug_ray = true;
-	gRaySys.on( on_ray );
-
-	GizmoMove.init();
-	eGizmo = GizmoMove.$();
-	eGizmo.info.active = false;
-	eGizmo.GizmoMove.on_drag = on_gizmo_move;
-
+	App.Debug.set_depth_test( false );
 	DragPoints.init();
-	ePoints = DragPoints.$( "Drag" );
-
-	gSpline = Spline.from_hermite( true );
+	RaySystem.init( 0, on_ray );
+	GizmoMove.init( 0, on_gizmo_move );
+	
+	eGizmo	= GizmoMove.$( "Gizmo", false, false );
+	ePoints	= DragPoints.$( "Drag" );
+	gSpline	= Spline.from_hermite( true );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	
 	let dp = ePoints.DragPoints;
 	dp
 		.add( [0,0,0] )
@@ -48,9 +43,7 @@ function init(){
 	return true;
 }
 
-function on_ray( e ){
-	let ray = e.detail;
-
+function on_ray( ray ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// If gizmo is active, check if its a hit. if not, hide it.
 	if( eGizmo.info.active ){
@@ -61,14 +54,14 @@ function on_ray( e ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// If not hit the gizmo, check if there is a point that
 	if( ePoints.DragPoints.is_hit( ray ) ){
-		let pos = ePoints.DragPoints.get_sel_pos();
+		let pos = ePoints.DragPoints.get_pos();
 		eGizmo.Node.set_pos( pos );
 		eGizmo.info.active = true;
 	}	
 }
 
 function on_gizmo_move( pos ){ 
-	ePoints.DragPoints.set_sel_pos( pos );
+	ePoints.DragPoints.move( pos );
 	spline_load();
 	spline_draw();
 }
@@ -120,8 +113,6 @@ window.Remove = ()=>{
 	eGizmo.info.active = false;
 	App.render();
 }
-
-
 
 </script><page-layout>
 	<a href="javascript:void(0)" slot="nav_a" title="Add" onClick="Add();">&#10010;</a>

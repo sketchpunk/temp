@@ -1,0 +1,208 @@
+<html><body>
+<style>
+	*{ font-family:monospace; }
+	table{  border-collapse: collapse; }
+	td{ width:20px; height:20px; text-align:center; border:1px solid silver; }
+</style>
+
+<table id="tbl"></table>
+
+<script>
+/* NOTES
+- https://robertheaton.com/2018/12/17/wavefunction-collapse-algorithm/
+- https://github.com/robert/wavefunction-collapse
+
+- https://gist.github.com/mitallast/f02591b3342fef4d569bb3e00004fe7c - TypeScript Version
+- https://gist.github.com/mitallast/1ec0c326e80847003c4952ffe0ce3140 - TypeScript with Path Constraint
+
+https://github.com/mxgmn/WaveFunctionCollapse
+https://github.com/math-fehr/fast-wfc
+
+*/
+
+const WIDTH     = 10;
+const HEIGHT    = 10;
+
+window.addEventListener( "load", ()=>{
+    let tbl = document.getElementById( "tbl" );
+
+	/* Basic but Efficent way */
+	let i, r, j;
+	for( i=0; i < HEIGHT; i++ ){
+		r = tbl.insertRow();
+		for( j=0; j < WIDTH; j++ ) r.insertCell().innerHTML = "x";
+	}
+	 
+	new Wfc().gen_cells( WIDTH, HEIGHT );
+
+	 /* Functional Way
+	//let rows = Array.from( Array( HEIGHT ), _=>tbl.insertRow() );
+	// (val,idx)=>{ return tbl.insertRow(); }
+	Array( HEIGHT )
+		.fill()
+		.map( _=>tbl.insertRow() )
+		.forEach( r=>{
+			for( let i=0; i < WIDTH; i++ ) r.insertCell().innerHTML = "x";
+		});
+	
+
+	Array.from( Array( HEIGHT ) )
+		.map( (_, i) => tbl.insertRow() )
+		.forEach( r=>{
+			for( let i=0; i < WIDTH; i++ ) r.insertCell().innerHTML = "x";
+		});
+	
+
+	[...Array( HEIGHT )]
+		.map( (_, i) => tbl.insertRow() )
+		.forEach( r=>{
+			for( let i=0; i < WIDTH; i++ ) r.insertCell().innerHTML = "x";
+		});
+	*/
+
+	/* Wacky Way 
+	let repeat = i => (val,func) =>{ for( let ii=0; ii < i; ii++ ) func( val ); };
+	repeat( HEIGHT )( tbl, t=>{
+		repeat( WIDTH )( t.insertRow(), r=>{ r.insertCell().innerHTML = "x"; } );
+	});
+	*/
+	
+});
+
+
+/*
+defn Run():
+	PatternsFromSample()	// Create Tiles
+	BuildPropagator()		// Build out Rules of how the tiles can be placed next to eachother.
+	Loop until finished:
+		Observe()
+		Propagate()
+	OutputObservations()
+
+// coefficient_matrix is an array that says which cells has been assigned a pattern. (True,False)
+// The purpose of Observe() is to identify the location on the grid with the lowest nonzero entropy.
+
+defn Observe(coefficient_matrix):
+	FindLowestEntropy()
+	If there is a contradiction, throw an error and quit
+	If all cells are at entropy 0, processing is complete:
+		Return CollapsedObservations()
+	Else:
+		Choose a pattern by a random sample, weighted by the
+			pattern frequency in the source data
+		Set the boolean array in this cell to false, except
+			for the chosen pattern
+
+
+defn FindLowestEntropy(coefficient_matrix):
+	Return the cell that has the lowest greater-than-zero entropy, defined as:
+		A cell with one valid pattern has 0 entropy
+		A cell with no valid patterns is a contradiction
+	Else: the entropy is based on the sum of the frequency
+		that the patterns appear in the source data, plus
+		Use some random noise to break ties and near-ties.
+
+defn Propagate(coefficient_matrix):
+	Loop until no more cells are left to be update:
+		For each neighboring cell:
+			For each pattern that is still potentially valid:
+				Compare this location in the pattern with the cell's values
+					If this point in the pattern no longer matches:
+						Set the array in the wave to false for this pattern
+						Flag this cell as needing to be updated in the next iteration
+
+
+# Sums are over the weights of each remaining
+# allowed tile type for the square whose
+# entropy we are calculating.
+shannon_entropy_for_square =
+  log(sum(weight)) -
+  (sum(weight * log(weight)) / sum(weight))
+*/
+
+class Wfc{
+	#cells = null;
+
+
+	// Generate 2D Matrix that will contain all the possible tiles
+	// that each cell can contain.
+	gen_cells( w, h, list=[] ){
+		let r, row, cells = new Array( h );
+		for( let i=0; i < w; i++ ){
+			row = new Array( w );
+			for( r=0; r < w; r++ ) row[ r ] = [...list];
+			cells[ i ] = row;
+		}
+		this.#cells = cells;
+	}
+
+	//“entropy” here means the sum of all possible patterns’ frequencies inside a cell.
+	// Basicly checks the matrix to see if we're done, a contradiction has been found or still busy.
+	get_lowest_entropy_cells(){
+		let min = -1;
+		let cells = this.#cells;
+		for( y=0; y < h; i++ ){
+			for( x=0; x < w; x++ ){
+				//cells[y][x]
+			}
+		}
+	}
+
+}
+
+class Model{
+
+}
+
+
+/*
+def parse_example_matrix(matrix):
+    """Parses an example `matrix`. Extracts:
+    
+    1. Tile compatibilities - which pairs of tiles can be placed next
+        to each other and in which directions
+    2. Tile weights - how common different tiles are
+    Arguments:
+    matrix -- a 2-D matrix of tiles
+    Returns:
+    A tuple of:
+    * A set of compatibile tile combinations, where each combination is of
+        the form (tile1, tile2, direction)
+    * A dict of weights of the form tile -> weight
+	"""
+
+    compatibilities = set()
+    matrix_width = len(matrix)
+    matrix_height = len(matrix[0])
+
+    weights = {}
+
+    for x, row in enumerate(matrix):
+        for y, cur_tile in enumerate(row):
+            if cur_tile not in weights:
+                weights[cur_tile] = 0
+            weights[cur_tile] += 1
+
+            for d in valid_dirs((x,y), (matrix_width, matrix_height)):
+                other_tile = matrix[x+d[0]][y+d[1]]
+                compatibilities.add((cur_tile, other_tile, d))
+
+	return compatibilities, weights
+*/
+
+let input_matrix = [
+    ['L','L','L','L'],
+    ['L','L','L','L'],
+    ['L','L','L','L'],
+    ['L','C','C','L'],
+    ['C','S','S','C'],
+    ['S','S','S','S'],
+    ['S','S','S','S'],
+];
+
+function parse_tile_matrix( tm ){
+	
+}
+
+</script>
+</body></html>

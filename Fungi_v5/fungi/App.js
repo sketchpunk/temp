@@ -198,6 +198,14 @@ let App = {
 			this.init_mod( "../fungi.armature/Armature.js", "../fungi.armature/BoneView.js" );
 			return this;
 		}
+
+		use_events(){
+			this.add( async()=>{
+				await import( "./lib/EventManager.js").then( mod=>{ App.events = new mod.default(); });
+				return true;
+			});
+			return this;
+		}
 		// #endregion ///////////////////////////////////////////////////////
 	}
 

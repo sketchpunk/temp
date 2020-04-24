@@ -1,6 +1,5 @@
-import App		from "../fungi/App.js";
-import Vec3		from "../fungi/maths/Vec3.js";
-import Points	from "../fungi/geo/Points.js";
+import App, {Vec3}	from "../fungi/App.js";
+import Points		from "../fungi/geo/Points.js";
 
 class DragPoints{
     // #region STATIC METHODS
@@ -18,17 +17,13 @@ class DragPoints{
     }
     // #endregion //////////////////////////////////////////////////////////
 
-    // #region PROPERTIES AND CONTRUCTOR
+    // #region PROPERTIES & CONTRUCTOR
 	points		= new Array();
 	updated		= true;
 	sel_idx 	= null;
-	ray_bind	= this.on_ray.bind( this );
-
-	constructor(){}
     // #endregion //////////////////////////////////////////////////////////
 
-    on_ray( e ){ this.is_hit( e.detail ); }
-
+    // #region MANAGE POINTS
 	is_hit( ray ){
 		const range = 0.05;
         let i, p, t,
@@ -63,7 +58,6 @@ class DragPoints{
         return ( idx != null );
     }
     
-    // #region Manage Points
 	add( pos ){
 		let o = {
 			pos		: new Vec3( pos ),
@@ -99,15 +93,26 @@ class DragPoints{
         return this;
     }
 
-    get_sel_pos(){ return ( this.sel_idx == null )? null : this.points[ this.sel_idx ].pos; }
-    set_sel_pos( pos ){ 
-        if( this.sel_idx != null ){
-            this.points[ this.sel_idx ].pos.copy( pos );
-            this.updated = true;
-        }
-    }
-    // #endregion //////////////////////////////////////////////////////////c
+    get_pos( idx=null ){ 
+		if( idx == null ){
+			if( this.sel_idx == null ){ console.error("No Index or Selected Index to get position"); return null; }
+			idx = this.sel_idx;
+		}
+		return this.points[ idx ].pos;
+	}
+	
+	move( pos, idx=null ){
+		if( idx == null ){
+			if( this.sel_idx == null ){ console.error("No Index or Selected Index to move drag point"); return this; }
+			idx = this.sel_idx;
+		}
+		this.points[ idx ].pos.copy( pos );
+		this.updated = true;
+		return this;
+	}
+    // #endregion //////////////////////////////////////////////////////////
 
+	// #region MISC
 	update(){
 		let e 		= App.ecs.entities[ this.entity_id ];
 		let pnts	= e.Points;
@@ -118,6 +123,7 @@ class DragPoints{
 		}
 		this.updated = false;
 	}
+	// #endregion //////////////////////////////////////////////////////////
 } 
 
 

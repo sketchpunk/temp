@@ -156,6 +156,14 @@ let App = {
 				})
 				return this;
 			}
+
+			use_events(){
+				this.add( async()=>{
+					await import( "../fungi/lib/EventManager.js").then( mod=>{ App.events = new mod.default(); });
+					return true;
+				});
+				return this;
+			}
 	}
 
 

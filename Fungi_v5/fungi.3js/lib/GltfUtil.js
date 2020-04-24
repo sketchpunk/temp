@@ -1,6 +1,5 @@
-import App,{THREE} from "../App.js";
+import App,{THREE, Vec3} from "../App.js";
 import Gltf from "../../fungi/lib/Gltf.js";
-import Vec3 from "../../fungi/maths/Vec3.js";
 
 class GltfUtil{
 	//////////////////////////////////////////////////////////////
@@ -136,7 +135,8 @@ class GltfUtil{
 		static load_bones_into( e, json, bin, arm_name=null, def_len=0.1 ){
 			let n_info	= {}, // Node Info
 				arm 	= e.Armature,
-				bones 	= Gltf.get_skin( json, bin, arm_name, n_info );
+				//bones 	= Gltf.get_skin( json, bin, arm_name, n_info );
+				bones 	= Gltf.get_skin_by_nodes( json, arm_name, n_info );
 			
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,17 +187,17 @@ class GltfUtil{
 		// Create a Geo Buffer and Mesh from data from bin file.
 		static mk_geo( g ){
 			let geo = new THREE.BufferGeometry();
-			geo.addAttribute( "position", new THREE.BufferAttribute( g.vertices.data, g.vertices.comp_len ) );
+			geo.setAttribute( "position", new THREE.BufferAttribute( g.vertices.data, g.vertices.comp_len ) );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			if( g.indices )
 				geo.setIndex( new THREE.BufferAttribute( g.indices.data, 1 ) );
 
 			if( g.normal )
-				geo.addAttribute( "normal", new THREE.BufferAttribute( g.normal.data, g.normal.comp_len ) );
+				geo.setAttribute( "normal", new THREE.BufferAttribute( g.normal.data, g.normal.comp_len ) );
 
 			if( g.uv )
-				geo.addAttribute( "uv", new THREE.BufferAttribute( g.uv.data, g.uv.comp_len ) );
+				geo.setAttribute( "uv", new THREE.BufferAttribute( g.uv.data, g.uv.comp_len ) );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			geo.name = g.name;
@@ -207,17 +207,17 @@ class GltfUtil{
 		// Create a Geo Buffer and Mesh from data from bin file.
 		static mk_geo_mesh( g, mat, is_skinned=false ){
 			let geo = new THREE.BufferGeometry();
-			geo.addAttribute( "position", new THREE.BufferAttribute( g.vertices.data, g.vertices.comp_len ) );
+			geo.setAttribute( "position", new THREE.BufferAttribute( g.vertices.data, g.vertices.comp_len ) );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			if( g.indices )
 				geo.setIndex( new THREE.BufferAttribute( g.indices.data, 1 ) );
 
 			if( g.normal )
-				geo.addAttribute( "normal", new THREE.BufferAttribute( g.normal.data, g.normal.comp_len ) );
+				geo.setAttribute( "normal", new THREE.BufferAttribute( g.normal.data, g.normal.comp_len ) );
 
 			if( g.uv )
-				geo.addAttribute( "uv", new THREE.BufferAttribute( g.uv.data, g.uv.comp_len ) );
+				geo.setAttribute( "uv", new THREE.BufferAttribute( g.uv.data, g.uv.comp_len ) );
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			if( is_skinned && g.joints && g.weights ){

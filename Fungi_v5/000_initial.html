@@ -21,16 +21,19 @@ App.builder( true )
 	.build();
 
 /* NOTES
-1.
-	First we need an object manage groups of bones ( Chains ). IK
-	Tends to be applied to bones that are connected in a Parent-Child relationship
-	in groups called Chains. We can look at an arm as a chain of 2 Bones.
-	( Look Over the IK Rig Component )
+1. What is an IK Rig? You can look at a rig as a collection of bone and groups (chains). IK
+is all about dynamiclly moving something, like a hand reaching out for something or a leg 
+bending correctly to have one foot stepping on a rock while the other is touching the ground.
 
-2. Rig consists of Chains and Single Bone Points. Points are like Hands, Feet, Head, etc.
-3. IK Target. Normally  the target for IK tends to be a point called the End Effector. 
-	Maybe go threw this with limbs
-4. Important to use TPoses, The more things are aligned the the better the results
+2. The way to represent IK Data can vary a bit, at its core its just a point in 3D Space that
+you want to reach. As you dive deeper, sometimes its better to represent things using Directions
+instead and in many cases you need Two Directions to determine 1 IK operation.
+
+3. One of the big things thats needed to make IK Rigs work well is to have a TPOSE. If all the
+skeletons have the same pose with bones straighten and aligned to some axis, it makes it
+very easy to share data and simplifies your system. Doesn't mean all your meshes need to have
+a Resting TPose... Just a Pose of T is enough, like you can have an resting APose, just 
+create an animation of one frame and move things to make a TPose, for example.
 */
 
 // #region INITIALIZE

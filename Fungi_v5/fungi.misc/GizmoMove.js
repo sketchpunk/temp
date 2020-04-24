@@ -5,26 +5,31 @@ import Lines 				from "../fungi/geo/Lines.js";
 let SHADER;
 const CAMERA_SCALE	= 8;		// Scale Factor from Camera Distance
 const MIN_ADJUST	= -0.02;	// Dot Angle minimum to flip Gizmo
-const AXIS_MIN_RNG	= 0.002;	// Range away from axis line to count as clicked.
+const AXIS_MIN_RNG	= 0.01;	// Range away from axis line to count as clicked.
 const UNIT_AXIS		= [ Vec3.FORWARD.clone(), Vec3.LEFT.clone(), Vec3.UP.clone() ];	// Array of Axis for Ray Intersection Checking
+
+//################################################################################
 
 class GizmoMove{
 	// #region Static Methods
-    static init( priority=700 ){
+    static init( size=null, init_func=null, priority=700 ){
 		if( !SHADER ){
 			SHADER = App.Shader.from_src( "GizmoMove", v_src, f_src )
 				.add_uniform_blocks( [ "Global", "Model" ] )
 				.add_uniform( "color_ary", "rgb", [ "#ff0000", "#00ff00", "#0000ff" ] )
 				.opt_cullface( false );
 		}
+		
 		App.ecs.sys_add( GizmoMoveSys, priority );
+		if( size != null) App.events.reg( "gizmo_move", size, true, init_func );
 	}
 
-	static $( name, inc_plane=false ){
+	static $( name, inc_plane=false, init_state=true ){
 		let e = App.$Draw( "GizmoMove" );
 		e.add_com( "GizmoMove" ).init( inc_plane );
 		
-		e.GizmoMove.line = Lines.$( "GizmoMoveLine" );
+		e.info.active		= init_state;
+		e.GizmoMove.line	= Lines.$( "GizmoMoveLine" );
 		return e;
 	}
 	// #endregion /////////////////////////////////////////////////
@@ -42,7 +47,6 @@ class GizmoMove{
 		this.drag_pnt_b		= new Vec3();
 		this.drag_offset	= new Vec3();
 		this.is_drag		= false;
-		this.on_drag 		= null;
 
 		// Function Binding
 		this.move_bind		= this.drag_move.bind( this );
@@ -101,7 +105,7 @@ class GizmoMove{
 		this.ent.Node.set_pos( pnts[ 1 ].add( this.drag_offset ) );
 
 		// Pass Drag Value
-		if( this.on_drag ) this.on_drag( pnts[ 1 ] );
+		App.events.emit( "gizmo_move", pnts[1] );
 	}
 
 	drag_end( e ){
@@ -148,6 +152,7 @@ function GizmoMoveSys( ecs ){
 	}
 }
 
+//################################################################################
 
 // #region RAY TESTING
 // Test the AABB  of the Gizmo
@@ -354,5 +359,6 @@ void main(void){
 }`;
 // #endregion ///////////////////////////////////////////////////////////
 
+//################################################################################
 
 export default GizmoMove;

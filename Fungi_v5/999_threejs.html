@@ -1,36 +1,30 @@
 <!DOCTYPE html><script type="module">
-import App							from "./fungi/App.js";
-import Maths,{Vec3,Quat,Transform}	from "../../fungi/maths/Maths.js";
+import App, {THREE} 			from "../../fungi.3js/App.js";
+import {Vec3,Quat,Transform }	from "../../fungi/maths/Maths.js";
+import GltfUtil, {Gltf} 		from "../../fungi.3js/lib/GltfUtil.js";
 
-import XhrQueue 					from "../../fungi/lib/XhrQueue.js";
-import GltfUtil, {Gltf}				from "../../fungi/lib/GltfUtil.js";
-import Animation					from "../../fungi/lib/Animation.js";
+import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
+import Animation		from "../../fungi/lib/Animation.js";
 
-import PoseAnimator					from "../../fungi.armature/PoseAnimator.js";
-import IKTarget 					from "../../fungi.armature/IKTarget.js";
-import IKRig						from "../../fungi.armature/IKRig.js";
-
-/* NOTES
-- Finish things up by Applying some Movement to the head
-- Also introduce a few extra dynamic movement to give RoboRex more life even though
-specific parts of it has no animation data coming from the source.
-*/
+import PoseAnimator		from "../../fungi.armature/PoseAnimator.js";
+import IKRig 			from "../../fungi.armature/IKRig.js";
+import IKTarget 		from "../../fungi.armature/IKTarget.js";
 
 //#####################################################
-App.builder( true, true )
-    .use_armature()
-    .init_mod( "../fungi.armature/BoneSpring.js" )
-	.load_shaders( "../fungi.armature/LowPolySkin.js" )
-	.set_camera( 0, 10, 4, 0, 0.75, 0 )
+App.builder( true )
+	.init_mod( "./ecs/Armature.js", "./ecs/BoneSpring.js" ) //
+	.set_camera( 40, 10, 3.5, 0, 0.75, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse()
 	.build();
 
-// #region INITIALIZE
-
+//#####################################################
 let gSrc, gModelA, gModelB, gAnimate, gIKPose;
-function on_draw( dt, ss ){ gAnimate( dt * 0.9 ); }
+
+function on_draw( dt, ss ){
+	gAnimate( dt * 0.9 ); // * 0.1
+}
 
 async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,38 +50,29 @@ async function init(){
 	gIKPose = new IKPose();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	gAnimate( 1.05 );
-	//IKCompute.run( gSrc, gIKPose );
+	gAnimate( 0.2 );
 
-	App.Debug.set_depth_test( false );
 	return true;
 }
 
+//#####################################################
+
 function load_src( json, bin ){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load Animation Armature, setup IK Rig For it.
-	// NOTE: Normally Need a TPose, but the Animation has a T Pose By Default.
 	let e		= GltfUtil.get_bone_view( "src", json, bin );
+	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
+	let pm		= new PoseAnimator();
 	let rig 	= e.add_com( "IKRig" )
 		.init( null, true, IKRig.ARM_MIXAMO )
 		.recompute_from_tpose(); // Mesh requires a few bits to be recomputed because of Mixamo Scaling
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load First Animation in GLTF, and Setup Animator
-	let anim	= new Animation( Gltf.get_animation( json, bin ), true );
-	let pm		= new PoseAnimator();
-
+	
 	pm.root_idx	= 0;	// Get Rid of Motion from The Hip
 	pm.root_z	= 1;	// Mixamo stuff is 90 degress off, so forward is Y :(
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Return a Closure that will run the IK Retarget Animation
 	gSrc  = e;
+
 	return ( dt )=>{
-		//-----------------------------
-		// ANIMATE SOURCE POSE
-		pm.tick( dt ).update( anim, rig.pose );	// Update Pose with next frame
-		rig.apply_pose();						// Apply Pose to Armature Bones
+		pm.tick( dt ).update( anim, rig.pose );
+		rig.apply_pose();
 
 		//-----------------------------
 		IKCompute.run( gSrc, gIKPose );
@@ -97,46 +82,32 @@ function load_src( json, bin ){
 			gIKPose.apply_rig( gModelA.IKRig );
 			gModelA.IKRig.apply_pose();
 		}
-
+		
 		if( gModelB ){
 			gIKPose.apply_rig( gModelB.IKRig );
 			gModelB.IKRig.apply_pose();
 		}
+		/**/
 	}
+	return null;
 }
 
 function load_mesh_a( json, bin ){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Create Rendering Entity
-	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
-	let e		= GltfUtil.get_debug_view( "target_a", json, bin, mat );
-	//let e		= GltfUtil.get_bone_view( "target_a", json, bin );
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// For IK, We need a TPose. Use custom data stored in 
-	// GLTF to load up the TPose for the Model
+	let e 		= GltfUtil.get_debug_view( "target_a", json, bin, new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1 } ) );
 	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
 	let rig 	= e.add_com( "IKRig" ).init( tpose, false );
+
 	tpose.apply();
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Misc Settings
-	rig.points.head.idx = rig.points.neck.idx;	// Lil hack cause Head Isn't Skinned Well.
-	e.Node.set_pos( 1, 0, 0 );					// Move it to the Left, So it doesn't block src.
-	gModelA = e;								// Save for Global Access
+	rig.points.head.idx = rig.points.neck.idx; // Lil hack cause Head Isn't Skinned Well.
+	e.Obj.set_pos( 1.0, 0, 0 );
+
+	gModelA = e;
 }
 
-function load_mesh_b( json, bin ){	
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Create Rendering Entity
-	let mat		= App.new_mat( "LowPolySkin", {color:"#ffffff"} );
-	let e		= GltfUtil.get_debug_view( "target_b", json, bin, mat );
-	//let e		= GltfUtil.get_bone_view( "target_b", json, bin );
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Robo Rex has a unique skeleton, so there is no default Rig function for it
-	// So that means we need to defined the Points and Chains of the Rig.
-	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );
+function load_mesh_b( json, bin ){
+	let e 		= GltfUtil.get_debug_view( "target_b", json, bin, new THREE.MeshPhongMaterial( { color: 0xff7f7f, shininess:1, flatShading:true } ) );
+	let tpose	= GltfUtil.get_pose( e, json, "tpose", true );	
 	let rig 	= e
 		.add_com( "IKRig" )
 		.init( tpose, false, 0 )
@@ -156,34 +127,23 @@ function load_mesh_b( json, bin ){
 		.set_leg_lmt( null, -0.1 )
 	;
 
-	// Using Quaternion Inverse Direction to set UP and FORWARD Direction
-	// Since leg bones point downward, we define Down as the IK FORWARD Direction.
-	// Then we use forward for IK UP, since thats the direction the Knees point.
-	// This follows the idea of Swing & Twist, IK FORWARD is our Swing Vector, IK UP is our Twist Vector
-	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose ); // ( fwd, up, tpose )
+	rig.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
 	rig.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	/**/
+
 	tpose.apply();
 
-    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // Add some Spring Movement to specific bones
-    // The source animation was made for Human types, but Rex is an animal rig that includes
-    // extra bits like a tail, so using Jiggle / Spring Bone types of functionality can bring
-    // life to extra parts of our rig even if there is no animation data available for it.
+	// Add some Spring Movement to specific bones
 	e.add_com( "BoneSpring" )
 		.add( rig.get_chain_indices( "tail" ), 2.9, 0.9, -0.1 )
 		.add( rig.points.wing_l.idx, 3.0, 0.9 )
-        .add( rig.points.wing_r.idx, 3.0, 0.9 )
-        //.add( rig.points.wing_l.idx, 5.0, 0.9 )
-        //.add( rig.points.wing_r.idx, 5.0, 0.9 )
-        ;
+		.add( rig.points.wing_r.idx, 3.0, 0.9 );
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Misc Settings
-	e.Node.set_pos( -1.0, 0, 0 ); // Move it to the Left, So it doesn't block src.
+	e.Obj.set_pos( -1.0, 0, 0 );
 	gModelB = e;
 }
 
-// #endregion ///////////////////////////////////////////
+//#####################################################
 
 // #region IK CLASSES
 
@@ -730,9 +690,10 @@ class IKVisualize{
 	static hip( rig, ik ){
 		let ws = rig.pose.bones[ rig.points.hip.idx ].world;
 		App.Debug
-			.pnt( ws.pos, "orange", 0.09, 6 )
-			.ln( ws.pos, Vec3.scale( ik.hip.dir, 0.20 ).add( ws.pos ), "cyan", null, true );
+			.pnt( ws.pos, CLR.orange, 6, 6 )
+			.ln( ws.pos, Vec3.scale( ik.hip.dir, 0.20 ).add( ws.pos ), CLR.cyan, null, true );
 	}
+	//static pnt( p, hex=0xff0000, shape=null, size=null ){ this.p.add( p, hex, shape, size ); return this; }
 
 	static limb( pose, chain, ik ){
 		let len		= chain.len * ik.len_scale,
@@ -741,19 +702,19 @@ class IKVisualize{
 			posC	= Vec3.scale( ik.joint_dir, 0.2 ).add( posA );	// Direction of Joint
 
 		App.Debug
-			.pnt( posA, "yellow", 0.05, 6 )
-			.pnt( posB, "orange", 0.05, 6 )
-			.ln( posA, posB, "yellow", "orange", true )
-			.ln( posA, posC, "yellow", null, true );
+			.pnt( posA, CLR.yellow, 6, 4 )
+			.pnt( posB, CLR.orange, 6, 4 )
+			.ln( posA, posB, CLR.yellow, CLR.orange, true )
+			.ln( posA, posC, CLR.yellow, null, true );
     }
     
     // Was Originally called Foot.
 	static look_twist( rig, b_info, ik, look_dir, twist_dir ){
 		let pos = rig.pose.bones[ b_info.idx ].world.pos;
 		App.Debug
-            .pnt( pos, "cyan", 0.03, 1 )											    // Foot Position
-			.ln( pos, Vec3.scale( ik.look_dir, 0.2 ).add( pos ), "cyan", null, true )	// IK.DIR
-			.ln( pos, Vec3.scale( ik.twist_dir, 0.2 ).add( pos ), "cyan", null, true );	// RESULT OF IK.TWIST
+            .pnt( pos, CLR.cyan, 1, 2.5 )												   		// Foot Position
+			.ln( pos, Vec3.scale( ik.look_dir, 0.2 ).add( pos ), CLR.cyan, null, true )		// IK.DIR
+			.ln( pos, Vec3.scale( ik.twist_dir, 0.2 ).add( pos ), CLR.cyan, null, true );	// RESULT OF IK.TWIST
 	}
 	
 	static spine( rig, chain, ik_ary ){
@@ -764,13 +725,24 @@ class IKVisualize{
 			ik = ik_ary[ i ];
 
 			App.Debug
-				.pnt( ws.pos, "cyan", 0.025, 1 )
-				.ln( ws.pos, Vec3.scale( ik.look_dir, 0.2 ).add(ws.pos), "cyan", null )
-				.ln( ws.pos, Vec3.scale( ik.twist_dir, 0.2 ).add(ws.pos), "yellow", null );
+				.pnt( ws.pos, CLR.orange, 1, 2 )
+				.ln( ws.pos, Vec3.scale( ik.look_dir, 0.2 ).add(ws.pos), CLR.yellow, null )
+				.ln( ws.pos, Vec3.scale( ik.twist_dir, 0.2 ).add(ws.pos), CLR.orange, null );
 		}
 	}
 }
 
+let CLR = {
+	"black"		: 0x000000,
+	"white"		: 0xffffff,
+	"red"		: 0xff0000,
+	"green"		: 0x00ff00,
+	"blue"		: 0x0000ff,
+	"fuchsia"	: 0xff00ff,
+	"cyan"		: 0x00ffff,
+	"yellow"	: 0xffff00,
+	"orange"	: 0xff8000,
+};
 // #endregion ///////////////////////////////////////////
 
 </script><page-layout></page-layout>

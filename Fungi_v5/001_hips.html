@@ -21,15 +21,13 @@ App.builder( true )
 	.build();
 
 /* NOTES
-1.
-	First we need an object manage groups of bones ( Chains ). IK
-	Tends to be applied to bones that are connected in a Parent-Child relationship
-	in groups called Chains. We can look at an arm as a chain of 2 Bones.
-	( Look Over the IK Rig Component )
+1. For pretty much all the bones, you only need to handle rotation. But
+the first bone be it root Or hips, you need to handle Position + Rotation.
 
-2. Rig consists of Chains and Single Bone Points. Points are like Hands, Feet, Head, etc.
-3. IK Target. Normally  the target for IK tends to be a point called the End Effector. 
-	Maybe go threw this with limbs
+2. Its not easy to create IK Information related to position movement, so
+in our case, we try to borrow a page of Animation retargeting and try to
+keep the Model's WS Movement vector then scale it to fit the model that
+you are applying it to.
 */
 
 // #region INITIALIZE

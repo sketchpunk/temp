@@ -61,3 +61,12 @@ https://github.com/Konstantin84UKR/WebGL_tutorials
 
 STATE MACHINE
 https://gameprogrammingpatterns.com/state.html
+
+
+PROCEDURAL GEN
+https://pvigier.github.io/2019/05/12/vagabond-map-generation.html
+https://azgaar.wordpress.com/page/1/
+https://www.gdcvault.com/play/1025191/Math-for-Game-Programmers-Digging
+https://iquilezles.org/www/articles/warp/warp.htm
+https://thebookofshaders.com/11/
+https://www.youtube.com/watch?v=wbpMiKiSKm8&list=PLFt_AvWsXl0eBW2EiBtl_sxmDtSgZBxB3&index=1
