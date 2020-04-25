@@ -3,6 +3,8 @@
 // Can not use anything less then Uint32, the way bit shifting is done by
 // looping back around when going over the int limit, 
 // so bit shift if 32 will only set the first bit
+// The first 5 shifts equal the value of 31, so when setting bit 32, shifted down will equal value of 1, meaning 
+// that is over the first uint32 and needs a second one to fill it in.
 const IDX_BIT = 5; // 5 bit shift, value of 32.
 class Bitset{
 	constructor(){

@@ -190,7 +190,7 @@ def parse_example_matrix(matrix):
 	return compatibilities, weights
 */
 
-let input_matrix = [
+let tile_matrix = [
     ['L','L','L','L'],
     ['L','L','L','L'],
     ['L','L','L','L'],
@@ -200,9 +200,50 @@ let input_matrix = [
     ['S','S','S','S'],
 ];
 
-function parse_tile_matrix( tm ){
-	
+function parse_matrix_rules( m ){
+	let ylen	= m.length,
+		xlen	= m[0].length,
+		x_max	= xlen - 1,
+		y_max 	= ylen - 1, 
+		len 	= xlen * ylen,
+		tiles	= {},
+		rules 	= {},
+		tile, y, x;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Rule sets, save as unique.
+	let add_rule = ( a, b, dir )=>{
+		let key = a + "_" + b + "_" + dir;
+		if( !rules[key] ) rules[ key ] = { a, b, dir };
+	};
+
+	// Save tile name & accordance, This is the WEIGHT value for WFC.
+	let add_tile = ( a )=>{
+		if( tiles[ a ] )	tiles[ a ]++;
+		else 				tiles[ a ] = 1;
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	for( let i=0; i < len; i++ ){
+		y		= Math.floor( i / xlen );		// Cell to inspect
+		x		= ( i % xlen );
+		tile 	= m[y][x];
+		
+		add_tile( tile );
+
+		if( x > 0 )		add_rule( tile,  m[y][x-1], "LEFT" );		
+		if( x < x_max )	add_rule( tile,  m[y][x+1], "RIGHT" );
+		if( y > 0 )		add_rule( tile,  m[y-1][x], "UP" );
+		if( y < y_max )	add_rule( tile,  m[y+1][x], "DOWN" );
+	}
+
+	console.log( "RULEZ", rules );
+	console.log( "TILES", tiles );
 }
 
+parse_matrix_rules( tile_matrix );
+
+
+console.log(  32 >>> 5 );
 </script>
 </body></html>
