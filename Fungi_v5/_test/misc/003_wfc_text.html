@@ -208,19 +208,31 @@ function parse_matrix_rules( m ){
 		len 	= xlen * ylen,
 		tiles	= {},
 		rules 	= {},
+		r_keys 	= {},
 		tile, y, x;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Rule sets, save as unique.
 	let add_rule = ( a, b, dir )=>{
 		let key = a + "_" + b + "_" + dir;
-		if( !rules[key] ) rules[ key ] = { a, b, dir };
+
+		if( !r_keys[ key ] ){
+			r_keys[ key ] = true;
+			if( !rules[ a ] )	rules[ a ] = [ { tile:b, dir } ];
+			else				rules[ a ].push( { tile:b, dir } );
+		}
 	};
 
 	// Save tile name & accordance, This is the WEIGHT value for WFC.
 	let add_tile = ( a )=>{
 		if( tiles[ a ] )	tiles[ a ]++;
 		else 				tiles[ a ] = 1;
+	}
+	
+	let rule_sort = ( a, b )=>{
+		if( a.tile == b.tile )
+			return ( a.dir == b.dir )? 0 : ( a.dir < b.dir )? -1 : 1;
+		return ( a.tile < b.tile )? -1 : 1;
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -237,13 +249,305 @@ function parse_matrix_rules( m ){
 		if( y < y_max )	add_rule( tile,  m[y+1][x], "DOWN" );
 	}
 
-	console.log( "RULEZ", rules );
-	console.log( "TILES", tiles );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-
+	// Sort the Rules to make it easier to visually see in debug.
+	// Also create an array list of tiles.
+	let ary = new Array();
+	for( let [k,v] of Object.entries( rules ) ){
+		ary.push( k );
+		v.sort( rule_sort );
+	}
+	//console.log( "RULE KEYS", r_keys );
+	//console.log( "RULEZ", rules );
+	//console.log( "TILES", tiles );
+
+	return { tiles, rules:r_keys, tile_ary:ary };
 }
 
-parse_matrix_rules( tile_matrix );
+// Create a Matrix where each cell contains all possible tiles
+function gen_cell_matrix( w, h, list=[] ){
+	let r, row, cells = new Array( h );
+	for( let i=0; i < w; i++ ){							// Create Rows
+		row = new Array( w );
+		for( r=0; r < w; r++ ) row[ r ] = [...list];	// Columns with tile List.
+		cells[ i ] = row;
+	}
+	return cells;
+}
+
+// Check if we are all done successful. 
+// Requires every cell to only have 1 tile left, no more, no less.
+function is_all_collapsed( cells ){
+	let x,y;
+	for( y=0; y < cells.length; y++ ){
+		for( x=0; x < cells[y].length; x++ ){
+			if( cells[y][x].length > 1 ) return false;
+		}
+	}
+	return true;
+}
+
+// Find the Cell with the least Probability Score
+// Which Kinda means which cell has the least available tiles with the least total weight
+function find_entropy_cell( cells, tiles ){
+	let x, y, c, entropy, entropy_rnd,
+		min		= Infinity,
+		min_x	= 0,
+		min_y	= 0;
+
+	for( y=0; y < cells.length; y++ ){
+		for( x=0; x < cells[y].length; x++ ){
+			
+			c = cells[y][x];
+			if( c.length == 1 ) continue;	// Skip and Cells that have been collapsed.
+
+			entropy		= shannon_entropy( c, tiles );		// Calc some Probabiity Value based on the Tile Weights available.
+			entropy_rnd	= entropy - ( Math.random() * 0.001 );	// Most cells will have the same Prob if no attempt to collapse, 
+																// so a bit of random lets us pick a "Random" cell within the
+																// the cells with the least probability score when all is equal.
+			if( entropy_rnd < min ){	// Found a possible cell that has the least probability.
+				min		= entropy_rnd;
+				min_x	= x;
+				min_y	= y;
+			}
+		}
+	}
+
+	return [ min_x, min_y ];
+}
+
+// https://en.wiktionary.org/wiki/Shannon_entropy
+// Calculate some kind of probability based on a curve, I guess by what I've read.
+function shannon_entropy( cell, tiles ){
+	let c, weight,
+		total_weight		= 0,
+		total_log_weight	= 0;
+
+	for( c of cell ){
+		weight				= tiles[ c ];
+		total_weight		+= weight;
+		total_log_weight	+= weight * Math.log( weight );
+	}
+
+	return Math.log( total_weight ) - ( total_log_weight / total_weight );
+}
+
+// Grab a cell, then out of the available tiles in it, pick one
+// randomly based on the weight of the cell.
+function collapse_cell( pos, cells, tiles ){
+	let w, rnd_weight, 
+		cell		= cells[ pos[1] ][ pos[0] ],		// Get Tiles array for the cell.
+		t_weight	= 0, 
+		weights		= new Array();
+
+	for( let c of cell ){
+		w			= tiles[ c ];
+		t_weight	+= w;
+		weights.push( w );
+	}
+
+	// Apply a Random Number to the total Weight,
+	// This will generate a number smaller then total weight.
+	rnd_weight = Math.random() * t_weight; 
+
+	// Loop through all the available tile weights for this cell
+	for( let i=0; i < weights.length; i++ ){
+
+		// Since Random total Weight is less then Total, this makes sure
+		// that at some point it'll be in the negative when we keep subtracting
+		// weight before we run out of weights for the process.
+		// Since the random number gives an unpredicted reduction and tiles
+		// are not in order by their weight, its a nice way to randomly
+		// pick something, Larger weighted tiles will have a greater chance of
+		// winning out which is what we'd like to happen.
+		rnd_weight -= weights[ i ];
+		if( rnd_weight < 0 ) return cells[ pos[1] ][ pos[0] ] = [ cell[i] ];	// Replace cell with just the Winning Tile.
+	}
+
+	return null;
+}
 
 
-console.log(  32 >>> 5 );
+function propagate( start_pos, cells, tiles, rules ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos,
+		stack		= [ start_pos ];
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	const UP		= [ 0,-1];
+	const RIGHT		= [ 1, 0];
+	const DOWN		= [ 0, 1];
+	const LEFT		= [-1, 0];
+	const DIRS		= [ UP, RIGHT, DOWN, LEFT ];
+	const DIR_NAMES	= [ "UP", "RIGHT", "DOWN", "LEFT" ];
+	
+
+	// Shift position in some direction
+	let get_dir_pos = ( p, d, out )=>{
+		out[ 0 ] = p[0] + d[0];
+		out[ 1 ] = p[1] + d[1];
+		return !( out[0] < 0 || out[0] >= WIDTH || out[1] < 0 || out[1] >= HEIGHT );
+	};
+
+
+	let get_tiles		= p=>cells[ p[1] ][ p[0] ];					// Local function to get Tiles from a Cell
+	let remove_tile	= ( p, t )=>{
+		let ary = cells[ p[1] ][ p[0] ];
+		let idx = ary.indexOf( t );
+		if( idx != -1 ) ary.splice( idx, 1 );
+		//cells[ p[1] ][ p[0] ] = ary.filter( v=>!bad.has(v) ) 
+		console.log( "---- FILTER", cells[ p[1] ][ p[0] ]  )	;
+	};
+
+	let tmp = 0;
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	while( (pos = stack.pop()) && tmp < 100 ){
+		// Get the Tiles available for the Cell we are going to process.
+		let main_tiles = get_tiles( pos );
+		console.log("------------------------------------------");
+		console.log( "- MAIN CELL", pos, main_tiles );
+
+		if( main_tiles.length == 0 ){
+			console.log("ERROR - MAIN TILES EMPTY");
+			return;
+		}
+
+		// We process the cell by checking its neighbor cells from
+		// each known directions
+		for( let idx=0; idx < 4; idx++ ){
+			//console.log( DIR_NAMES[ idx ], DIRS[ idx ] );
+
+			// Get a Neighbor Cell based on the current direction
+			// we are scanning.
+			let chk_pos		= [0,0];	// Must LET, it gets saved to the stack if possible.
+			let dir_name	= DIR_NAMES[ idx ];
+			if( ! get_dir_pos( pos, DIRS[ idx ], chk_pos ) ){  console.log( "Direction out of bounds", chk_pos ); continue; break; }
+
+
+			let chk_tiles	= get_tiles( chk_pos );
+			if( chk_tiles.length == 0 ){
+				console.log("ERROR - CHECK TILES EMPTY");
+				return;
+			}
+
+			console.log( ":::::");
+			console.log( "-- DIR CHECK", dir_name, "OF", main_tiles );
+			console.log( "--- CHECK CELL", chk_pos, chk_tiles );
+
+			// Loop over all the Neighbor cells, Then check if any of them
+			// is allowed to exists at this direction from any of the MAIN CELL's tiles.
+			//let bad_tiles = new Set();
+			let modified = false;
+			for( let cti = chk_tiles.length-1; cti >=0; cti--){ // Since we're deleting from the array by reference, work backwards to not mess up indexing.
+				let ct = chk_tiles[ cti ];
+		
+				// If the Tile is not compatible with NONE of the main tile list
+				let compatible_cnt = 0;
+				for( let mt of main_tiles ){	
+					let key = mt + "_" + ct + "_" + dir_name;  // ex. L_C_UP
+					console.log( "---- CHK RULE", key, rules[ key ] );
+					//if( !rules[ key ] ) bad_tiles.add( ct );
+					if( rules[ key ] ){ compatible_cnt++; break; }
+				}
+
+				console.log( "---- COMPATIBLE COUNT:", ct, compatible_cnt );
+				
+				// if a tile is NOT compatible with any of the main tiles, Then its worthless
+				// so remove it from our tile array. This will effect the array in the cell matrix
+				// since the changed is done by reference.
+				if( compatible_cnt == 0 ){
+					remove_tile( chk_pos, ct );
+					modified = true;
+				}
+			}
+
+			// if we had to remove tiles, then add the cell to the stack 
+			// because its change, effects it's neighbors.
+			if( modified ) stack.push( chk_pos );
+
+			///console.log( "--- BAD DIR TILES", bad_tiles, "IN", chk_tiles );
+
+			//
+			//if( bad_tiles.size > 0 ){
+			//	remove_tiles( chk_pos, bad_tiles );
+			//	stack.push( chk_pos );
+			//	console.log( "---- NOT ALL TILES WHERE GOOD, UPDATE CELL WITH GOOD TILES ONLY" );
+			//}
+
+			//break;
+		}
+
+		tmp++;
+		//break;
+	}
+	console.log( "TMP", tmp );
+}
+
+
+
+/*
+def propagate(self, co_ords):
+	"""Propagates the consequences of the wavefunction at `co_ords`
+	collapsing. If the wavefunction at (x,y) collapses to a fixed tile,
+	then some tiles may not longer be theoretically possible at
+	surrounding locations.
+	This method keeps propagating the consequences of the consequences,
+	and so on until no consequences remain.
+	"""
+	stack = [co_ords]
+
+	while len(stack) > 0:
+		cur_coords = stack.pop()
+		# Get the set of all possible tiles at the current location
+		cur_possible_tiles = self.wavefunction.get(cur_coords)
+
+		# Iterate through each location immediately adjacent to the
+		# current location.
+		for d in valid_dirs(cur_coords, self.output_size):
+			other_coords = (cur_coords[0] + d[0], cur_coords[1] + d[1])
+
+			# Iterate through each possible tile in the adjacent location's
+			# wavefunction.
+			for other_tile in set(self.wavefunction.get(other_coords)):
+				# Check whether the tile is compatible with any tile in
+				# the current location's wavefunction.
+				other_tile_is_possible = any([
+					self.compatibility_oracle.check(cur_tile, other_tile, d) for cur_tile in cur_possible_tiles
+				])
+				# If the tile is not compatible with any of the tiles in
+				# the current location's wavefunction then it is impossible
+				# for it to ever get chosen. We therefore remove it from
+				# the other location's wavefunction.
+				if not other_tile_is_possible:
+					self.wavefunction.constrain(other_coords, other_tile)
+					stack.append(other_coords)
+*/
+
+
+//###############################################################################
+let info	= parse_matrix_rules( tile_matrix );
+let cells	= gen_cell_matrix( WIDTH, HEIGHT, info.tile_ary );
+
+console.log( info );
+
+// Single Pass
+
+// console.log( is_all_collapsed( cells ) );
+// 1. Find Min Entropy ( Find the cell with the least amount of tile weight );
+let pos = find_entropy_cell( cells, info.tiles );
+
+// 2. Collapse that Cell
+console.log( pos,  collapse_cell( pos, cells, info.tiles ) );
+
+// 3. Propagate ( Try to collase affected cells of the collapse cell )
+propagate( pos, cells, info.tiles, info.rules );
+
+
+/* ==================================================================
+IMPROVEMENTS
+- The Tile Matrix as a Flat Array, faster to iterate then Array of Arrays.
+- Instead of saving Tiles array per cell, Use a BitSet with Tile Indexes
+- Replace Random gen with Seeded One, Hopefully to regenerate same results over&over
+================================================================== */
 </script>
 </body></html>

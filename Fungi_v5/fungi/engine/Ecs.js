@@ -5,6 +5,10 @@
 // so bit shift if 32 will only set the first bit
 // The first 5 shifts equal the value of 31, so when setting bit 32, shifted down will equal value of 1, meaning 
 // that is over the first uint32 and needs a second one to fill it in.
+// Using Shift 5, means the INDEX will increment by every 32.
+// Using Shift 6, which is the 64 bit value, we can increase the index for every value of 64.
+// Technically we index by the factor of the bit, so 4 is the third bit, but if we shift by 2, 
+// every 4 will increment.
 const IDX_BIT = 5; // 5 bit shift, value of 32.
 class Bitset{
 	constructor(){
