@@ -24,16 +24,18 @@ const WIDTH     = 10;
 const HEIGHT    = 10;
 
 window.addEventListener( "load", ()=>{
+	/*
     let tbl = document.getElementById( "tbl" );
 
-	/* Basic but Efficent way */
+	/Basic but Efficent way /
 	let i, r, j;
 	for( i=0; i < HEIGHT; i++ ){
 		r = tbl.insertRow();
 		for( j=0; j < WIDTH; j++ ) r.insertCell().innerHTML = "x";
 	}
-	 
-	new Wfc().gen_cells( WIDTH, HEIGHT );
+	*/
+	
+	//new Wfc().gen_cells( WIDTH, HEIGHT );
 
 	 /* Functional Way
 	//let rows = Array.from( Array( HEIGHT ), _=>tbl.insertRow() );
@@ -155,40 +157,6 @@ class Model{
 }
 
 
-/*
-def parse_example_matrix(matrix):
-    """Parses an example `matrix`. Extracts:
-    
-    1. Tile compatibilities - which pairs of tiles can be placed next
-        to each other and in which directions
-    2. Tile weights - how common different tiles are
-    Arguments:
-    matrix -- a 2-D matrix of tiles
-    Returns:
-    A tuple of:
-    * A set of compatibile tile combinations, where each combination is of
-        the form (tile1, tile2, direction)
-    * A dict of weights of the form tile -> weight
-	"""
-
-    compatibilities = set()
-    matrix_width = len(matrix)
-    matrix_height = len(matrix[0])
-
-    weights = {}
-
-    for x, row in enumerate(matrix):
-        for y, cur_tile in enumerate(row):
-            if cur_tile not in weights:
-                weights[cur_tile] = 0
-            weights[cur_tile] += 1
-
-            for d in valid_dirs((x,y), (matrix_width, matrix_height)):
-                other_tile = matrix[x+d[0]][y+d[1]]
-                compatibilities.add((cur_tile, other_tile, d))
-
-	return compatibilities, weights
-*/
 
 let tile_matrix = [
     ['L','L','L','L'],
@@ -483,7 +451,18 @@ function propagate( start_pos, cells, tiles, rules ){
 	console.log( "TMP", tmp );
 }
 
+function render( tbl, cells ){
+	let x, y, tiles,
+		rows = tbl.rows;
 
+	for( y=0; y < HEIGHT; y++ ){
+		for( x=0; x < WIDTH; x++ ){
+			tiles = cells[y][x];
+			rows[y].cells[x].innerHTML = ( tiles.length == 0 )? "" :
+				( tiles.length == 1 )? tiles[0] : tiles.length;
+		}
+	}
+}
 
 /*
 def propagate(self, co_ords):
@@ -528,20 +507,32 @@ def propagate(self, co_ords):
 let info	= parse_matrix_rules( tile_matrix );
 let cells	= gen_cell_matrix( WIDTH, HEIGHT, info.tile_ary );
 
+let tbl = document.getElementById( "tbl" );
+let i, r, j;
+for( i=0; i < HEIGHT; i++ ){
+	r = tbl.insertRow();
+	for( j=0; j < WIDTH; j++ ) r.insertCell().innerHTML = "x";
+}
+
 console.log( info );
 
 // Single Pass
+let tries = 0;
 
-// console.log( is_all_collapsed( cells ) );
-// 1. Find Min Entropy ( Find the cell with the least amount of tile weight );
-let pos = find_entropy_cell( cells, info.tiles );
+do{
+	// 1. Find Min Entropy ( Find the cell with the least amount of tile weight );
+	let pos = find_entropy_cell( cells, info.tiles );
 
-// 2. Collapse that Cell
-console.log( pos,  collapse_cell( pos, cells, info.tiles ) );
+	// 2. Collapse that Cell
+	console.log( pos,  collapse_cell( pos, cells, info.tiles ) );
 
-// 3. Propagate ( Try to collase affected cells of the collapse cell )
-propagate( pos, cells, info.tiles, info.rules );
-
+	// 3. Propagate ( Try to collase affected cells of the collapse cell )
+	propagate( pos, cells, info.tiles, info.rules );
+	tries++;
+}while( !is_all_collapsed( cells ) && tries < 40 );
+//console.log( is_all_collapsed( cells ) );
+console.log( "INTERVAL COUNT", tries );
+render( tbl, cells );
 
 /* ==================================================================
 IMPROVEMENTS
@@ -551,3 +542,4 @@ IMPROVEMENTS
 ================================================================== */
 </script>
 </body></html>
+       
