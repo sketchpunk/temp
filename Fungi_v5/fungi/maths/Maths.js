@@ -301,27 +301,27 @@ class Maths{
 		}
 
 
-	static newtons_method( x, f, fd=null ){
-		// without derivitive, use th following:
-		// x = x - f(x) / ( (f(x+i) - f(x-1)) / (2*i) )
-		// else
-		// x = x - f(x) / fd(x);
-		const precision = 0.001;
-		const inc 		= 0.001;
-		const inc_2_inv	= 1 / (2 * inc); // Just to remove Division and the extra mul
-		const lmt 		= 20;
-		
-		let i, px = x;
-		for( i=0; i < lmt; i++ ){
-			x = ( !fd )?
-				x - f(x) / (( f(x + inc) - f(x - inc) ) * inc_2_inv ) :
-				x - f(x) / fd(x);
-			//console.log( i, px, x );
-			if( Math.abs( px - x ) <= precision ) break;
-			px = x;
+		static newtons_method( x, f, fd=null ){
+			// without derivitive, use th following:
+			// x = x - f(x) / ( (f(x+i) - f(x-1)) / (2*i) )
+			// else
+			// x = x - f(x) / fd(x);
+			const precision = 0.001;
+			const inc 		= 0.001;
+			const inc_2_inv	= 1 / (2 * inc); // Just to remove Division and the extra mul
+			const lmt 		= 20;
+			
+			let i, px = x;
+			for( i=0; i < lmt; i++ ){
+				x = ( !fd )?
+					x - f(x) / (( f(x + inc) - f(x - inc) ) * inc_2_inv ) :
+					x - f(x) / fd(x);
+				//console.log( i, px, x );
+				if( Math.abs( px - x ) <= precision ) break;
+				px = x;
+			}
+			return x;
 		}
-		return x;
-	}
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -343,6 +343,8 @@ class Maths{
 
 // https://github.com/CiaccoDavide/CiaccoPRNG
 class CiaccoRandom{
+	static tree = 0;
+
     static seed( v ){
         this.tree = Math.abs( v ) % 9999999+1;
         return this.rand( 0, 9999999 );
@@ -353,8 +355,33 @@ class CiaccoRandom{
         return this.tree % ( max - min + 1 ) + min;
     }
 }
-CiaccoRandom.tree = 0;
 
+//https://www.youtube.com/watch?v=U9q-jM3-Phc&
+function ValueNoise2D_Closure(){
+	let cache	= {};
+	let rand	= ( x, y )=>{
+		let key = x+"."+y;
+		if( !cache[ key ] ) cache[ key ] = Math.random();
+		return cache[ key ];
+	};
+
+	return ( x, y )=>{
+		// Bilinear Filter
+		let x1	= Math.floor( x ),   // Get Base Number
+			y1	= Math.floor( y ),
+			x2	= x1 + 1,            // Get Next Coord
+			y2	= y1 + 1,
+			xp	= x - x1,			// Fract()
+			yp	= y - y1,
+			p11	= rand( x1, y1 ),	// Rnd at Pos
+			p21	= rand( x2, y1 ),
+			p12	= rand( x1, y2 ),	
+			p22	= rand( x2, y2 ),
+			px1	= p11 * (1-xp) + p21 * xp,	// Lerp X
+			px2 = p12 * (1-xp) + p22 * xp;
+		return px1 * (1-yp) + px2 * yp;		// Lerp Y
+	};
+}
 
 /*
 https://stackoverflow.com/questions/5674149/3d-coordinates-on-a-sphere-to-latitude-and-longitude

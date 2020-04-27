@@ -1,13 +1,55 @@
 <html><body>
 <style>
-	*{ font-family:monospace; }
+	*{ font-family:monospace; color:white; font-size:20px;}
+	body{ background-color:#242424; }
 	table{  border-collapse: collapse; }
-	td{ width:20px; height:20px; text-align:center; border:1px solid silver; }
+	td{ width:35px; height:35px; text-align:center; border:1px solid #707070; }
+	button{ color:black; }
+
+	.TS{ background-color:#80DEEA; }
+	.TL{ background-color:#62B360; }
+	.TC{ background-color:#D3C933; }
+	.TERR{ background-color:red; }
 </style>
 
-<table id="tbl"></table>
+<div style="display:flex; align-items:flex-start;">
+	<table id="tbl"></table>
+	<div>
+		<pre style=" margin:0px 0px 0px 10px;">let rule_matrix = [
+  ['L','L','L','L'],
+  ['L','L','L','L'],
+  ['L','L','L','L'],
+  ['L','C','C','L'],
+  ['C','S','S','C'],
+  ['S','S','S','S'],
+  ['S','S','S','S'],
+];</pre>
+		<center style="margin-top:10px;">
+			<button onClick="Run()">Generate</button>
+		</center>
+	</div>
+
+</div>
 
 <script>
+/* BASED ON TUTORIAL + CODE FROM
+https://robertheaton.com/2018/12/17/wavefunction-collapse-algorithm/
+https://github.com/robert/wavefunction-collapse
+
+Dissected the code and recreate a simpler implementation  that I can use to help
+understand how it works plus as a way to possibly teach it in the future.
+
+Original Source to what started Wave Function Collapse
+https://github.com/mxgmn/WaveFunctionCollapse
+https://github.com/math-fehr/fast-wfc
+
+/* ==================================================================
+IMPROVEMENTS NOTES
+- The Tile Matrix as a Flat Array, faster to iterate then Array of Arrays.
+- Instead of saving Tiles array per cell, Use a BitSet with Tile Indexes
+- Replace Random gen with Seeded One, Hopefully to regenerate same results over&over
+================================================================== */
+
 /* NOTES
 - https://robertheaton.com/2018/12/17/wavefunction-collapse-algorithm/
 - https://github.com/robert/wavefunction-collapse
@@ -17,11 +59,8 @@
 
 https://github.com/mxgmn/WaveFunctionCollapse
 https://github.com/math-fehr/fast-wfc
-
 */
 
-const WIDTH     = 10;
-const HEIGHT    = 10;
 
 window.addEventListener( "load", ()=>{
 	/*
@@ -72,138 +111,43 @@ window.addEventListener( "load", ()=>{
 });
 
 
-/*
-defn Run():
-	PatternsFromSample()	// Create Tiles
-	BuildPropagator()		// Build out Rules of how the tiles can be placed next to eachother.
-	Loop until finished:
-		Observe()
-		Propagate()
-	OutputObservations()
-
-// coefficient_matrix is an array that says which cells has been assigned a pattern. (True,False)
-// The purpose of Observe() is to identify the location on the grid with the lowest nonzero entropy.
-
-defn Observe(coefficient_matrix):
-	FindLowestEntropy()
-	If there is a contradiction, throw an error and quit
-	If all cells are at entropy 0, processing is complete:
-		Return CollapsedObservations()
-	Else:
-		Choose a pattern by a random sample, weighted by the
-			pattern frequency in the source data
-		Set the boolean array in this cell to false, except
-			for the chosen pattern
-
-
-defn FindLowestEntropy(coefficient_matrix):
-	Return the cell that has the lowest greater-than-zero entropy, defined as:
-		A cell with one valid pattern has 0 entropy
-		A cell with no valid patterns is a contradiction
-	Else: the entropy is based on the sum of the frequency
-		that the patterns appear in the source data, plus
-		Use some random noise to break ties and near-ties.
-
-defn Propagate(coefficient_matrix):
-	Loop until no more cells are left to be update:
-		For each neighboring cell:
-			For each pattern that is still potentially valid:
-				Compare this location in the pattern with the cell's values
-					If this point in the pattern no longer matches:
-						Set the array in the wave to false for this pattern
-						Flag this cell as needing to be updated in the next iteration
-
-
-# Sums are over the weights of each remaining
-# allowed tile type for the square whose
-# entropy we are calculating.
-shannon_entropy_for_square =
-  log(sum(weight)) -
-  (sum(weight * log(weight)) / sum(weight))
-*/
-
-class Wfc{
-	#cells = null;
-
-
-	// Generate 2D Matrix that will contain all the possible tiles
-	// that each cell can contain.
-	gen_cells( w, h, list=[] ){
-		let r, row, cells = new Array( h );
-		for( let i=0; i < w; i++ ){
-			row = new Array( w );
-			for( r=0; r < w; r++ ) row[ r ] = [...list];
-			cells[ i ] = row;
-		}
-		this.#cells = cells;
-	}
-
-	//“entropy” here means the sum of all possible patterns’ frequencies inside a cell.
-	// Basicly checks the matrix to see if we're done, a contradiction has been found or still busy.
-	get_lowest_entropy_cells(){
-		let min = -1;
-		let cells = this.#cells;
-		for( y=0; y < h; i++ ){
-			for( x=0; x < w; x++ ){
-				//cells[y][x]
-			}
-		}
-	}
-
-}
-
-class Model{
-
-}
-
-
-
-let tile_matrix = [
-    ['L','L','L','L'],
-    ['L','L','L','L'],
-    ['L','L','L','L'],
-    ['L','C','C','L'],
-    ['C','S','S','C'],
-    ['S','S','S','S'],
-    ['S','S','S','S'],
-];
-
+// The way the algorithm works is based on Constraints, which is really just RULES.
+// The rules are pretty simple : C can have L on its left side, C can have L on its Up Side, etc.
+// Writing the rules manually can lead to mistakes, so its better to find ways to auto generate them
+// In this example, I learned about using a multi dimensional array with tiles layed out in some fashion.
+// We can then generate rules based on the placement of the tiles, easy to check what each tile is next to, 
+// then we can create rules that way.
 function parse_matrix_rules( m ){
-	let ylen	= m.length,
-		xlen	= m[0].length,
-		x_max	= xlen - 1,
-		y_max 	= ylen - 1, 
-		len 	= xlen * ylen,
-		tiles	= {},
-		rules 	= {},
-		r_keys 	= {},
-		tile, y, x;
+	let ylen		= m.length,		// Height of the Matrix
+		xlen		= m[0].length,	// Width of the Matrix
+		x_max		= xlen - 1,		// Boundary on X
+		y_max 		= ylen - 1, 	// Boundary on Y
+		len 		= xlen * ylen,	// Total cells
+		tiles		= {},			// List of Tile Weights
+		tile_ary	= [],			// Array of tile names
+		r_keys 	= {},				// Rules in simple key format.
+		tile, y, x;					
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOCAL FUNCTIONS
 	// Rule sets, save as unique.
 	let add_rule = ( a, b, dir )=>{
 		let key = a + "_" + b + "_" + dir;
-
-		if( !r_keys[ key ] ){
-			r_keys[ key ] = true;
-			if( !rules[ a ] )	rules[ a ] = [ { tile:b, dir } ];
-			else				rules[ a ].push( { tile:b, dir } );
-		}
+		if( !r_keys[ key ] ) r_keys[ key ] = true;
 	};
 
 	// Save tile name & accordance, This is the WEIGHT value for WFC.
 	let add_tile = ( a )=>{
 		if( tiles[ a ] )	tiles[ a ]++;
-		else 				tiles[ a ] = 1;
-	}
-	
-	let rule_sort = ( a, b )=>{
-		if( a.tile == b.tile )
-			return ( a.dir == b.dir )? 0 : ( a.dir < b.dir )? -1 : 1;
-		return ( a.tile < b.tile )? -1 : 1;
+		else{
+			tiles[ a ] = 1;
+			tile_ary.push( a );
+		}
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Go through every cell, and check what Tile is next to what tile.
+	// be it in the following directions, UP, Down, Left, Right.
 	for( let i=0; i < len; i++ ){
 		y		= Math.floor( i / xlen );		// Cell to inspect
 		x		= ( i % xlen );
@@ -218,26 +162,17 @@ function parse_matrix_rules( m ){
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-
-	// Sort the Rules to make it easier to visually see in debug.
-	// Also create an array list of tiles.
-	let ary = new Array();
-	for( let [k,v] of Object.entries( rules ) ){
-		ary.push( k );
-		v.sort( rule_sort );
-	}
-	//console.log( "RULE KEYS", r_keys );
-	//console.log( "RULEZ", rules );
-	//console.log( "TILES", tiles );
-
-	return { tiles, rules:r_keys, tile_ary:ary };
+	return { tiles, rules:r_keys, tile_ary };
 }
 
 // Create a Matrix where each cell contains all possible tiles
-function gen_cell_matrix( w, h, list=[] ){
-	let r, row, cells = new Array( h );
-	for( let i=0; i < w; i++ ){							// Create Rows
-		row = new Array( w );
-		for( r=0; r < w; r++ ) row[ r ] = [...list];	// Columns with tile List.
+// The idea is we start with all possibilites then we start to 
+// widdle away tiles that dont fit with their neighbors.
+function gen_cell_matrix( list=[] ){
+	let r, row, cells = new Array( HEIGHT );
+	for( let i=0; i < HEIGHT; i++ ){						// Create Rows
+		row = new Array( WIDTH );
+		for( r=0; r < WIDTH; r++ ) row[ r ] = [...list];	// Columns with tile List.
 		cells[ i ] = row;
 	}
 	return cells;
@@ -245,6 +180,9 @@ function gen_cell_matrix( w, h, list=[] ){
 
 // Check if we are all done successful. 
 // Requires every cell to only have 1 tile left, no more, no less.
+// I do not check for or Handle failure, WFC can lead to cells having
+// NO tiles. It happens for time to time, normally just reset and try
+// again at a new starting tile.
 function is_all_collapsed( cells ){
 	let x,y;
 	for( y=0; y < cells.length; y++ ){
@@ -257,6 +195,8 @@ function is_all_collapsed( cells ){
 
 // Find the Cell with the least Probability Score
 // Which Kinda means which cell has the least available tiles with the least total weight
+// The main goal is that, the cells with the least score, has less choices and better chances
+// of collapsing quickly without error.
 function find_entropy_cell( cells, tiles ){
 	let x, y, c, entropy, entropy_rnd,
 		min		= Infinity,
@@ -269,7 +209,7 @@ function find_entropy_cell( cells, tiles ){
 			c = cells[y][x];
 			if( c.length == 1 ) continue;	// Skip and Cells that have been collapsed.
 
-			entropy		= shannon_entropy( c, tiles );		// Calc some Probabiity Value based on the Tile Weights available.
+			entropy		= shannon_entropy( c, tiles );			// Calc some Probabiity Value based on the Tile Weights available.
 			entropy_rnd	= entropy - ( Math.random() * 0.001 );	// Most cells will have the same Prob if no attempt to collapse, 
 																// so a bit of random lets us pick a "Random" cell within the
 																// the cells with the least probability score when all is equal.
@@ -308,6 +248,9 @@ function collapse_cell( pos, cells, tiles ){
 		t_weight	= 0, 
 		weights		= new Array();
 
+	// Create list of weights, plus compute total weight.
+	// We use the total weight as a way to randomly pix a
+	// tile as the only tile this cell will have.
 	for( let c of cell ){
 		w			= tiles[ c ];
 		t_weight	+= w;
@@ -335,20 +278,23 @@ function collapse_cell( pos, cells, tiles ){
 	return null;
 }
 
-
+// At a starting cell, check its neighbor cells to see if any tile does NOT
+// fit with any of the starting cell's tiles. If any tile is removed from
+// a cell, then its neighbors will also be checked in the same way for that
+// modified cell. It will then spread like wild fire to any cell that changes
 function propagate( start_pos, cells, tiles, rules ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let pos,
-		stack		= [ start_pos ];
+		stack		= [ start_pos ];	// Start our process with a collapsed cell.
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOCAL FUNCTION AND CONSTANTS
 	const UP		= [ 0,-1];
 	const RIGHT		= [ 1, 0];
 	const DOWN		= [ 0, 1];
 	const LEFT		= [-1, 0];
 	const DIRS		= [ UP, RIGHT, DOWN, LEFT ];
 	const DIR_NAMES	= [ "UP", "RIGHT", "DOWN", "LEFT" ];
-	
 
 	// Shift position in some direction
 	let get_dir_pos = ( p, d, out )=>{
@@ -357,21 +303,25 @@ function propagate( start_pos, cells, tiles, rules ){
 		return !( out[0] < 0 || out[0] >= WIDTH || out[1] < 0 || out[1] >= HEIGHT );
 	};
 
+	// Local function to get Tiles from a Cell
+	let get_tiles = p=>cells[ p[1] ][ p[0] ];
 
-	let get_tiles		= p=>cells[ p[1] ][ p[0] ];					// Local function to get Tiles from a Cell
+	// Remove file from the cell matrix
 	let remove_tile	= ( p, t )=>{
 		let ary = cells[ p[1] ][ p[0] ];
 		let idx = ary.indexOf( t );
 		if( idx != -1 ) ary.splice( idx, 1 );
-		//cells[ p[1] ][ p[0] ] = ary.filter( v=>!bad.has(v) ) 
 		console.log( "---- FILTER", cells[ p[1] ][ p[0] ]  )	;
 	};
 
-	let tmp = 0;
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	while( (pos = stack.pop()) && tmp < 100 ){
+	let passes = 0,
+		dir_name, main_tiles, chk_tiles,  ct, mt, cti,
+		idx,  modified, compatible_cnt, key;
+
+	while( (pos = stack.pop()) && passes < PROP_LMT ){
 		// Get the Tiles available for the Cell we are going to process.
-		let main_tiles = get_tiles( pos );
+		main_tiles = get_tiles( pos );
 		console.log("------------------------------------------");
 		console.log( "- MAIN CELL", pos, main_tiles );
 
@@ -380,46 +330,47 @@ function propagate( start_pos, cells, tiles, rules ){
 			return;
 		}
 
-		// We process the cell by checking its neighbor cells from
-		// each known directions
-		for( let idx=0; idx < 4; idx++ ){
+		// We process the cell by checking its neighbor cells from each known direction
+		for( idx=0; idx < 4; idx++ ){
 			//console.log( DIR_NAMES[ idx ], DIRS[ idx ] );
 
+			//-----------------------------------------
 			// Get a Neighbor Cell based on the current direction
 			// we are scanning.
-			let chk_pos		= [0,0];	// Must LET, it gets saved to the stack if possible.
-			let dir_name	= DIR_NAMES[ idx ];
+			let chk_pos = [0,0];	// Must LET, it gets saved to the stack, else we can cause errors modifing pointers
+			dir_name = DIR_NAMES[ idx ];
 			if( ! get_dir_pos( pos, DIRS[ idx ], chk_pos ) ){  console.log( "Direction out of bounds", chk_pos ); continue; break; }
 
-
-			let chk_tiles	= get_tiles( chk_pos );
-			if( chk_tiles.length == 0 ){
-				console.log("ERROR - CHECK TILES EMPTY");
-				return;
-			}
+			//-----------------------------------------
+			// Get all the vailable tiles on the neighbor cell.
+			chk_tiles = get_tiles( chk_pos );
+			if( chk_tiles.length == 0 ){ console.log("ERROR - CHECK TILES EMPTY"); return; }
 
 			console.log( ":::::");
 			console.log( "-- DIR CHECK", dir_name, "OF", main_tiles );
 			console.log( "--- CHECK CELL", chk_pos, chk_tiles );
 
+			//-----------------------------------------
 			// Loop over all the Neighbor cells, Then check if any of them
 			// is allowed to exists at this direction from any of the MAIN CELL's tiles.
-			//let bad_tiles = new Set();
-			let modified = false;
-			for( let cti = chk_tiles.length-1; cti >=0; cti--){ // Since we're deleting from the array by reference, work backwards to not mess up indexing.
-				let ct = chk_tiles[ cti ];
-		
+			// Since we're deleting from the array by reference, work backwards to not mess up indexing.
+
+			modified = false;
+			for( cti = chk_tiles.length-1; cti >=0; cti-- ){ 
+				ct = chk_tiles[ cti ];
+
+				//.............................
 				// If the Tile is not compatible with NONE of the main tile list
-				let compatible_cnt = 0;
-				for( let mt of main_tiles ){	
-					let key = mt + "_" + ct + "_" + dir_name;  // ex. L_C_UP
+				compatible_cnt = 0;
+				for( mt of main_tiles ){	
+					key = mt + "_" + ct + "_" + dir_name;  // ex. L_C_UP
 					console.log( "---- CHK RULE", key, rules[ key ] );
 					//if( !rules[ key ] ) bad_tiles.add( ct );
 					if( rules[ key ] ){ compatible_cnt++; break; }
 				}
 
 				console.log( "---- COMPATIBLE COUNT:", ct, compatible_cnt );
-				
+				//.............................
 				// if a tile is NOT compatible with any of the main tiles, Then its worthless
 				// so remove it from our tile array. This will effect the array in the cell matrix
 				// since the changed is done by reference.
@@ -429,117 +380,108 @@ function propagate( start_pos, cells, tiles, rules ){
 				}
 			}
 
+			//-----------------------------------------
 			// if we had to remove tiles, then add the cell to the stack 
 			// because its change, effects it's neighbors.
 			if( modified ) stack.push( chk_pos );
-
-			///console.log( "--- BAD DIR TILES", bad_tiles, "IN", chk_tiles );
-
-			//
-			//if( bad_tiles.size > 0 ){
-			//	remove_tiles( chk_pos, bad_tiles );
-			//	stack.push( chk_pos );
-			//	console.log( "---- NOT ALL TILES WHERE GOOD, UPDATE CELL WITH GOOD TILES ONLY" );
-			//}
-
 			//break;
 		}
 
-		tmp++;
+		passes++;
 		//break;
 	}
-	console.log( "TMP", tmp );
+	console.log( "Propagate Pass Count", passes );
 }
 
+// How to Render the Cell Matrix Data after the algorithm has done
+// its work.
 function render( tbl, cells ){
-	let x, y, tiles,
+	let x, y, tiles, t,
 		rows = tbl.rows;
 
 	for( y=0; y < HEIGHT; y++ ){
 		for( x=0; x < WIDTH; x++ ){
-			tiles = cells[y][x];
-			rows[y].cells[x].innerHTML = ( tiles.length == 0 )? "" :
-				( tiles.length == 1 )? tiles[0] : tiles.length;
+			tiles	= cells[y][x];
+			td		= rows[y].cells[x];
+			t		= ( tiles.length == 0 )? "" : ( tiles.length == 1 )? tiles[0] : tiles.length;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			td.innerHTML = t;	// View Cell Results
+			
+			// Color the Table cell based on the CELL Result
+			switch( t ){
+				case "S": td.className = "TS"; break;
+				case "C": td.className = "TC"; break;
+				case "L": td.className = "TL"; break;
+				case "":  td.className = "TERR"; break;
+				default:  td.className = ""; break;
+			}
 		}
 	}
 }
 
-/*
-def propagate(self, co_ords):
-	"""Propagates the consequences of the wavefunction at `co_ords`
-	collapsing. If the wavefunction at (x,y) collapses to a fixed tile,
-	then some tiles may not longer be theoretically possible at
-	surrounding locations.
-	This method keeps propagating the consequences of the consequences,
-	and so on until no consequences remain.
-	"""
-	stack = [co_ords]
-
-	while len(stack) > 0:
-		cur_coords = stack.pop()
-		# Get the set of all possible tiles at the current location
-		cur_possible_tiles = self.wavefunction.get(cur_coords)
-
-		# Iterate through each location immediately adjacent to the
-		# current location.
-		for d in valid_dirs(cur_coords, self.output_size):
-			other_coords = (cur_coords[0] + d[0], cur_coords[1] + d[1])
-
-			# Iterate through each possible tile in the adjacent location's
-			# wavefunction.
-			for other_tile in set(self.wavefunction.get(other_coords)):
-				# Check whether the tile is compatible with any tile in
-				# the current location's wavefunction.
-				other_tile_is_possible = any([
-					self.compatibility_oracle.check(cur_tile, other_tile, d) for cur_tile in cur_possible_tiles
-				])
-				# If the tile is not compatible with any of the tiles in
-				# the current location's wavefunction then it is impossible
-				# for it to ever get chosen. We therefore remove it from
-				# the other location's wavefunction.
-				if not other_tile_is_possible:
-					self.wavefunction.constrain(other_coords, other_tile)
-					stack.append(other_coords)
-*/
-
 
 //###############################################################################
-let info	= parse_matrix_rules( tile_matrix );
-let cells	= gen_cell_matrix( WIDTH, HEIGHT, info.tile_ary );
+const WIDTH     = 10;
+const HEIGHT    = 10;
+const TBL		= document.getElementById( "tbl" );
 
-let tbl = document.getElementById( "tbl" );
-let i, r, j;
-for( i=0; i < HEIGHT; i++ ){
-	r = tbl.insertRow();
-	for( j=0; j < WIDTH; j++ ) r.insertCell().innerHTML = "x";
+// LIMITS are there for prototyping since I made an infinite loop by accident.
+// I also want to limit certain things during testing to easily read the logs.
+const PASS_LMT	= 40;	// How many passes to go through the matrix.
+const PROP_LMT	= 100;	// How many passes in the propagate to allow
+
+// Generte HTML Table
+(_=>{
+	let i, r, j;
+	for( i=0; i < HEIGHT; i++ ){
+		r = TBL.insertRow();
+		for( j=0; j < WIDTH; j++ ) r.insertCell().innerHTML = "x";
+	}
+})();
+
+
+let rule_matrix = [
+    ['L','L','L','L'],
+    ['L','L','L','L'],
+    ['L','L','L','L'],
+    ['L','C','C','L'],
+    ['C','S','S','C'],
+    ['S','S','S','S'],
+    ['S','S','S','S'],
+];
+
+function Run(){
+	let info	= parse_matrix_rules( rule_matrix ),	// 1. Generate Tiles and Rules
+		cells	= gen_cell_matrix( info.tile_ary ),		// 2. Create Matrix with each Cell Filled with all Possible Tiles
+		passes	= 0,
+		pos;
+
+	do{
+		// 3. Find Min Entropy ( Find the cell with the least amount of tile weight );
+		// The less the weight, the faster it will collapse, so the idea is to get
+		// the easiest ones done first since they have less choices to pick from.
+		pos = find_entropy_cell( cells, info.tiles );
+
+		// 2. Collapse that Cell, Basicly means to just randomly pick
+		// a tile to use based on whats currently available for that cell.
+		collapse_cell( pos, cells, info.tiles );
+
+		// 3. Propagate, The cell we just collapsed, we need to now check all
+		// its neighbors to limit the choices of tiles based on the rules. Each cell,
+		// that has it's choices reduced gets added to a list to also check its neighbors
+		// Its kinda like, once cell got the coronoa, so now you need to check if the people
+		// around it has corona, if they have it, gotta check people around them too. If a
+		// cell did not get changed, it will not be added to the list, cause it doesn't have corona
+		propagate( pos, cells, info.tiles, info.rules );
+		passes++;
+	}while( !is_all_collapsed( cells ) && passes < PASS_LMT );
+
+	console.log( "PASS COUNT", passes );
+	render( TBL, cells );
 }
 
-console.log( info );
-
-// Single Pass
-let tries = 0;
-
-do{
-	// 1. Find Min Entropy ( Find the cell with the least amount of tile weight );
-	let pos = find_entropy_cell( cells, info.tiles );
-
-	// 2. Collapse that Cell
-	console.log( pos,  collapse_cell( pos, cells, info.tiles ) );
-
-	// 3. Propagate ( Try to collase affected cells of the collapse cell )
-	propagate( pos, cells, info.tiles, info.rules );
-	tries++;
-}while( !is_all_collapsed( cells ) && tries < 40 );
-//console.log( is_all_collapsed( cells ) );
-console.log( "INTERVAL COUNT", tries );
-render( tbl, cells );
-
-/* ==================================================================
-IMPROVEMENTS
-- The Tile Matrix as a Flat Array, faster to iterate then Array of Arrays.
-- Instead of saving Tiles array per cell, Use a BitSet with Tile Indexes
-- Replace Random gen with Seeded One, Hopefully to regenerate same results over&over
-================================================================== */
+window.addEventListener( "load", Run );
 </script>
 </body></html>
        
