@@ -20,6 +20,9 @@ class Vec3 extends Float32Array{
 		get y(){ return this[1]; }	set y( v ){ this[1] = v; }
 		get z(){ return this[2]; }	set z( v ){ this[2] = v; }
 
+		set_x( v ){ this[0] = v; return this; }
+		set_y( v ){ this[1] = v; return this; }
+		set_z( v ){ this[2] = v; return this; }
 		set( x=null, y=null, z=null ){ 
 			if( x != null ) this[0] = x;
 			if( y != null ) this[1] = y; 
@@ -414,6 +417,14 @@ class Vec3 extends Float32Array{
 			return out;
 		}
 
+		static div( v, s, out=null ){
+			out = out || new Vec3();
+			out[0] = v[0] / s;
+			out[1] = v[1] / s;
+			out[2] = v[2] / s;
+			return out;			
+		}
+
 		static scale( v, s, out=null ){
 			out = out || new Vec3();
 			out[0] = v[0] * s;
@@ -453,6 +464,31 @@ class Vec3 extends Float32Array{
 			//else return Math.acos( cosine / ( Math.sqrt( v0.len_sqr() * v1.len_sqr() ) ) );
 		}
 
+		static project( from, to, out=null ){
+			// Modified from https://github.com/Unity-Technologies/UnityCsReference/blob/master/Runtime/Export/Math/Vector3.cs#L265
+			// dot( a, b ) / dot( b, b ) * b
+			out = out || new Vec3();
+
+			let denom = Vec3.dot( to, to );
+			if( denom < 0.000001 ) return out.copy( Vec3.ZERO );
+		
+			let scl	= Vec3.dot( from, to ) / denom;
+			return out.set( to[0] * scl, to[1] * scl, to[2] * scl );
+		}
+
+		static project_plane( from, norm, out=null ){
+			// a - ( dot( a, b ) / dot( b, b ) * b )
+			out = out || new Vec3();
+
+			let denom = Vec3.dot( norm, norm );
+			if( denom < 0.000001 ) return out.copy( Vec3.ZERO );
+		
+			let scl	= Vec3.dot( from, norm ) / denom;
+			out.set( norm[0] * scl, norm[1] * scl, norm[2] * scl );
+
+			return Vec3.sub( from, out, out );
+		}
+
 		//-------------------------------------------
 
 		static len( a, b ){ return Math.sqrt( (a[0]-b[0]) ** 2 + (a[1]-b[1]) ** 2 + (a[2]-b[2]) ** 2 ); }
@@ -476,6 +512,18 @@ class Vec3 extends Float32Array{
 			out[2] = vz + 2 * z2;
 			return out;
 		}
+
+		static lerp( a, b, t, out=null ){
+			out = out || new Vec3();
+
+			let ti = 1 - t; // Linear Interpolation : (1 - t) * v0 + t * v1;
+			out[0] = a[0] * ti + b[0] * t;
+			out[1] = a[1] * ti + b[1] * t;
+			out[2] = a[2] * ti + b[2] * t;
+			return out;
+		}
+
+
 
 
 	////////////////////////////////////////////////////////////////////
@@ -578,29 +626,6 @@ export function bezier(out, a, b, c, d, t) {
 		//	out[2] = s * v[2];
 		//	return out;
 		//}
-
-// https://docs.unity3d.com/ScriptReference/Vector3.Project.html
-// https://github.com/Unity-Technologies/UnityCsReference/blob/master/Runtime/Export/Math/Vector3.cs#L265
-function vec3_project( v, v_norm, out ){
-	let sqr = Vec3.dot( v_norm, v_norm );
-	out = out || new Vec3();
-
-	if( sqr < 0.000001 ) return out.copy( Vec3.ZERO );
-
-	let dot 	= Vec3.dot( v, v_norm ),
-		sqr_i	= 1 / sqr;
-
-	return out.set(
-		//v_norm[0] * dot * sqr_i,
-		//v_norm[1] * dot * sqr_i,
-		//v_norm[2] * dot * sqr_i
-
-		v_norm[0] * dot / sqr,
-		v_norm[1] * dot / sqr,
-		v_norm[2] * dot / sqr
-	);
-}
-
 
 //https://keithmaggio.wordpress.com/2011/02/15/math-magician-lerp-slerp-and-nlerp/
 

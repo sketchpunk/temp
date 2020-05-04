@@ -103,7 +103,7 @@ class Quat extends Float32Array{
  			return out;
 		}
 
-		get_euler( out=null ){ //order="YZX"
+		get_euler( out=null, in_deg=false ){ //order="YZX"
 			//http://bediyap.com/programming/convert-Quat-to-euler-rotations/
 			//http://schteppe.github.io/cannon.js/docs/files/src_math_Quat.js.html
 			let x		= this[0],
@@ -138,10 +138,11 @@ class Quat extends Float32Array{
 			}
 
 			//..............................
+			let deg = (in_deg)? 180 / Math.PI : 1;
 			out		= out || new Vec3();
-			out[0]	= roll;
-			out[1]	= pitch;
-			out[2]	= yaw;
+			out[0]	= roll	* deg;
+			out[1]	= pitch	* deg;
+			out[2]	= yaw	* deg;
 			return out;
 		}
 
@@ -216,7 +217,8 @@ class Quat extends Float32Array{
 					phi_s * Math.cos( theta )
 				];
 
-			return Quat.look( v, up || Vec3.UP, this );
+			this.from_look( v, up || Vec3.UP );
+			return this;
 		}
 		
 		from_look( vDir, vUp ){
@@ -407,12 +409,20 @@ class Quat extends Float32Array{
 		}
 
 		//-------------------------------------------
-
 		from_euler( x, y, z ){ //order="YXZ", Values in Degrees, will be converted to Radians by function
-			var xx = x * 0.01745329251 * 0.5,
-				yy = y * 0.01745329251 * 0.5,
-				zz = z * 0.01745329251 * 0.5,
-				c1 = Math.cos( xx ),
+			let xx, yy, zz;
+
+			if( arguments.length == 3 ){
+				xx = x * 0.01745329251 * 0.5;
+				yy = y * 0.01745329251 * 0.5;
+				zz = z * 0.01745329251 * 0.5;
+			}else if( arguments.length == 1 ){
+				xx = x[0] * 0.01745329251 * 0.5;
+				yy = x[1] * 0.01745329251 * 0.5;
+				zz = x[2] * 0.01745329251 * 0.5;
+			}
+
+			let	c1 = Math.cos( xx ),
 				c2 = Math.cos( yy ),
 				c3 = Math.cos( zz ),
 				s1 = Math.sin( xx ),

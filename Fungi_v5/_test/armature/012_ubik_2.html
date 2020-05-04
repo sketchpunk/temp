@@ -1,0 +1,525 @@
+<!DOCTYPE html><script type="module">
+import App,{ Maths, Vec3, Quat, Transform }			from "../../fungi/App.js";
+import FacedCube from "../../fungi/geo/FacedCube.js";
+import DragPoints   from "../../fungi.test/DragPoints.js";
+
+//#####################################################
+App.builder( true )
+	.use_events()
+	.use_armature()
+	.set_camera( 0, 20, 3, 0, 0.5, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+let gIK;
+const HAND_L = 0;
+const HAND_R = 1;
+
+
+function init(){
+	App.Debug.set_depth_test( false );
+
+	DragPoints.init().set_move_handler( on_gizmo_move );
+	gIK = new UBIK(); //gIK.head_ee.rot.rot_deg( 30, "x" );
+	
+	DragPoints.pnt( gIK.el.pos, HAND_L );
+	DragPoints.pnt( gIK.er.pos, HAND_R );
+
+
+	Visualizer.init();
+	gIK.update();
+
+	return true;
+}
+
+
+function on_gizmo_move( pos ){
+	let pnt = DragPoints.get_pnt();
+	
+	switch( pnt.data ){
+		case HAND_L : gIK.el.pos.copy( pos ); break;
+		case HAND_R : gIK.er.pos.copy( pos ); break;
+	}
+
+	gIK.update();
+}
+
+class Node{
+	local = new Transform();
+	world = new Transform();
+
+	constructor( lpos=null ){
+		if( lpos ) this.local.pos.copy( lpos );
+	}
+
+	world_update( p_ws ){
+		this.world.from_add( p_ws, this.local );
+		return this;
+	}
+
+	//Take World Rotation and convert to local space by passing in parent ws rotation.
+	to_local_rot( p_ws_rot ){
+		this.local.rot.copy( this.world.rot ).pmul_invert( p_ws_rot );
+		return this;
+	}
+}
+
+class UBIK{
+	constructor(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Configs
+		this.arm_len 			= 1.0;
+		this.arm_dn_len			= this.arm_len * 0.48;
+		this.arm_up_len			= this.arm_len * 0.52;
+		this.neck_offset		= [ 0, -0.12,  -0.06 ];
+		this.chest_offset		= [ 0, -0.15, 0 ];
+		this.shoulder_offset 	= [ 0, 0, 0.3 ];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Body Nodes
+		this.chest		= new Node( [0,0.7,0] );
+
+		this.clavicle_l	= new Node( [ 0.07, 0, 0 ] );
+		this.clavicle_l.local.rot.from_axis_angle( Vec3.UP, Math.PI * 0.5 );
+		this.clavicle_l_bind = this.clavicle_l.local.rot.clone();
+
+		this.clavicle_r	= new Node( [ -0.07, 0, 0 ] );
+		this.clavicle_r.local.rot.from_axis_angle( Vec3.UP, Math.PI * -0.5 );
+		this.clavicle_r_bind = this.clavicle_r.local.rot.clone();
+
+		this.arm_up_l	= new Node( this.shoulder_offset );
+		this.arm_up_r	= new Node( this.shoulder_offset );
+
+		this.arm_dn_l	= new Node( [ 0, 0, this.arm_up_len ] );
+		this.arm_dn_r	= new Node( [ 0, 0, this.arm_up_len ] );
+
+		this.hand_l		= new Node( [ 0, 0, this.arm_dn_len ] );
+		this.hand_r		= new Node( [ 0, 0, this.arm_dn_len ] );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// VR End Effectors
+		this.head		= Transform.from_pos( 0, 1, 0 );
+		this.el 		= Transform.from_pos( 0.3, 0.5, 0.5 );
+		this.er 		= Transform.from_pos( -0.3, 0.5, 0.5 );
+	}
+
+	update_hierarchy(){
+		// Chest is the Root
+		this.chest.world.copy( this.chest.local );
+
+		// LEFT ARM
+		this.clavicle_l.world_update( this.chest.world );
+		this.arm_up_l.world_update( this.clavicle_l.world );
+		this.arm_dn_l.world_update( this.arm_up_l.world );
+		this.hand_l.world_update( this.arm_dn_l.world );
+
+		// RIGHT ARM
+		this.clavicle_r.world_update( this.chest.world );
+		this.arm_up_r.world_update( this.clavicle_r.world );
+		this.arm_dn_r.world_update( this.arm_up_r.world );
+		this.hand_r.world_update( this.arm_dn_r.world );
+	}
+
+	update(){
+		App.Debug.reset();
+
+		//this.calc_chest_loc();
+		this.calc_clavicle();
+		this.calc_arms();
+		
+		this.update_hierarchy();
+		Visualizer.update();
+	}
+
+	calc_chest_loc(){
+		//https://www.youtube.com/watch?v=wI5Vn-RQ2Uk&list=PLT4SeajOa6mZuzBdp5GC5NrKy4pdnVj0b&index=6
+		let chest = this.chest;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Figure out where the Chest is going to be located 
+		// based on the locatio of the head with some offsets
+		let pos = new Vec3();
+		pos.from_quat( this.head.rot, this.neck_offset )	// Rotate Nect offset based on Head's rot
+		chest.local.pos
+			.from_add( pos, this.chest_offset )				// Add Chest offset from Neck Position
+			.add( this.head.pos );							// Then add the current head position
+
+		//App.Debug.pnt( Vec3.add( this.head.pos, pos), "yellow", 0.05, 1 );	// Visually see Neck Pos
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Figure out how to rotate the chest.
+
+		// First get the vectos directions from the chest to the hand effectors
+		// Then get the vector in the middle, This will be our general direction
+		let to_left		= Vec3.sub( this.el.pos, chest.local.pos );
+		let to_right	= Vec3.sub( this.er.pos, chest.local.pos );
+		let to_center 	= Vec3.add( to_left, to_right );
+
+		//App.Debug.ln( chest.local.pos, Vec3.add( chest.local.pos, to_left ), "orange" );	// See Directions
+		//App.Debug.ln( chest.local.pos, Vec3.add( chest.local.pos, to_right ), "orange" );
+		//App.Debug.ln( chest.local.pos, Vec3.add( chest.local.pos, to_center ), "yellow" );
+
+		// Next we get the Head's Look Direction
+		let head_dir 	= Vec3.transform_quat( Vec3.FORWARD, this.head.rot );
+		//App.Debug.ln( this.head.pos, Vec3.add( this.head.pos, head_dir ), "yellow" ); // See Head Dir
+
+		// Next we Move the vectors to XZ plane and do a halway Lerp between our 
+		// Hands Center and Head Dir. So our chest's rotation will be a Mix of
+		// to vectors
+		let look = Vec3.lerp(
+			to_center.set_y( 0 ),
+			head_dir.set_y( 0 ),
+			0.5 ).norm();
+
+		chest.local.rot.from_look( look, Vec3.UP ); // Chest is root, So Local == World
+		//App.Debug.ln( chest.local.pos, Vec3.add( chest.local.pos, look ), "cyan" );
+	}
+
+	calc_clavicle(){
+		// https://www.youtube.com/watch?v=hQIQOrrQCvE&list=PLT4SeajOa6mZuzBdp5GC5NrKy4pdnVj0b&index=8
+		// Reset Local rotations back to Bind Pose.
+		this.clavicle_l.local.rot.copy( this.clavicle_l_bind );
+		this.clavicle_r.local.rot.copy( this.clavicle_r_bind );
+
+		// Compute World Space, we care about our clavicle's bind rotation
+		// but in relation to our current chest position / rotation
+		this.update_hierarchy();
+
+		// Now move the bones in relation to where the End Effectors are.
+		this.update_clavicle( this.clavicle_l, this.arm_up_l, this.el, 1 );
+		this.update_clavicle( this.clavicle_r, this.arm_up_r, this.er, -1 );
+	}
+
+	update_clavicle( clav, arm, hand, dir_scl=1 ){
+		let chestws = this.chest.world;
+
+		//App.Debug.pnt( clav.world.pos, "yellow", 0.06 );
+		//App.Debug.pnt( arm.world.pos, "yellow", 0.06 );
+
+		let to_hand 	= Vec3.sub( hand.pos, chestws.pos );
+		let fwd_ratio	= Vec3.dot( to_hand, Vec3.FORWARD ) / this.arm_len;
+		let up_ratio 	= Vec3.dot( to_hand, Vec3.UP ) / this.arm_len;
+
+		//App.Debug.ln( chestws.pos, Vec3.add( chestws.pos, to_hand ), "red" );
+
+		let y_rot = 0, z_rot = 0;
+		if( fwd_ratio > 0 ){
+			y_rot = Maths.clamp( (fwd_ratio - 0.5) * 20, 0.0, 33 ) * -dir_scl; // Max Rotation of 33
+		}else{
+			y_rot = Maths.clamp( (fwd_ratio - 0.08) * 20, -20, 0 ) * -dir_scl;
+		}
+
+		if( up_ratio > 0 ){
+			z_rot = Maths.clamp( (up_ratio - 0.2) * 20, 0.0, 33 ) * dir_scl;
+		}
+
+		clav.local.rot
+			.from_euler( 0, y_rot, z_rot )	// Specifc Rotation	in WS
+			.mul( clav.world.rot )			// Apply it ot our WS Clav
+			.pmul_invert( chestws.rot );	// To Local Space.
+	}
+
+	calc_arms(){
+		// Arm Bones Have no bind rotation, they are placed in a TPose position
+		// because of the clavicle bone's bind rotation. Since no bind rotation, just reset to identity.
+		this.arm_up_l.local.rot.reset();
+		this.arm_up_r.local.rot.reset();
+		this.arm_dn_l.local.rot.reset();
+		this.arm_dn_r.local.rot.reset();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// With the clavicles moving then arms reset, Recompute the world space of everything again
+		// so we can know where the shoulders live in world space
+		this.update_hierarchy();
+
+		this.update_arm( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
+		this.update_arm( this.clavicle_r, this.arm_up_r, this.arm_dn_r, this.er, -1 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.update_hierarchy();
+		this.elbow_down( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
+		this.update_hierarchy();
+		this.elbow_zones( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
+	}
+
+	update_arm( clav, arm_u, arm_d, hand, dir_scl=1 ){
+		let q 		= new Quat();
+		let axis	= new Vec3();
+		let rad;
+		//App.Debug.pnt( arm_u.world.pos, "yellow", 0.05 );
+		//App.Debug.transform( arm_u.world, 0.23 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Aim the arm Toward Target ( SWING )
+		let arm_dir		= Vec3.transform_quat( Vec3.FORWARD, arm_u.world.rot );	// WS Forward dir of UpperArm
+		let to_hand		= Vec3.sub( hand.pos, arm_u.world.pos );				// Dir Shoulder > Hand
+		let to_hand_len	= to_hand.len();										// Length to Hand from Shoulder
+		to_hand.norm(); // Normalize 
+
+		//App.Debug.ln( arm_u.world.pos, Vec3.add( arm_u.world.pos, arm_dir ), "red" );
+		//App.Debug.ln( arm_u.world.pos, Vec3.add( arm_u.world.pos, to_hand ), "orange" );
+		
+		q.from_unit_vecs( arm_dir, to_hand );	// Rotate from Bind Direction to IK Dir
+		arm_u.world.rot.pmul( q );						// Apply to Upper Bone in WS
+
+		// Apply some Twist
+		//arm_u.world.rot.pmul_axis_angle( to_hand, Maths.to_rad( 90 * -dir_scl ) );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Calculate the Angle For the Upper Arm
+		axis.from_quat( arm_u.world.rot, Vec3.UP ).scale( dir_scl );	// Get WS UP to use as a Rotation Axis
+		rad = law_cos( this.arm_up_len, to_hand_len, this.arm_dn_len );	// Angle in Relation to the Triangle
+		arm_u.world.rot.pmul_axis_angle( axis, rad );					// Apply to new Rotation
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Calculate the Angle of the Elbow
+		arm_d.world_update( arm_u.world );								// Bring World Space
+		axis.from_quat( arm_d.world.rot, Vec3.UP ).scale( dir_scl );	// Get its Axis of Rotation in WS (Up)
+		//App.Debug.pnt( arm_d.world.pos, "red", 0.05 );
+
+		rad = law_cos( this.arm_up_len, this.arm_dn_len, to_hand_len ) - Math.PI;	// Get Angle inverted
+		arm_d.world.rot.pmul_axis_angle( axis, rad );								// Apply
+		//App.Debug.ln( arm_d.world.pos, Vec3.add( arm_d.world.pos, rot_axis ), "red" );
+		//App.Debug.transform( arm_u.world );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Copy Changes to Local Space.
+		//arm_u.local.rot.copy( arm_u.world.rot ).pmul_invert( clav.world.rot );
+		//arm_d.local.rot.copy( arm_d.world.rot ).pmul_invert( arm_u.world.rot );
+		arm_u.to_local_rot( clav.world.rot );
+		arm_d.to_local_rot( arm_u.world.rot );
+	}
+
+	elbow_down( clav, arm_u, arm_d, hand, dir_scl ){
+		let apos 		= arm_u.world.pos;	// Shoulder Position in WS
+		
+		// First I need some vectors to see the directions
+		let to_hand		= Vec3.sub( hand.pos, arm_u.world.pos );			// From Shoulder to Hand Direction
+		let to_elbow	= Vec3.sub( arm_d.world.pos, arm_u.world.pos );		// From Shoulder to Elbow Direction
+		let proj_pnt	= Vec3.project( to_elbow, to_hand ).add( apos );	// Closest point between Hand + Elbow Vector, on hand dir
+		let elbow_dir	= Vec3.sub( arm_d.world.pos, proj_pnt ).norm();		// Direction from Projected Point to Elbow Dir
+		/*
+		App.Debug.ln( apos, hand.pos, "orange" );
+		App.Debug.ln( proj_pnt, arm_d.world.pos, "orange" );
+		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, Vec3.DOWN ), "orange" );
+		App.Debug.pnt( proj_pnt, "orange", 0.05 );
+		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, elbow_dir ), "red" );
+		*/
+		let cross		= Vec3.cross( to_hand, Vec3.DOWN );		// Get cross Vector from our Hand and target Direction
+		let down_orth	= Vec3.cross( cross, to_hand ).norm();	// The cross & hand will now give us a downward direction that is
+																// axis aligned with the to_hand vector.
+		/*
+		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, cross ), "yellow", null, true );
+		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, down_orth ), "yellow", null, true );
+		*/
+		// Rotate upper arm so that the elbow is pointing downward.
+		let q = Quat.unit_vecs( elbow_dir, down_orth );	//let ang = Vec3.angle( elbow_dir.norm(), b );
+		arm_u.world.rot.pmul( q );	//arm_u.world.rot.pmul_axis_angle( to_hand.norm(), -ang );
+		arm_u.to_local_rot( clav.world.rot );
+	}
+	
+	elbow_zones( clav, arm_u, arm_d, hand, dir_scl ){
+		let apos = arm_u.world.pos;	// Shoulder Position in WS
+
+		// Figure Vector to defined Zones and where the hand is.
+		let to_hand = Vec3.sub( hand.pos, apos );
+		let ch_side	= Vec3.transform_quat( Vec3.LEFT, this.chest.world.rot );
+		let ch_up 	= Vec3.transform_quat( Vec3.UP, this.chest.world.rot );
+		let ch_fwd 	= Vec3.transform_quat( Vec3.FORWARD, this.chest.world.rot );
+
+		// Project hand onto Zone Plane to
+		let plane_hand_dir = Vec3.project_plane( to_hand, ch_up );
+
+		App.Debug
+			.circle_quat( this.chest.world.rot, apos, 0.2, "yellow" )
+			.ln( apos, Vec3.add( apos, ch_side ), "yellow" )
+			//.ln( apos, Vec3.add( apos, ch_up ), "yellow" )
+			.ln( apos, Vec3.add( apos, ch_fwd ), "yellow" )
+			//.ln( apos, hand.pos, "orange" )
+			.ln( apos, Vec3.add( apos, plane_hand_dir ), "orange", null, true )
+			.ln( Vec3.add( apos, ch_side ), Vec3.add( apos, plane_hand_dir ), "orange", null, true );
+			;
+		
+		let max_dot		= Math.sin( Maths.to_rad(70) );		// How Far in the zone
+		let dot 		= Vec3.dot( plane_hand_dir.norm(), ch_side );	// What is our Dot Angle?
+		let max_rot		= 90;
+
+		// If DOT is negative, it has passed into our Chest Zone
+		if( dot < 0 ){
+			// Scale our Zone Location 
+			let t = Math.min( Math.abs( dot / max_dot ), 1.0 );
+
+			arm_u.world.rot.pmul_axis_angle( to_hand.norm(), Maths.to_rad( max_rot * t ) );
+			arm_u.to_local_rot( clav.world.rot );
+			
+			console.log( max_dot, dot, t );
+		}
+	}
+}
+
+		
+
+		/*
+		// unreal x = forward, y=right, z=up
+		
+		// this is in Local space, so it doesn't normalize based on its length but 
+		// the arm's length instead, so it can over or under arm length
+		// The idea is that the elbow points down then points left the further across the chest
+		// and pass the shoulder point in the XZ plane
+		let hand_norm = ( hand.pos / arm_len );
+		let twist = ElbowWeight(130) * Max( hand_norm.x * dir_scl + distance_start (0.2), 0) + offset_angle;
+
+		When the hand passes the shoulder point to go across the chest, the elbow will more point more aligned
+		to the x-axis, so point left or right.
+
+		*/
+
+// y=x*(2-x)  // Quat Out Easing Speed quickly to 1
+// --k * k * k * k * k + 1; quint easing, faster to one then quat
+
+/*
+So if you have a vector A and a plane with normal
+N, the vector that is resulted by projecting A on
+the plane will be B = A - (A.dot.N)N, where B is the
+new vector, .dot. represents a dot product operation,
+and the quantity in parentheses is multiplying N.
+*
+
+/*
+P is the point being evaluated, N is the normalized vector perpendicular to the plane.
+
+//POP means Point On Plane
+D=-(POP*N);
+
+Plane formula:
+//Multiply vectors P and N then add D
+P*N+D = DistanceFromPlane;
+
+If you were to add (POPN) to D instead of (PN) you would get zero, because D is actualy the negated version of (POP*N).
+
+Now that you have the distance from the plane, all you have to do to project P onto the plane is this:
+
+//create a new vector the length of
+//DistanceFromPlane(DFP) in the direction of
+//the normal on the plane
+ProjVec=N.xDFP + N.yDFP + N.z*DFP
+
+//subtracting ProjVec from P will place P on your plane
+P=P-ProjVec;
+*/
+
+//distanceToPoint: function ( point ) { return this.normal.dot( point ) + this.constant;  // constant can be zero, its distance from origin to plane
+//projectPoint: function ( point, target ) {
+//return target.copy( this.normal ).multiplyScalar( - this.distanceToPoint( point ) ).add( point );
+
+function law_cos( a, b, c ){
+	let v = ( a*a + b*b - c*c ) / ( 2*a*b );
+	return Math.acos( (( v < -1 )? -1 : ( v > 1)? 1 : v) ) // Clamp Value -1 to 1
+}
+
+class Visualizer{
+	static init(){
+		this.head		= FacedCube("head");		this.head.Node.set_scl( 0.15 );
+		this.chest		= FacedCube("chest");		this.chest.Node.set_scl( 0.1 );
+
+		this.clavicle_l	= FacedCube("clavicle_l");	this.clavicle_l.Node.set_scl( 0.05 );
+		this.clavicle_r = FacedCube("clavicle_r");	this.clavicle_r.Node.set_scl( 0.05 );
+
+		this.arm_up_l	= FacedCube("arm_up_l");	this.arm_up_l.Node.set_scl( 0.07 );
+		this.arm_up_r	= FacedCube("arm_up_r");	this.arm_up_r.Node.set_scl( 0.07 );
+
+		this.arm_dn_l	= FacedCube("arm_dn_l");	this.arm_dn_l.Node.set_scl( 0.05 );
+		this.arm_dn_r	= FacedCube("arm_dn_r");	this.arm_dn_r.Node.set_scl( 0.05 );
+
+		this.hand_l		= FacedCube("hand_l");		this.hand_l.Node.set_scl( 0.07 );
+		this.hand_r		= FacedCube("hand_r");		this.hand_r.Node.set_scl( 0.07 );
+
+		this.nodes = [ 
+			this.chest,			gIK.chest,
+			
+			this.clavicle_l,	gIK.clavicle_l,
+			this.arm_up_l,		gIK.arm_up_l,
+			this.arm_dn_l,		gIK.arm_dn_l,
+			this.hand_l,		gIK.hand_l,
+			/**/
+
+			this.clavicle_r,	gIK.clavicle_r,
+			this.arm_up_r,		gIK.arm_up_r,
+			this.arm_dn_r,		gIK.arm_dn_r,
+			this.hand_r,		gIK.hand_r,
+		];
+	}
+
+	static update(){
+		this.head.Node.set_pos( gIK.head.pos ).set_rot( gIK.head.rot );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Move All the Cubes to match the arm positions
+		let a;
+		for( let i=0; i < this.nodes.length; i+=2 ){
+			a = this.nodes[ i+1 ];
+			this.nodes[ i ].Node.set_pos( a.world.pos ).set_rot( a.world.rot );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Points and Lines
+		App.Debug //.reset()
+			.transform( gIK.head, 0.15 )
+
+			.ln( gIK.clavicle_l.world.pos, gIK.arm_up_l.world.pos, "yellow", null, true )
+			.ln( gIK.arm_up_l.world.pos, gIK.arm_dn_l.world.pos, "cyan", null, true )
+			.ln( gIK.arm_dn_l.world.pos, gIK.hand_l.world.pos, "cyan", null, true )
+
+			.ln( gIK.clavicle_r.world.pos, gIK.arm_up_r.world.pos, "yellow", null, true )
+			.ln( gIK.arm_up_r.world.pos, gIK.arm_dn_r.world.pos, "cyan", null, true )
+			.ln( gIK.arm_dn_r.world.pos, gIK.hand_r.world.pos, "cyan", null, true )
+
+			.pnt( gIK.el.pos, "green", 0.1, 6 ).transform( gIK.el, 0.15 )
+			.pnt( gIK.er.pos, "cyan", 0.1, 6 ).transform( gIK.er, 0.15 );
+
+		//App.Debug
+		//	.transform( gIK.arm_up_l.world )
+		//	.transform( gIK.arm_dn_l.world );
+	}
+}
+
+/*
+NOTES
+
+- Can compute the length of the arms based on the height of the person.
+Its not perfect, its just a guestimate based on human body averages.
+
+Person_Height / 2  - (Chest_Center to Shoulder Length) = Arm Length
+
+Found a tutorial on how to do specific IK Stuff in VR, so I built myself a little IK Rig from scratch to learn + prototype with. Hopefully this will teach me a few things so I can built FullBody IK at some point.
+
+
+
+Would be fun to use VR or Xbox Kinects to control characters on the Web. Might be good for VR chats or whatever. Doesn't really matter, just want to learn, build something, open source it, then move onto the next challenge... Its a vicious loop I'm stuck in... But its fun and comes with unlimited coffee :)
+
+*/
+
+window.UI = {
+	head_lon : 0,
+	head_lat : 0,
+
+	set_head_rot : function( lon=null, lat=null ){
+		if( lon != null ) this.head_lon = lon;
+		if( lat != null ) this.head_lat = lat;
+		gIK.head.rot.from_polar( this.head_lon, this.head_lat );
+		this.update();
+	},
+
+	update :_=>{ gIK.update(); App.render(); },
+};
+
+</script><page-layout>
+
+<div style="position:absolute; top:10px; left:10px;">
+	<input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_head_rot( null, this.value );"><br>
+	<input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_head_rot( this.value );">
+</div>
+
+</page-layout>

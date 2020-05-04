@@ -183,6 +183,13 @@ class Transform{
 
 			return inv;
 		}
+
+		static from_pos( x, y, z ){
+			let t = new Transform();
+			if( arguments.length == 3 )			t.pos.set( x, y, z );
+			else if( arguments.length == 1 )	t.pos.copy( x );
+			return t;
+		}
 }
 
 export default Transform;

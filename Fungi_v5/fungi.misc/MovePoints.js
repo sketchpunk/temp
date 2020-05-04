@@ -1,16 +1,16 @@
 import App, {Vec3}	from "../fungi/App.js";
 import Points		from "../fungi/geo/Points.js";
 
-class DragPoints{
+class MovePoints{
     // #region STATIC METHODS
     static init( priority=800 ){
-        App.ecs.sys_add( DragPointSys, priority );
-        App.Components.reg( DragPoints );
+		App.ecs.sys_add( MovePointSys, priority );
+		App.Components.reg( MovePoints );
     }
 
 	static $( name, e=null ){
 		e = Points.$( e );
-		e.add_com( "DragPoints" );
+		e.add_com( "MovePoints" );
 		e.Points.use_size 	= 0.07;
 		e.Points.use_shape 	= 1;
 		return e;
@@ -57,11 +57,13 @@ class DragPoints{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         return ( idx != null );
     }
-    
-	add( pos ){
+	
+	// TODO, Base Color, Sel Color, Data, fn get_point( idx=null );
+	add( pos, data=null, ){
 		let o = {
 			pos		: new Vec3( pos ),
 			color 	: "red",
+			data	: data,
 		};
         this.points.push( o );
         this.updated = true;
@@ -92,6 +94,14 @@ class DragPoints{
         }
         return this;
     }
+
+	get_pnt( idx=null ){
+		if( idx == null ){
+			if( this.sel_idx == null ){ console.error("No Index or Selected Index to get position"); return null; }
+			idx = this.sel_idx;
+		}
+		return this.points[ idx ];		
+	}
 
     get_pos( idx=null ){ 
 		if( idx == null ){
@@ -127,11 +137,11 @@ class DragPoints{
 } 
 
 
-function DragPointSys( ecs ){
-	let c, ary = ecs.query_comp( "DragPoints" );
+function MovePointSys( ecs ){
+	let c, ary = ecs.query_comp( "MovePoints" );
 	if( !ary ) return;
 	for( c of ary ) if( c.updated ) c.update();
 }
 
 
-export default DragPoints;
+export default MovePoints;

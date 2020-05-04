@@ -80,6 +80,13 @@ class GizmoMove{
 		return false;
 	}
 
+	hide(){ this.ent.info.active = false; return this; }
+	show( pos ){
+		this.ent.Node.set_pos( pos );	// Move Gizmo to starting position.
+		this.ent.info.active = true;	// Enable it
+		return this;
+	}
+
 	// #region Drag Handling
 	drag_begin( pos, axis, pnt ){
 		// Define the Dragging Line

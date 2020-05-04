@@ -1,9 +1,6 @@
 <!DOCTYPE html><script type="module">
 import App, {Vec3}	from "../../fungi/App.js";
-import RaySystem	from "../../fungi.ray/RaySystem.js";
-import MovePoints 	from "../../fungi.misc/MovePoints.js";
-import GizmoMove	from "../../fungi.misc/GizmoMove.js";
-
+import DragPoints   from "../../fungi.test/DragPoints.js";
 import Spline		from "../../fungi/maths/Spline.js";
 
 //#####################################################
@@ -15,64 +12,38 @@ App.builder( true )
 	.build();
 
 //#####################################################
-let ePoints, eGizmo, gSpline;
+let gSpline;
 
 function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Initialize 
-	App.Debug.set_depth_test( false );
-	MovePoints.init();
-	RaySystem.init( 0, on_ray );
-	GizmoMove.init( 0, on_gizmo_move );
-	
-	eGizmo	= GizmoMove.$( "Gizmo", false, false );
-	ePoints	= MovePoints.$( "Drag" );
-	gSpline	= Spline.from_hermite( true );
+    App.Debug.set_depth_test( false );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    DragPoints.init().set_move_handler( on_gizmo_move );
+    DragPoints.pnt( [0,0,0] );
+    DragPoints.pnt( [0.5,0.5,0] );
+    DragPoints.pnt( [0,1.0,0] );
+    DragPoints.pnt( [-0.5,0.5,0] );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let dp = ePoints.MovePoints;
-	dp
-		.add( [0,0,0] )
-		.add( [0.5,0.5,0] )
-		.add( [0,1.0,0] )
-		.add( [-0.5,0.5,0] );
-
-	spline_load();
-	spline_draw();
+    gSpline	= Spline.from_hermite( true );
+	on_gizmo_move();
 
 	return true;
 }
 
-function on_ray( ray ){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// If gizmo is active, check if its a hit. if not, hide it.
-	if( eGizmo.info.active ){
-		if( eGizmo.GizmoMove.is_hit( ray ) )	return;
-		else 									eGizmo.info.active = false;
-	}
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// If not hit the gizmo, check if there is a point that
-	if( ePoints.MovePoints.is_hit( ray ) ){
-		let pos = ePoints.MovePoints.get_pos();
-		eGizmo.Node.set_pos( pos );
-		eGizmo.info.active = true;
-	}	
-}
-
 function on_gizmo_move( pos ){ 
-	ePoints.MovePoints.move( pos );
 	spline_load();
 	spline_draw();
 }
 
-
 function spline_load(){
-	let dp = ePoints.MovePoints;
+	let pnts = DragPoints.get_pnts();
 
 	gSpline.clear();
-	for( let i=0; i < dp.points.length; i++ ){
-		gSpline.add( dp.points[ i ].pos );
+	for( let i=0; i < pnts.length; i++ ){
+		gSpline.add( pnts[ i ].pos );
 	}
 }
 

@@ -1,0 +1,296 @@
+<!DOCTYPE html><script type="module">
+import App,{ Maths, Vec3, Quat, Transform }			from "../../fungi/App.js";
+import DragPoints   from "../../fungi.test/DragPoints.js";
+
+//#####################################################
+App.builder( true )
+	.use_events()
+	.use_armature()
+	.set_camera( 90, 20, 3, 0, 0.5, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+let gIK;
+const HAND_L = 0;
+const HAND_R = 1;
+
+
+function init(){
+	App.Debug.set_depth_test( false );
+	DragPoints.init().set_move_handler( on_gizmo_move );
+
+	gIK = new UBIK(); //	//gIK.head_ee.rot.rot_deg( 30, "x" );
+	gIK.update();
+
+	DragPoints.pnt( gIK.hand_l_ee.pos, HAND_L );
+	DragPoints.pnt( gIK.hand_r_ee.pos, HAND_R );
+
+	return true;
+}
+
+function on_gizmo_move( pos ){
+	let pnt = DragPoints.get_pnt();
+	
+	switch( pnt.data ){
+		case HAND_L : gIK.hand_l_ee.pos.copy( pos ); break;
+		case HAND_R : gIK.hand_r_ee.pos.copy( pos ); break;
+	}
+
+	gIK.update();
+}
+
+class Node{
+	local = new Transform();
+	world = new Transform();
+
+	world_update( p_ws ){
+		this.world.from_add( p_ws, this.local );
+		return this;
+	}
+
+	static from_pos( x, y, z ){
+		let n = Node;
+		n.local.pos.set( x, y, z );
+		return n;
+	}
+}
+
+class UBIK{
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// END EFFECTORS
+	head_ee		= Transform.from_pos( 0, 1, 0 );
+	hand_r_ee	= Transform.from_pos( -0.3, 0.5, 0.5 );
+	hand_l_ee	= Transform.from_pos( 0.3, 0.5,  0.5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// NODES
+	chest		= new Node();
+	clavicle_l 	= new Node();
+	clavicle_r	= new Node();
+	arm_up_l	= new Node();
+	arm_up_r	= new Node();
+
+	arm_dn_l 	= new Node();
+	arm_dn_r 	= new Node();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	arm_len 		= 1.0;
+	arm_dn_len		= 1.0 * 0.48; // * arm_len
+	arm_up_len		= 1.0 * 0.52; // * arm_len
+
+	chest_offset	= new Vec3( 0, -0.12, 0 );
+	neck_offset		= new Vec3( 0, -0.12,  -0.1 );
+	shoulder_offset	= new Vec3( 0.3, 0, 0 );
+
+	update(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let H = this.head_ee,
+			L = this.hand_l_ee,
+			R = this.hand_r_ee;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		App.Debug
+			.reset()
+			.pnt( H.pos, "yellow", 0.2, 6 ).transform( H, 0.2 )
+			.pnt( R.pos, "cyan", 0.08, 6 ).transform( R, 0.1 )
+			.pnt( L.pos, "green", 0.08, 6 ).transform( L, 0.1 )
+		;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.calc_chest_loc();
+		this.calc_clavical();
+		this.calc_arms();
+	}
+
+	calc_chest_loc(){
+		// https://www.youtube.com/watch?v=wI5Vn-RQ2Uk&list=PLT4SeajOa6mZuzBdp5GC5NrKy4pdnVj0b&index=6
+		// Reduced the original math, No need for lots of Euler stuff and no need to switch around spaces.
+		// Easy to do things in local space of the neck offset, then move it to WS when done.
+		// Only need Euler to reduce the Head effector's rotation to only the Y Axis.
+
+		let euler 	= new Vec3();
+		let pos		= new Vec3();
+		let rot		= new Quat();
+		let H		= this.head_ee;	// Head end Effector
+		let CH 		= this.chest;	// Chest Node
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+		/*
+		// TODO - Orignally he had rotate by XZ, then later took out X, so only Z 
+		// This might not matter, the chest rotation only has Y
+		H.rot.get_euler( euler, true ); 
+		rot.from_euler( 0, 0, euler.z  )
+		*/
+		
+		pos.from_quat( H.rot, this.neck_offset ); // Just rotate the neck offset by the Head's WS rotation.
+		App.Debug.pnt( Vec3.add( H.pos, pos ), "yellow", 0.03, 1 ); // See Neck Point
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Add our Chest offset to our Rotated neck,
+		// And only save the Y rotation of the head to local rotation.
+		// this way, whatever XZ dir the face looks, so does the chest.
+		H.rot.get_euler( euler, true ); 			// Convert Quat to Euler.
+		CH.local.rot.from_euler( 0, euler.y, 0 );	// TODO - may need to do 0,0,euler.z
+		CH.local.pos.from_add( pos, this.chest_offset );		
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Special World Space Setup for Chest.
+		CH.world.pos.from_add( H.pos, CH.local.pos );	// Offset pos from Head.
+		//CH.world.rot.copy( CH.local.rot );				// Do not want Head's rotation, keep the local, Not doing this by Part 9
+
+
+		// Second version at Part 9 changes how the chest rotate.
+		// The idea is that you create a unit vector from the chest to the 2 hand effectors
+		// Then you can add them up to get a vector that exists in the middle, kinda like lerp 0.5
+		// Remove the Y so that its a direction in one plane. Then take the head's direction and make it on
+		// the same plane, then lerp half way between vectors. This gives you  a in between where the 
+		// chest rotates at the direction based on the head look direction and where the hands are.
+		let HR = this.hand_r_ee;
+		let HL = this.hand_l_ee;
+
+		let head_dir	= Vec3.transform_quat( Vec3.FORWARD, H.rot ).set_y( 0 ); // Get the Head Direction on XZ Plane
+		let to_left		= Vec3.sub( HL.pos, CH.world.pos ).set_y(0);			// Dir of Chest to Hands
+		let to_right	= Vec3.sub( HR.pos, CH.world.pos ).set_y(0);
+		let to_center	= Vec3.add( to_left, to_right ).norm();					// Get tthe middle of the two hand vectors
+
+		let look 		= Vec3.lerp( head_dir, to_center, 0.5 ).set_y(0).norm();	// Lerp between Hands and Head as final look direction.
+		
+		CH.local.rot.from_look( look );		// Create rotation based on direction, save to local + world.
+		CH.world.rot.copy( CH.local.rot );
+
+		/*
+		App.Debug.ln( CH.world.pos, Vec3.add( to_left, CH.world.pos ), "orange" );
+		App.Debug.ln( CH.world.pos, Vec3.add( to_right, CH.world.pos ), "orange" );
+		App.Debug.ln( CH.world.pos, Vec3.add( to_center, CH.world.pos ), "yellow" );
+		App.Debug.ln( H.pos, Vec3.add( head_dir, H.pos ), "yellow" );
+		App.Debug.ln( CH.world.pos, Vec3.add( look.scale(0.5), CH.world.pos ), "red" );
+		*/	
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Visualize the chest and its orientation.
+		App.Debug
+			.pnt( CH.world.pos , "yellow", 0.18, 3 )
+			.transform( CH.world, 0.1 );
+	}
+
+
+	calc_clavical(){
+		this.update_clavicle( this.clavicle_l, this.arm_up_l, this.hand_l_ee, 1 );
+		this.update_clavicle( this.clavicle_r, this.arm_up_r, this.hand_r_ee, -1 );
+	}
+	update_clavicle( CL, AU, HD, dir_scl=1 ){ // clavicle, arm_up, hand
+		// https://www.youtube.com/watch?v=hQIQOrrQCvE&list=PLT4SeajOa6mZuzBdp5GC5NrKy4pdnVj0b&index=8
+		/*
+			NOTES:
+			- The Y and Z Rotations are overly complicated for what its trying to do.
+			There might be a way to try to use unit vectors instead with the DOT product
+			then using a curve that can be applied to the Angle Range of movement.
+			Only issue is in this idea is if the Hand Effector tries to go Right, it would
+			not bend in the right direction... Which is ok since the current version based on the video 
+			doesn't do it either.
+		*/
+
+		let S	= this.shoulder_offset,
+			C 	= this.chest;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute the Current Worldspace Transforms of the Clavicle + Shoulder
+		AU.local.pos.from_scale( S, dir_scl );			// Set Local Space Position in relation to chest.
+		AU.local.rot.from_look( Vec3.LEFT, Vec3.UP );
+
+
+		CL.world_update( C.world );		// Chest > Clavicale
+		AU.world_update( CL.world );	// Clavicle > Upper Arm
+
+
+		//let tmp = Vec3.transform_quat( Vec3.FORWARD, AU.world.rot );
+		//App.Debug.ln( AU.world.pos, Vec3.add( AU.world.pos, tmp ), "red" );
+
+		App.Debug.transform( AU.world ); 
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Calculate the Y and Z rotation of the clavicle, based on the distance
+		// of the hand is away from the shoulder. The further the hand the more the
+		// clavicale will move forward, but if the hand is closer to the chest, it can
+		// move backwards.
+		let to_hand		= Vec3.sub( HD.pos, AU.world.pos ); // Direction of Shoulder to End Effector
+		let fwd_ratio	= Vec3.dot( to_hand, Vec3.FORWARD ) / this.arm_len;
+		let up_ratio 	= Vec3.dot( to_hand, Vec3.UP ) / this.arm_len;
+
+		//console.log( fwd_ratio );
+
+		let y_rot = 0, z_rot = 0;
+		if( fwd_ratio > 0 ){
+			y_rot = Maths.clamp( (fwd_ratio - 0.5) * 20, 0.0, 33 ) * -dir_scl; // Max Rotation of 33
+		}else{
+			y_rot = Maths.clamp( (fwd_ratio - 0.08) * 20, -20, 0 ) * -dir_scl;
+		}
+
+		if( up_ratio > 0 ){
+			z_rot = Maths.clamp( (up_ratio - 0.2) * 20, 0.0, 33 );
+		}
+
+		CL.local.rot.from_euler( 0, y_rot, z_rot );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Since Clavicle rotation has been update, need to update the world space and its children
+		CL.world_update( C.world );		// Chest > Clavicale
+		AU.world_update( CL.world );	// Clavicle > Upper Arm
+
+		App.Debug
+			.pnt( AU.world.pos, "green", 0.08, 6 )
+			.ln( CL.world.pos, AU.world.pos, "yellow", "green", true )
+			.transform( AU.world, 0.1 );
+	}
+
+
+	calc_arms(){		
+		let AU = this.arm_up_l;
+		let AD = this.arm_dn_l;
+		
+
+		AD.local.pos.z = this.arm_up_len; // Lower Arm Exists at the Tail end of the Upper Arm Bone.
+
+		AD.world_update( AU.world );
+
+	//	App.Debug.pnt( AD.world.pos, "red", 0.1, 1 );
+
+	}
+
+}
+
+/*
+NOTES
+
+- Can compute the length of the arms based on the height of the person.
+Its not perfect, its just a guestimate based on human body averages.
+
+Person_Height / 2  - (Chest_Center to Shoulder Length) = Arm Length
+ 
+*/
+
+window.UI = {
+	head_lon : 0,
+	head_lat : 0,
+
+	set_head_rot : function( lon=null, lat=null ){
+		if( lon != null ) this.head_lon = lon;
+		if( lat != null ) this.head_lat = lat;
+		gIK.head_ee.rot.from_polar( this.head_lon, this.head_lat );
+		this.update();
+	},
+
+	update :_=>{ gIK.update(); App.render(); },
+};
+
+</script><page-layout>
+
+<div style="position:absolute; top:10px; left:10px;">
+	<input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_head_rot( null, this.value );"><br>
+	<input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_head_rot( this.value );">
+</div>
+
+</page-layout>

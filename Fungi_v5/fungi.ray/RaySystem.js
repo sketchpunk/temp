@@ -2,12 +2,17 @@ import App		from "../fungi/App.js";
 import Ray      from "./Ray.js";
 //import Events   from "../fungi/lib/Events.js";
 
-let ray		= new Ray();
-let debug	= false;
+let ray			= new Ray();
+let debug		= false;
+let initialized = false;
 
 function init( size=null, init_func=null ){
+	if( initialized ){ console.log( "RaySystem has already been initialized" ); return this; }
+	
 	App.gl.canvas.addEventListener( "mousedown", on_click );
 	if( size != null) App.events.reg( "mouse_ray", size, true, init_func );
+
+	initialized = true;
 	return this;
 }
 
