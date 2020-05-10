@@ -1,5 +1,7 @@
 const B_LEN = 3;
 class Vec3Buffer{
+	static from( buf ){ return new Vec3Buffer( null, null, buf ); }
+
 	constructor( capacity=3, use_all=false, buf=null ){
 		if( buf ){ // Passed in a Float Array filled with Vertex Positions.
 			this.buffer 	= buf;
@@ -157,6 +159,14 @@ class Vec3Buffer{
 	// Basic Math Operations
 	///////////////////////////////////////////////////////////////////			
 	
+		scale( i, s ){
+			i *= B_LEN;
+			this.buffer[ i ]	*= s;
+			this.buffer[ i+1 ]	*= s;
+			this.buffer[ i+2 ]	*= s;
+			return this;
+		}
+
 	///////////////////////////////////////////////////////////////////
 	// Vector Math Operations
 	///////////////////////////////////////////////////////////////////	
@@ -195,6 +205,41 @@ class Vec3Buffer{
 			}
 
 			return this;
+		}
+
+	///////////////////////////////////////////////////////////////////
+	// 
+	///////////////////////////////////////////////////////////////////
+		
+		compute_bounds( min, max ){
+			let x_min 	= Infinity,
+				y_min 	= Infinity,
+				z_min	= Infinity,
+				x_max 	= -Infinity,
+				y_max 	= -Infinity,
+				z_max	= -Infinity,
+				x,y,z;
+
+			for( let i=0; i < this.buffer.length; i+=3 ){
+				x = this.buffer[ i ];
+				y = this.buffer[ i+1 ];
+				z = this.buffer[ i+2 ];
+				if( x < x_min ) x_min = x;
+				if( x > x_max ) x_max = x;
+
+				if( y < y_min ) y_min = y;
+				if( y > y_max ) y_max = y;
+
+				if( z < z_min ) z_min = z;
+				if( z > z_max ) z_max = z;
+			}
+			
+			min[ 0 ] = x_min;
+			min[ 1 ] = y_min;
+			min[ 2 ] = z_min;
+			max[ 0 ] = x_max;
+			max[ 1 ] = y_max;
+			max[ 2 ] = z_max;
 		}
 }
 

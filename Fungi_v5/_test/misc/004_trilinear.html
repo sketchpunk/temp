@@ -1,0 +1,326 @@
+<!DOCTYPE html><script type="module">
+import App, {Vec3}	from "../../fungi/App.js";
+import DragPoints   from "../../fungi.test/DragPoints.js";
+import Sphere 		from "../../fungi/geo/UVSphere.js";
+import Cube 		from "../../fungi/geo/Cube.js";
+import Util 		from "../../fungi/geo/Util.js";
+import Vec3Buffer	from "../../fungi/maths/Vec3Buffer.js";
+
+//#####################################################
+App.builder( true, false )
+	.use_events()
+	.load_shaders( "./shaders/LowPoly.js" )
+	.set_camera( 0, 15, 4, 0, 0.5, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+// https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/interpolation/trilinear-interpolation
+// http://paulbourke.net/miscellaneous/interpolation/
+
+// http://codepen.io/prisoner849/pen/NVVJBW Bilinear Interpolation
+// https://codepen.io/prisoner849/pen/LoKQoR Trilinear Interpolation
+// https://codepen.io/essingen123/pen/ExaMOBL?editors=0010  Triliner on rounded cube.
+
+
+//#####################################################
+
+let V3Buf, GLBuf, bMax, bMin, PntAry;
+let offset;
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Initialize 
+    App.Debug.set_depth_test( true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mat		= App.new_mat( "LowPoly" );
+	let mesh	= build_mesh();
+	let e		= App.$Draw( "test", mesh, mat, App.Mesh.TRI_STRIP ); //TRI_STRIP
+
+	GLBuf = mesh.buf.vert;
+	V3Buf = Vec3Buffer.from( mesh.buf.vert_ary );
+	
+	bMin = new Vec3();
+	bMax = new Vec3();
+	V3Buf.compute_bounds( bMin, bMax );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/**/
+    DragPoints.init().set_move_handler( on_gizmo_move );
+
+
+	bounding_points( bMin, bMax );
+	compute();
+
+	return true;
+}
+
+function on_gizmo_move( pos ){ 
+	compute();
+}
+
+
+function build_mesh(){
+	let d	= Sphere.geo(), //Sphere.geo(),
+		m 	= new App.Mesh( "Cube" ),
+		vao = new App.Vao().bind();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	m.buf.idx = App.Buf.new_element( d.idx, true, false );
+	vao.add_indices( m.buf.idx );
+
+	m.buf.vert = App.Buf.new_array( d.vert, 3, false, false ); //Dynamic Buffer.
+	vao.add_buf( m.buf.vert, App.Shader.POS_LOC );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.Vao.unbind_all();
+
+	m.buf.vert_ary = d.vert; // Hack, Save Verts Data for later use.
+
+	return m.set( vao, d.idx.length );
+}
+
+
+function bounding_points( min, max ){
+	PntAry = [
+		new Vec3( min.x, min.y, max.z ),	// Front Face
+		new Vec3( max.x, min.y, max.z ),
+		new Vec3( min.x, max.y, max.z ),
+		new Vec3( max.x, max.y, max.z ),
+
+		new Vec3( min.x, min.y, min.z ),	// Back Face
+		new Vec3( max.x, min.y, min.z ),
+		new Vec3( min.x, max.y, min.z ),
+		new Vec3( max.x, max.y, min.z ),
+	];
+
+	DragPoints
+		.pnt( PntAry[0], null, "black" )
+		.pnt( PntAry[1], null, "red" )
+		.pnt( PntAry[2], null, "green" )
+		.pnt( PntAry[3], null, "yellow" )
+		
+		.pnt( PntAry[4], null, "blue" )
+		.pnt( PntAry[5], null, "fuchsia" )
+		.pnt( PntAry[6], null, "cyan" )
+		.pnt( PntAry[7], null, "white" );
+
+	/*
+	App.Debug.pnt( PntAry[0], "black", 0.1 );
+	App.Debug.pnt( PntAry[1], "red", 0.1 );
+	App.Debug.pnt( PntAry[2], "green", 0.1 );
+	App.Debug.pnt( PntAry[3], "yellow", 0.1 );
+
+	App.Debug.pnt( PntAry[4], "blue", 0.1 );
+	App.Debug.pnt( PntAry[5], "fuchsia", 0.1 );
+	App.Debug.pnt( PntAry[6], "cyan", 0.1 );
+	App.Debug.pnt( PntAry[7], "white", 0.1 );
+	*/
+}
+
+function compute(){
+	// https://codepen.io/prisoner849/pen/LoKQoR?editors=0010
+
+	let PntAry	= DragPoints.get_pos_array(); // Drag Positions
+	let len		= V3Buf.buf_len;
+	let p		= new Vec3();
+	let v		= new Vec3();
+	let i;
+
+	let far_bot_x	= new Vec3();
+	let far_top_x	= new Vec3();
+	let near_bot_x	= new Vec3();
+	let near_top_x	= new Vec3();
+	let far_y 		= new Vec3();
+	let near_y		= new Vec3();
+
+	App.Debug.reset();
+
+	// Loop through all the vertices of the mesh.
+	for( i=0; i < len; i++ ){
+		V3Buf.copy_to( i, p );
+
+		// There is an issue where the Math shifts the points to some offset,
+		// then when moving the points, it overly morphs things. The Distance
+		// from the first transform pointer toward the center of the mesh's bounding
+		// box seems to do the job of keeping the object centered and morphing well.
+		p.add( [0.5,0.5,0.5] );
+
+		far_bot_x.from_sub( PntAry[1], PntAry[0] ).scale( p.x ).add( PntAry[0] );
+		far_top_x.from_sub( PntAry[3], PntAry[2] ).scale( p.x ).add( PntAry[2] );
+		near_bot_x.from_sub( PntAry[5], PntAry[4] ).scale( p.x ).add( PntAry[4] );
+		near_top_x.from_sub( PntAry[7], PntAry[6] ).scale( p.x ).add( PntAry[6] );
+
+		far_y.from_sub( far_top_x, far_bot_x ).scale( p.y ).add( far_bot_x );
+		near_y.from_sub( near_top_x, near_bot_x ).scale( p.y ).add( near_bot_x );
+		v.from_sub( near_y, far_y ).scale( p.z ).add( far_y );
+
+		App.Debug.pnt( v, "white", 0.025 );
+	}
+}
+
+</script><page-layout></page-layout>
+
+<!--
+
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(60, 1, 1, 1000);
+camera.position.setScalar(5);
+var renderer = new THREE.WebGLRenderer({
+  antialias: true
+});
+renderer.setClearColor(0x404040);
+var canvas = renderer.domElement;
+document.body.appendChild(canvas);
+
+var orbitControls = new THREE.OrbitControls(camera, canvas);
+
+var upoints = []; // positions of control points for the uniform
+
+var controlPoints = [];
+var dragControls = new THREE.DragControls(controlPoints, camera, canvas);
+dragControls.addEventListener("dragstart", function(event) {
+  orbitControls.enabled = false;
+});
+dragControls.addEventListener("dragend", function(event) {
+  orbitControls.enabled = true;
+});
+
+//scene.add(new THREE.GridHelper(10, 10, "gray", "gray"));
+
+let dimX = 5;
+let dimY = 4;
+let dimZ = 3;
+
+// create control points
+createControlPoint(-dimX / 2, -dimY / 2, -dimZ / 2, "black", controlPoints, upoints);
+createControlPoint( dimX / 2, -dimY / 2, -dimZ / 2, "red", controlPoints, upoints);
+createControlPoint(-dimX / 2,  dimY / 2, -dimZ / 2, "green", controlPoints, upoints);
+createControlPoint( dimX / 2,  dimY / 2, -dimZ / 2, "yellow", controlPoints, upoints);
+
+createControlPoint(-dimX / 2, -dimY / 2,  dimZ / 2, "blue", controlPoints, upoints);
+createControlPoint( dimX / 2, -dimY / 2,  dimZ / 2, "magenta", controlPoints, upoints);
+createControlPoint(-dimX / 2,  dimY / 2,  dimZ / 2, "aqua", controlPoints, upoints);
+createControlPoint( dimX / 2,  dimY / 2,  dimZ / 2, "white", controlPoints, upoints);
+
+let geometry = get3DGrid(dimX, dimY, dimZ);
+
+let material = new THREE.LineBasicMaterial({vertexColors: THREE.VertexColors});
+material.onBeforeCompile = shader => {
+  shader.uniforms.upoints = {value: upoints};
+  shader.vertexShader = `
+    uniform vec3 upoints[8];
+  ` + shader.vertexShader;
+  shader.vertexShader = shader.vertexShader.replace(
+    `#include <begin_vertex>`,
+    `#include <begin_vertex>
+    
+    vec3 farBottomX = (upoints[1] - upoints[0]) * position.x + upoints[0];
+    vec3 farTopX = (upoints[3] - upoints[2]) * position.x + upoints[2];
+    
+    vec3 nearBottomX = (upoints[5] - upoints[4]) * position.x + upoints[4];
+    vec3 nearTopX = (upoints[7] - upoints[6]) * position.x + upoints[6];
+
+    vec3 farY = (farTopX - farBottomX) * position.y + farBottomX;
+    vec3 nearY = (nearTopX - nearBottomX) * position.y + nearBottomX;
+    
+    transformed = (nearY - farY) * position.z + farY;
+    
+    `
+  );
+  
+}
+
+let lines = new THREE.LineSegments(geometry, material);
+scene.add(lines);
+
+render();
+
+function render() {
+  if (resize(renderer)) {
+    camera.aspect = canvas.clientWidth / canvas.clientHeight;
+    camera.updateProjectionMatrix();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(render);
+}
+
+function resize(renderer) {
+  const canvas = renderer.domElement;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const needResize = canvas.width !== width || canvas.height !== height;
+  if (needResize) {
+    renderer.setSize(width, height, false);
+  }
+  return needResize;
+}
+
+
+  function get3DGrid(xSize, ySize, zSize) {
+    let n = xSize * ySize * zSize;
+    let geometry = new THREE.BufferGeometry();
+
+    function mapTo3D(i) {
+      let z = Math.floor(i / (xSize * ySize));
+      i -= z * xSize * ySize;
+      let y = Math.floor(i / xSize);
+      let x = i % xSize;
+      return {
+        x: x,
+        y: y,
+        z: z
+      };
+    }
+
+    function mapFrom3D(x, y, z) {
+      return x + y * xSize + z * xSize * ySize;
+    }
+    let positions = [];
+    let colors = [];
+    for (let i = 0; i < n; i++) {
+      let p = mapTo3D(i);
+      let x = p.x / (xSize - 1);
+      let y = p.y / (ySize - 1);
+      let z = p.z / (zSize - 1);
+      positions.push(x, y, z);
+      colors.push(x, y, z);
+    }
+    geometry.addAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.addAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    let indexPairs = [];
+    for (let i = 0; i < n; i++) {
+      let p = mapTo3D(i);
+      if (p.x + 1 < xSize) {
+        indexPairs.push(i);
+        indexPairs.push(mapFrom3D(p.x + 1, p.y, p.z));
+      }
+      if (p.y + 1 < ySize) {
+        indexPairs.push(i);
+        indexPairs.push(mapFrom3D(p.x, p.y + 1, p.z));
+      }
+      if (p.z + 1 < zSize) {
+        indexPairs.push(i);
+        indexPairs.push(mapFrom3D(p.x, p.y, p.z + 1));
+      }
+    }
+    geometry.setIndex(indexPairs);
+    return geometry;
+  }
+
+  function createControlPoint(posX, posY, posZ, color, controlPoints, upoints) {
+    let dim = 0.25;
+    let pointGeometry = new THREE.BoxGeometry(dim, dim, dim);
+    let pointMaterial = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.5
+    });
+    let controlPoint = new THREE.Mesh(pointGeometry, pointMaterial);
+    controlPoint.position.set(posX, posY, posZ);
+    controlPoints.push(controlPoint);
+    upoints.push(controlPoint.position);
+    scene.add(controlPoint);
+  }
+
+-->

@@ -70,3 +70,9 @@ https://www.gdcvault.com/play/1025191/Math-for-Game-Programmers-Digging
 https://iquilezles.org/www/articles/warp/warp.htm
 https://thebookofshaders.com/11/
 https://www.youtube.com/watch?v=wbpMiKiSKm8&list=PLFt_AvWsXl0eBW2EiBtl_sxmDtSgZBxB3&index=1
+
+
+IRREGULAR HEX GRID
+https://www.kchapelier.com/hexagrid-relaxing/
+https://github.com/kchapelier/hexagrid-relaxing
+https://github.com/CedricGuillemet/HexagridRelaxing

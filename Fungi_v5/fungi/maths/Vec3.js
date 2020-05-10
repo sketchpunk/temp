@@ -435,6 +435,8 @@ class Vec3 extends Float32Array{
 
 		//-------------------------------------------
 
+		static norm( v ){ return new Vec3().from_norm( v ); }
+
 		static dot( a, b ){ return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 		
 		static cross( a, b, out ){
@@ -522,9 +524,6 @@ class Vec3 extends Float32Array{
 			out[2] = a[2] * ti + b[2] * t;
 			return out;
 		}
-
-
-
 
 	////////////////////////////////////////////////////////////////////
 	// INTERPOLATION

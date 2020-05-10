@@ -61,6 +61,12 @@ class Vao{
 	//
 	///////////////////////////////////////////////////////////////
 		static unbind(){ gl.ctx.bindVertexArray( null ); return this; }
+		static unbind_all(){
+			gl.ctx.bindVertexArray( null );
+			gl.ctx.bindBuffer( 34962, null ); // Array Buffer
+			gl.ctx.bindBuffer( 34963, null ); // Element Array Buffer
+			return this;
+		}
 
 		bind(){ gl.ctx.bindVertexArray( this.ref ); return this; }
 		unbind(){ gl.ctx.bindVertexArray( null ); return this; }

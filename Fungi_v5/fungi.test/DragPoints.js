@@ -52,9 +52,12 @@ export default {
 		return this;
 	},
 
-	get_pnts	: ()=>{ return ePnt.MovePoints.points; },
-	get_pnt 	: ( idx=null )=>{ return ePnt.MovePoints.get_pnt( idx ); },
-	pnt			: ( p, data=null, )=>{ ePnt.MovePoints.add( p, data ); },
+	get_pos_array 		: function(){ return ePnt.MovePoints.get_pos_array(); },
+
+	get_pnts			: function(){ return ePnt.MovePoints.points; },
+	get_pnt 			: function( idx=null ){ return ePnt.MovePoints.get_pnt( idx ); },
+	pnt					: function( p, data=null, color="red" ){ ePnt.MovePoints.add( p, data, color ); return this; },
+	move				: function( pos, idx=null ){ ePnt.MovePoints.move( pos, idx ); return this; },
 	
-	set_move_handler : function( fn ){ Gizmo_Move_Handler = fn; return this; },
+	set_move_handler	: function( fn ){ Gizmo_Move_Handler = fn; return this; },
 };

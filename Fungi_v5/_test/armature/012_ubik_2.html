@@ -101,7 +101,7 @@ class UBIK{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// VR End Effectors
 		this.head		= Transform.from_pos( 0, 1, 0 );
-		this.el 		= Transform.from_pos( 0.3, 0.5, 0.5 );
+		this.el 		= Transform.from_pos( 0.4, 0.3, 0.5 );
 		this.er 		= Transform.from_pos( -0.3, 0.5, 0.5 );
 	}
 
@@ -233,21 +233,23 @@ class UBIK{
 		// With the clavicles moving then arms reset, Recompute the world space of everything again
 		// so we can know where the shoulders live in world space
 		this.update_hierarchy();
-
+	
 		this.update_arm( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
 		this.update_arm( this.clavicle_r, this.arm_up_r, this.arm_dn_r, this.er, -1 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.update_hierarchy();
-		this.elbow_down( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
-		this.update_hierarchy();
-		this.elbow_zones( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
+		this.elbow_down2( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
+		//this.update_hierarchy();
+		//this.elbow_zones2( this.clavicle_l, this.arm_up_l, this.arm_dn_l, this.el, 1 );
 	}
 
 	update_arm( clav, arm_u, arm_d, hand, dir_scl=1 ){
 		let q 		= new Quat();
 		let axis	= new Vec3();
 		let rad;
+
+		let in_range = false;
 		//App.Debug.pnt( arm_u.world.pos, "yellow", 0.05 );
 		//App.Debug.transform( arm_u.world, 0.23 );
 
@@ -262,34 +264,42 @@ class UBIK{
 		//App.Debug.ln( arm_u.world.pos, Vec3.add( arm_u.world.pos, to_hand ), "orange" );
 		
 		q.from_unit_vecs( arm_dir, to_hand );	// Rotate from Bind Direction to IK Dir
-		arm_u.world.rot.pmul( q );						// Apply to Upper Bone in WS
+		arm_u.world.rot.pmul( q );				// Apply to Upper Bone in WS
 
 		// Apply some Twist
 		//arm_u.world.rot.pmul_axis_angle( to_hand, Maths.to_rad( 90 * -dir_scl ) );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Calculate the Angle For the Upper Arm
-		axis.from_quat( arm_u.world.rot, Vec3.UP ).scale( dir_scl );	// Get WS UP to use as a Rotation Axis
-		rad = law_cos( this.arm_up_len, to_hand_len, this.arm_dn_len );	// Angle in Relation to the Triangle
-		arm_u.world.rot.pmul_axis_angle( axis, rad );					// Apply to new Rotation
+		//console.log("X",to_hand_len, this.arm_len );
+		if( to_hand_len < this.arm_len ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Calculate the Angle For the Upper Arm
+			axis.from_quat( arm_u.world.rot, Vec3.UP ).scale( dir_scl );	// Get WS UP to use as a Rotation Axis
+			rad = law_cos( this.arm_up_len, to_hand_len, this.arm_dn_len );	// Angle in Relation to the Triangle
+			arm_u.world.rot.pmul_axis_angle( axis, rad );					// Apply to new Rotation
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Calculate the Angle of the Elbow
-		arm_d.world_update( arm_u.world );								// Bring World Space
-		axis.from_quat( arm_d.world.rot, Vec3.UP ).scale( dir_scl );	// Get its Axis of Rotation in WS (Up)
-		//App.Debug.pnt( arm_d.world.pos, "red", 0.05 );
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Calculate the Angle of the Elbow
+			arm_d.world_update( arm_u.world );								// Bring World Space
+			axis.from_quat( arm_d.world.rot, Vec3.UP ).scale( dir_scl );	// Get its Axis of Rotation in WS (Up)
+			//App.Debug.pnt( arm_d.world.pos, "red", 0.05 );
 
-		rad = law_cos( this.arm_up_len, this.arm_dn_len, to_hand_len ) - Math.PI;	// Get Angle inverted
-		arm_d.world.rot.pmul_axis_angle( axis, rad );								// Apply
-		//App.Debug.ln( arm_d.world.pos, Vec3.add( arm_d.world.pos, rot_axis ), "red" );
-		//App.Debug.transform( arm_u.world );
+			rad = law_cos( this.arm_up_len, this.arm_dn_len, to_hand_len ) - Math.PI;	// Get Angle inverted
+			arm_d.world.rot.pmul_axis_angle( axis, rad );								// Apply
+			//App.Debug.ln( arm_d.world.pos, Vec3.add( arm_d.world.pos, rot_axis ), "red" );
+			//App.Debug.transform( arm_u.world );
+
+			arm_d.to_local_rot( arm_u.world.rot );
+			in_range = true;
+		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Copy Changes to Local Space.
 		//arm_u.local.rot.copy( arm_u.world.rot ).pmul_invert( clav.world.rot );
 		//arm_d.local.rot.copy( arm_d.world.rot ).pmul_invert( arm_u.world.rot );
 		arm_u.to_local_rot( clav.world.rot );
-		arm_d.to_local_rot( arm_u.world.rot );
+		
+		return in_range;
 	}
 
 	elbow_down( clav, arm_u, arm_d, hand, dir_scl ){
@@ -297,29 +307,106 @@ class UBIK{
 		
 		// First I need some vectors to see the directions
 		let to_hand		= Vec3.sub( hand.pos, arm_u.world.pos );			// From Shoulder to Hand Direction
+		if( to_hand.len() >= this.arm_len ) return;
+
 		let to_elbow	= Vec3.sub( arm_d.world.pos, arm_u.world.pos );		// From Shoulder to Elbow Direction
 		let proj_pnt	= Vec3.project( to_elbow, to_hand ).add( apos );	// Closest point between Hand + Elbow Vector, on hand dir
 		let elbow_dir	= Vec3.sub( arm_d.world.pos, proj_pnt ).norm();		// Direction from Projected Point to Elbow Dir
-		/*
+		
+		to_hand.norm();
+
+		let dot = Vec3.dot( to_hand, Vec3.DOWN ) ;
+		let t = Maths.smooth_step( .85, 1.0, dot );
+		if( Vec3.dot( to_hand, Vec3.FORWARD ) <= 0 ) t = 1;
+		let force_dir = Vec3.lerp( Vec3.DOWN, Vec3.BACK, t );
+		if( t >= 1 ){
+			//dot = Vec3.dot( to_hand, Vec3.LEFT );
+			//t = Maths.smooth_step( .3, .5, dot );
+			//force_dir.lerp( Vec3.UP, t );
+		}
+
+		//let force_dir = ( Vec3.dot( to_hand, Vec3.DOWN ) < 0.98 )? Vec3.DOWN : Vec3.BACK;
+
+		//console.log( Vec3.dot( to_hand, Vec3.DOWN ) );
+		/* */
 		App.Debug.ln( apos, hand.pos, "orange" );
 		App.Debug.ln( proj_pnt, arm_d.world.pos, "orange" );
-		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, Vec3.DOWN ), "orange" );
+		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, force_dir ), "orange" );
 		App.Debug.pnt( proj_pnt, "orange", 0.05 );
 		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, elbow_dir ), "red" );
-		*/
-		let cross		= Vec3.cross( to_hand, Vec3.DOWN );		// Get cross Vector from our Hand and target Direction
+		
+	
+
+		let cross		= Vec3.cross( to_hand, force_dir );		// Get cross Vector from our Hand and target Direction
 		let down_orth	= Vec3.cross( cross, to_hand ).norm();	// The cross & hand will now give us a downward direction that is
 																// axis aligned with the to_hand vector.
-		/*
-		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, cross ), "yellow", null, true );
+		/**/
+		//App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, cross ), "yellow", null, true );
 		App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, down_orth ), "yellow", null, true );
-		*/
+		
 		// Rotate upper arm so that the elbow is pointing downward.
 		let q = Quat.unit_vecs( elbow_dir, down_orth );	//let ang = Vec3.angle( elbow_dir.norm(), b );
 		arm_u.world.rot.pmul( q );	//arm_u.world.rot.pmul_axis_angle( to_hand.norm(), -ang );
 		arm_u.to_local_rot( clav.world.rot );
 	}
 	
+	elbow_down2( clav, arm_u, arm_d, hand, dir_scl ){
+		let upos 		= arm_u.world.pos;	// Shoulder Position in WS
+		let dpos 		= arm_d.world.pos;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// First I need some vectors to see the directions
+		let to_hand		= Vec3.sub( hand.pos, upos );			// From Shoulder to Hand Direction
+		if( to_hand.len() >= this.arm_len ) return;
+		to_hand.norm();
+
+		let ch_up		= Vec3.transform_quat( Vec3.UP, this.chest.world.rot );
+		let ch_side		= Vec3.transform_quat( Vec3.LEFT, this.chest.world.rot );
+		let to_hand_yz	= Vec3.project_plane( to_hand, ch_side ).norm(); 	// Project the hand location onto the XZ Shoulder Plane
+
+		let to_elbow	= Vec3.sub( dpos, upos );							// From Shoulder to Elbow Direction
+		let proj_pnt	= Vec3.project( to_elbow, to_hand ).add( upos );	// Closest point between Hand + Elbow Vector, on hand dir
+		let elbow_dir	= Vec3.sub( dpos, proj_pnt ).norm();				// Direction from Projected Point to Elbow Dir
+
+		App.Debug
+			.circle_quat( this.chest.world.rot, upos, 0.15, "gray", 8, Vec3.FORWARD, Vec3.LEFT, Vec3.DOWN )
+			.circle_quat( this.chest.world.rot, upos, 0.15, "gray", 8, Vec3.LEFT, Vec3.BACK, Vec3.DOWN )
+			.ln( upos, Vec3.scale( to_hand_yz, 0.8 ).add( upos ), "gray", null, true )
+		;
+
+		//App.Debug.ln( upos, hand.pos, "orange" );	// Show Shoulder to Hand
+		//App.Debug.pnt( proj_pnt, "orange", 0.05 );	// Hand Mid Point
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Rotate the YZ Plane hand direction 90 degrees, Helps keep down dir Or forward if over shoulder.
+		// or BACK if hand is moving behind our backs.
+		let dn_yz		= Vec3.transform_quat( to_hand_yz, new Quat().from_axis_angle( ch_side, Maths.to_rad(90) )  );
+
+		let dot_up		= Vec3.dot( to_hand, ch_up ); 	// Hand in relation to the UP Direction
+		let dot_side	= Vec3.dot( to_hand, ch_side );	// Hand in relation to the Side Direction
+		let t			= Maths.smooth_step( 0, 0.6, Math.abs( dot_side ) ); // Closer to side plane, use Plane Down as direction
+		if( dot_up > 0 && dot_side < 0 ) t = 0; // Over Shoulder and Toward chest, Dont point down, use
+
+		// The idea is the closer the hand gets to the ribs, the more we want to
+		// use the Projected YZ direction of the hand, then transition to down 
+		// the further away the hand is from the ribs
+		let target_dir = new Vec3();
+		target_dir.from_lerp( dn_yz, Vec3.DOWN, t ); 
+		//App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, target_dir ), "white" ); // See Elbow Target Dir
+		
+		// Project the Target dir onto the Rotation axis which is defined by the to hand direction,
+		// this will make the dir perpendicular to the axis which makes it easy to create an axis-angle 
+		// like rotation to point the elbow in the desired direction.
+		let axis_target_dir = Vec3.project_plane( target_dir, to_hand ).norm();
+		//App.Debug.ln( proj_pnt, Vec3.add( proj_pnt, axis_target_dir ), "green" )
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Rotate upper arm so that the elbow is pointing downward.
+		let q = Quat.unit_vecs( elbow_dir, axis_target_dir );	//let ang = Vec3.angle( elbow_dir.norm(), b );
+		arm_u.world.rot.pmul( q );
+		arm_u.to_local_rot( clav.world.rot );
+	}
+
 	elbow_zones( clav, arm_u, arm_d, hand, dir_scl ){
 		let apos = arm_u.world.pos;	// Shoulder Position in WS
 
@@ -354,8 +441,73 @@ class UBIK{
 			arm_u.world.rot.pmul_axis_angle( to_hand.norm(), Maths.to_rad( max_rot * t ) );
 			arm_u.to_local_rot( clav.world.rot );
 			
-			console.log( max_dot, dot, t );
+			//console.log( max_dot, dot, t );
 		}
+	}
+
+	elbow_zones2( clav, arm_u, arm_d, hand, dir_scl ){
+		// Zones - CHEST, BACK, UPPER, SIDE, FRONT
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let apos		= arm_u.world.pos;				// Shoulder Position in WS
+		let ch_fwd		= Vec3.transform_quat( Vec3.FORWARD, this.chest.world.rot );
+		let ch_up		= Vec3.transform_quat( Vec3.UP, this.chest.world.rot );
+		let ch_side		= Vec3.transform_quat( Vec3.LEFT, this.chest.world.rot );
+		let to_hand 	= Vec3.sub( hand.pos, apos );	// Get Direction from Shoulder to Hand
+		let to_hand_n	= Vec3.norm( to_hand );
+		let to_hand_xz	= Vec3.project_plane( to_hand, ch_up ).norm(); // Project the hand location onto the XZ Shoulder Plane
+		let to_hand_yz	= Vec3.project_plane( to_hand, ch_side ).norm(); // Project the hand location onto the XZ Shoulder Plane
+		let to_hand_xy	= Vec3.project_plane( to_hand, ch_fwd ).norm(); // Project the hand location onto the XZ Shoulder Plane
+
+		/*
+		App.Debug
+			.circle_quat( this.chest.world.rot, apos, 0.15, "yellow" )
+			.circle_quat( this.chest.world.rot, apos, 0.15, "orange", 8, Vec3.FORWARD, Vec3.LEFT, Vec3.DOWN )
+			.circle_quat( this.chest.world.rot, apos, 0.15, "green", 8, Vec3.UP, Vec3.BACK, Vec3.LEFT )
+			//.ln( apos, Vec3.scale( ch_side, 0.3 ).add( apos ), "cyan" )
+			//.ln( apos, Vec3.scale( ch_up, 0.3 ).add( apos ), "cyan" )
+			//.ln( apos, Vec3.scale( ch_fwd, 0.3 ).add( apos ), "cyan" )
+			.ln( apos, Vec3.scale( to_hand_xz, 0.5 ).add( apos ), "yellow", null, true )
+			.ln( apos, Vec3.scale( to_hand_yz, 0.5 ).add( apos ), "orange", null, true )
+			.ln( apos, Vec3.scale( to_hand_xy, 0.5 ).add( apos ), "green", null, true );
+		*/
+
+		const back_dot_lmt	= Math.sin( Maths.to_rad( 5 ) ); // Degrees > Rad > Normalized Dot
+		
+		let angle = 0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// CHEST ZONE
+		let chest_dot = Vec3.dot( to_hand_xz, ch_side );
+		if( chest_dot < 0 ){
+			const max_dot_rng	= Math.sin( Maths.to_rad( 70 ) ); // Degrees > Rad > Normalized Dot
+			const max_rot		= 90;
+			
+			// How far into the chest range is the hand, the further
+			// in it goes, the more we will rotate the shoulder up.
+			let t = Math.min( Math.abs( chest_dot / max_dot_rng ), 1 );
+			angle = Maths.to_rad( max_rot * t );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BACK ZONE
+		} else if( Vec3.dot( ch_fwd, to_hand_n) <= back_dot_lmt ){
+
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// FRONT ZONE
+		}else{
+			
+			// if the Hand is pointing up, elbow is most likely pointing down, 0 Degrees
+			// if the hand is pointing forward, elblow
+
+			// Divide Up and Down areas?
+			// In down zone, very little elbow rotation.
+
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Apply
+		arm_u.world.rot.pmul_axis_angle( to_hand_n, angle );
+		arm_u.to_local_rot( clav.world.rot );
 	}
 }
 
@@ -505,10 +657,23 @@ window.UI = {
 	head_lon : 0,
 	head_lat : 0,
 
+	handr_lon : 0,
+	handr_lat : 0,
+	//hardr_tw  : 0,
+
 	set_head_rot : function( lon=null, lat=null ){
 		if( lon != null ) this.head_lon = lon;
 		if( lat != null ) this.head_lat = lat;
 		gIK.head.rot.from_polar( this.head_lon, this.head_lat );
+		this.update();
+	},
+
+	set_lhand_rot : function( lon=nul, lat=null ){
+		if( lon != null ) this.handr_lon = lon;
+		if( lat != null ) this.handr_lat = lat;
+		
+		gIK.el.rot.from_polar( this.handr_lon, this.handr_lat );
+		//console.log( gIK.el.rot.get_euler( null, true ) );
 		this.update();
 	},
 
@@ -520,6 +685,9 @@ window.UI = {
 <div style="position:absolute; top:10px; left:10px;">
 	<input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_head_rot( null, this.value );"><br>
 	<input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_head_rot( this.value );">
+	<br>
+	LEFT Hand - <input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_lhand_rot( this.value );"><br>
+	LEFT Hand - <input type="range" min="-90" max="90" value="0" step="5" onInput="UI.set_lhand_rot( null,this.value );">
 </div>
 
 </page-layout>

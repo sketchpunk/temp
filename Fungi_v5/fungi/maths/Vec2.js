@@ -11,7 +11,7 @@ class Vec2 extends Float32Array{
 	//Getters and Setters
 		get x(){ return this[0]; }	set x(val){ this[0] = val; }
 		get y(){ return this[1]; }	set y(val){ this[1] = val; }
-		set(x,y){ this[0] = x; this[1] = y; return this;}
+		set( x, y ){ this[0] = x; this[1] = y; return this;}
 
 		clone(){ return new Vec2(this); }
 		copy(v){ this[0] = v[0]; this[1] = v[1]; return this; }
@@ -46,7 +46,7 @@ class Vec2 extends Float32Array{
 
 	//----------------------------------------------
 	// Methods
-		length(v){
+		len(v){
 			//Only get the magnitude of this vector
 			if(v === undefined) return Math.sqrt( this[0]*this[0] + this[1]*this[1] );
 
@@ -57,7 +57,7 @@ class Vec2 extends Float32Array{
 			return Math.sqrt( x*x + y*y );
 		}
 		
-		lengthSqr(v){
+		len_sqr(v){
 			//Only get the squared magnitude of this vector
 			if(v === undefined) return this[0]*this[0] + this[1]*this[1];
 
@@ -68,7 +68,7 @@ class Vec2 extends Float32Array{
 			return x*x + y*y;
 		}
 
-		normalize(out = null){
+		norm(out = null){
 			var mag = Math.sqrt( this[0]*this[0] + this[1]*this[1] );
 			if(mag == 0) return this;
 
@@ -110,50 +110,26 @@ class Vec2 extends Float32Array{
 		}
 	//endregion
 
+	from_add( a, b ){ this[0] = a[0] + b[0]; this[1] = a[1] + b[1]; return this; }
+	from_sub( a, b ){ this[0] = a[0] - b[0]; this[1] = a[1] - b[1]; return this; }
+	from_scale( a, s ){ this[0] = a[0] * s; this[1] = a[1] * s; return this; }
 
 	//----------------------------------------------
 	// Math
-		add(v, out=null){
-			out = out || this;
-			out[0] = this[0] + v[0];
-			out[1] = this[1] + v[1];
-			return out;
+		add( v ){ this[0] += v[0]; this[1] += v[1]; return this; }
+		add_raw( x, y ){ this[0] += x; this[1] += y; return this; }
+
+		sub( v ){ this[0] -= v[0]; this[1] -= v[1]; return this; }
+		mul( v ){ this[0] *= [0]; this[1] *= [1]; return this; }
+
+		div( v ){
+			this[0] = (v[0] != 0)? this[0] / v[0] : 0;
+			this[1] = (v[1] != 0)? this[1] / v[1] : 0;
+			return this;
 		}
 
-		addXY(x, y, out=null){
-			out = out || this;
-			out[0] = this[0] + x;
-			out[1] = this[1] + y;
-			return out;
-		}
-
-		sub(v, out=null){
-			out = out || this;
-			out[0] = this[0] - v[0];
-			out[1] = this[1] - v[1];
-			return out;
-		}
-
-		mul(v, out=null){
-			out = out || this;
-			out[0] = this[0] * v[0];
-			out[1] = this[1] * v[1];
-			return out;
-		}
-
-		div(v, out=null){
-			out = out || this;
-			out[0] = (v[0] != 0)? this[0] / v[0] : 0;
-			out[1] = (v[1] != 0)? this[1] / v[1] : 0;
-			return out;
-		}
-
-		scale(v, out=null){
-			out = out || this;
-			out[0] = this[0] * v;
-			out[1] = this[1] * v;
-			return out;
-		}
+		scale( v ){ this[0] *= v; this[1] *= v; return this; }
+		div_scale( v ){ this[0] /= v; this[1] /= v; return this; }
 
 		divInvScale(v, out=null){
 			out = out || this;
@@ -173,7 +149,7 @@ class Vec2 extends Float32Array{
 
 	//----------------------------------------------
 	//region Static
-		static add(a,b,out){
+		static add( a, b, out ){
 			out = out || new Vec2();
 			out[0] = a[0] + b[0];
 			out[1] = a[1] + b[1];			
@@ -210,10 +186,16 @@ class Vec2 extends Float32Array{
 			return out;
 		}
 
-		static length(v0,v1){
-			var x = v0[0] - v1[0],
+		static len( v0, v1 ){
+			let x = v0[0] - v1[0],
 				y = v0[1] - v1[1];
 			return Math.sqrt( x*x + y*y );
+		}
+
+		static len_sqr( v0, v1 ){
+			let x = v0[0] - v1[0],
+				y = v0[1] - v1[1];
+			return x*x + y*y;
 		}
 
 		static lerp(v0, v1, t, out){

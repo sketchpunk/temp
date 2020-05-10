@@ -18,3 +18,149 @@ https://www.youtube.com/watch?v=0bcZb-SsnrA
 https://marian42.itch.io/wfc 3D Generated City
 https://github.com/marian42/wavefunctioncollapse
 https://robertheaton.com/2018/12/17/wavefunction-collapse-algorithm/
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+https://jacco.ompf2.com/2020/04/10/optimizing-trilinear-interpolation/
+
+float4 FetchTexelTrilinear( float lambda, float2 uv, int offset, int width, int height )
+{
+    int level0 = min( MIPLEVELCOUNT - 1, (int)lambda );
+    int level1 = min( MIPLEVELCOUNT - 1, level0 + 1 );
+    float f = lambda - floor( lambda );
+    // select first MIP level
+    int o0 = offset, w0 = width, h0 = height;
+    for (int i = 0; i < level0; i++) o0 += w0 * h0, w0 >>= 1, h0 >>= 1;
+    // select second MIP level
+    int o1 = offset, w1 = width, h1 = height;
+    for (int i = 0; i < level1; i++) o1 += w1 * h1, w1 >>= 1, h1 >>= 1;
+    // read actual data
+    float4 p0 = FetchTexel( uv, o0, w0, h0 );
+    float4 p1 = FetchTexel( uv, o1, w1, h1 );
+    // final interpolation
+    return (1 - f) * p0 + f * p1;
+}
+
+float4 FetchTexelTrilinear_v2( float lambda, float2 uv, int offset, int width, int height )
+{
+    int level0 = 0, level1 = 0;
+    float f = 0;
+    if (lambda >= 0)
+        level0 = min( MIPLEVELCOUNT - 1, (int)lambda ),
+        level1 = min( MIPLEVELCOUNT - 1, level0 + 1 ),
+        f = lambda - floor( lambda );
+    // as proposed by Marvin Reza, slightly faster
+    float scale = (float)(width * height) * 1.3333333333f;
+    int o0 = offset + (int)(scale * (1 - __uint_as_float( (127 - 2 * level0) << 23 )));
+    int o1 = offset + (int)(scale * (1 - __uint_as_float( (127 - 2 * level1) << 23 )));    
+    // read actual data
+    float4 p0 = FetchTexel( texCoord, o0, width >> level0, height >> level0 );
+    float4 p1 = FetchTexel( texCoord, o1, width >> level1, height >> level1 );
+    // final interpolation
+    return (1 - f) * p0 + f * p1;
+}
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  function RoundEdgedBox(w, h, d, r, wSegs, hSegs, dSegs, rSegs) {
+    w = w || 1;
+    h = h || 1;
+    d = d || 1;
+    let minimum = Math.min(Math.min(w, h), d);
+    r = r || minimum * .25;
+    r = r > minimum * .5 ? minimum * .5 : r;
+    wSegs = Math.floor(wSegs) || 1;
+    hSegs = Math.floor(hSegs) || 1;
+    dSegs = Math.floor(dSegs) || 1;
+    rSegs = Math.floor(rSegs) || 1;
+    let fullGeometry = new THREE.BufferGeometry();
+    let fullPosition = [];
+    let fullUvs = [];
+    let fullIndex = [];
+    let fullIndexStart = 0;
+    let groupStart = 0;
+    bendedPlane(w, h, r, wSegs, hSegs, rSegs, d * .5, 'y', 0, 0);
+    bendedPlane(w, h, r, wSegs, hSegs, rSegs, d * .5, 'y', Math.PI, 1);
+    bendedPlane(d, h, r, dSegs, hSegs, rSegs, w * .5, 'y', Math.PI * .5, 2);
+    bendedPlane(d, h, r, dSegs, hSegs, rSegs, w * .5, 'y', Math.PI * -.5, 3);
+    bendedPlane(w, d, r, wSegs, dSegs, rSegs, h * .5, 'x', Math.PI * -.5, 4);
+    bendedPlane(w, d, r, wSegs, dSegs, rSegs, h * .5, 'x', Math.PI * .5, 5);
+    fullGeometry.addAttribute("position", new THREE.BufferAttribute(new Float32Array(fullPosition), 3));
+    fullGeometry.addAttribute("uv", new THREE.BufferAttribute(new Float32Array(fullUvs), 2));
+    fullGeometry.setIndex(fullIndex);
+    fullGeometry.computeVertexNormals();
+    return fullGeometry;
+
+    function bendedPlane(width, height, radius, widthSegments, heightSegments, smoothness, offset, axis, angle, materialIndex) {
+      let halfWidth = width * .5;
+      let halfHeight = height * .5;
+      let widthChunk = width / (widthSegments + smoothness * 2);
+      let heightChunk = height / (heightSegments + smoothness * 2);
+      let planeGeom = new THREE.PlaneBufferGeometry(width, height, widthSegments + smoothness * 2, heightSegments + smoothness * 2);
+      let v = new THREE.Vector3(); // current vertex
+      let cv = new THREE.Vector3(); // control vertex for bending
+      let cd = new THREE.Vector3(); // vector for distance
+      let position = planeGeom.attributes.position;
+      let uv = planeGeom.attributes.uv;
+      let widthShrinkLimit = widthChunk * smoothness;
+      let widthShrinkRatio = radius / widthShrinkLimit;
+      let heightShrinkLimit = heightChunk * smoothness;
+      let heightShrinkRatio = radius / heightShrinkLimit;
+      let widthInflateRatio = (halfWidth - radius) / (halfWidth - widthShrinkLimit);
+      let heightInflateRatio = (halfHeight - radius) / (halfHeight - heightShrinkLimit);
+      for (let i = 0; i < position.count; i++) {
+        v.fromBufferAttribute(position, i);
+        if (Math.abs(v.x) >= halfWidth - widthShrinkLimit) {
+          v.setX((halfWidth - (halfWidth - Math.abs(v.x)) * widthShrinkRatio) * Math.sign(v.x));
+        } else {
+          v.x *= widthInflateRatio;
+        } // lr
+        if (Math.abs(v.y) >= halfHeight - heightShrinkLimit) {
+          v.setY((halfHeight - (halfHeight - Math.abs(v.y)) * heightShrinkRatio) * Math.sign(v.y));
+        } else {
+          v.y *= heightInflateRatio;
+        } // tb
+        //re-calculation of uvs
+        uv.setXY(
+          i,
+          (v.x - (-halfWidth)) / width,
+          1 - (halfHeight - v.y) / height
+        );
+        // bending
+        let widthExceeds = Math.abs(v.x) >= halfWidth - radius;
+        let heightExceeds = Math.abs(v.y) >= halfHeight - radius;
+        if (widthExceeds || heightExceeds) {
+          cv.set(
+            widthExceeds ? (halfWidth - radius) * Math.sign(v.x) : v.x,
+            heightExceeds ? (halfHeight - radius) * Math.sign(v.y) : v.y, -radius);
+          cd.subVectors(v, cv).normalize();
+          v.copy(cv).addScaledVector(cd, radius);
+        };
+        position.setXYZ(i, v.x, v.y, v.z);
+      }
+      planeGeom.translate(0, 0, offset);
+      switch (axis) {
+        case 'y':
+          planeGeom.rotateY(angle);
+          break;
+        case 'x':
+          planeGeom.rotateX(angle);
+      }
+      // merge positions
+      position.array.forEach(function(p) {
+        fullPosition.push(p);
+      });
+      // merge uvs
+      uv.array.forEach(function(u) {
+        fullUvs.push(u);
+      });
+      // merge indices
+      planeGeom.index.array.forEach(function(a) {
+        fullIndex.push(a + fullIndexStart);
+      });
+      fullIndexStart += position.count;
+      // set the groups
+      fullGeometry.addGroup(groupStart, planeGeom.index.count, materialIndex);
+      groupStart += planeGeom.index.count;
+    }
+  }

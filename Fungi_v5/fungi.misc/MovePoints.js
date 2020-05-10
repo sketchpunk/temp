@@ -59,10 +59,10 @@ class MovePoints{
     }
 	
 	// TODO, Base Color, Sel Color, Data, fn get_point( idx=null );
-	add( pos, data=null, ){
+	add( pos, data=null, color="red" ){
 		let o = {
 			pos		: new Vec3( pos ),
-			color 	: "red",
+			color 	: color,
 			data	: data,
 		};
         this.points.push( o );
@@ -109,6 +109,12 @@ class MovePoints{
 			idx = this.sel_idx;
 		}
 		return this.points[ idx ].pos;
+	}
+
+	get_pos_array(){
+		let i, ary = new Array( this.points.length );
+		for( i in this.points ) ary[ i ] = this.points[ i ].pos;
+		return ary;
 	}
 	
 	move( pos, idx=null ){
