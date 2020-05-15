@@ -11,6 +11,14 @@ class GltfUtil{
 		return e;
 	}
 
+	static mesh( json, bin, mesh_name ){
+		let geo_ary = Gltf.get_mesh( mesh_name, json, bin, true ); // Spec Only, Doing a BIN Loading
+		if( geo_ary.length == 0 ){	console.error("Mesh not found", mesh_name ); return null; }
+		if( geo_ary.length > 1 ){	console.log( "Mesh has sub geometry, only returning first one" ); }
+		
+		return App.Mesh.from_bin( mesh_name, geo_ary[0], bin );
+	}
+
 	// Load Skinned Mesh with Bone View
 	static get_debug_view( e_name, json, bin, mat, m_names=null, arm_name=null ){
 		let e = App.ecs.entity( e_name, ["Node", "Draw", "Armature", "BoneView"] );

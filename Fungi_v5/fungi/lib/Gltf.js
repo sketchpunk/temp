@@ -186,7 +186,7 @@ class Gltf{
 				//.......................................
 				// Setup some vars
 				prim	= m.primitives[ i ];
-				attr	= prim.attributes;
+				attr	= prim.attributes; // console.log( attr );
 				itm		= { 
 					name	: name + (( pLen != 1 )? "_p" + i : ""),
 					mode 	: ( prim.mode != undefined )? prim.mode : Gltf.MODE_TRIANGLES
@@ -208,6 +208,7 @@ class Gltf{
 				if( attr.TEXCOORD_0 != undefined )		itm.uv		= Gltf.parse_accessor( attr.TEXCOORD_0,	json, bin, spec_only );
 				if( attr.WEIGHTS_0 != undefined )		itm.weights	= Gltf.parse_accessor( attr.WEIGHTS_0,	json, bin, spec_only ); 
 				if( attr.JOINTS_0 != undefined )		itm.joints	= Gltf.parse_accessor( attr.JOINTS_0,	json, bin, spec_only );
+				if( attr.COLOR_0 != undefined )			itm.color	= Gltf.parse_accessor( attr.COLOR_0,	json, bin, spec_only );
 
 				//.......................................
 				// Save to return array

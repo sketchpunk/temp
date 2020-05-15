@@ -1,0 +1,926 @@
+<!DOCTYPE html><script type="module">
+import App,{Vec3,Quat}	from "../../fungi/App.js";
+import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, {Gltf}	from "../../fungi/lib/GltfUtil.js";
+import Bitset			from "../../fungi/lib/Bitset.js";
+
+//#####################################################
+App.builder( true, true )
+	//.use_events()
+	.load_shaders( "./shaders/LowPoly.js" )
+	.load_shaders( "./shaders/LowPolyColor.js" )
+	.set_camera( 0, 40, 23, 0, 0, 0 )
+	.add( init )
+	.render_on_mouse()
+	.build();
+
+// https://www.youtube.com/watch?v=1hqt8JkYRdI Oskar about WFC
+// https://github.com/kchapelier/wavefunctioncollapse
+
+// Marching Cubes & WFC
+
+/* THE PLAN!!!
+- Load and display tiles
+-- Need to vertex color the tiles cause of blender import issues.
+- Rotate, Mirror and offset tiles
+- define Up, Top, left, right
+- define connection values
+- generate rules
+*/
+
+class Sockets{
+	static Road			= 0;
+	static Grass		= 1;
+	static Asphalt		= 2;
+	static AsphaltSide	= 3;
+}
+
+class BuildMode{
+	static None 		= 0;	
+	static Rotate90		= 1;
+	static Rotate180	= 2;
+	static Rotate270	= 4;
+	static RotateAll 	= 7;
+}
+
+class Tile{
+	name 		= "";
+	index		= null;	// Index in Tileset
+	mesh 		= null;	// Mesh Reference
+	sockets 	= null; // Top, Right, Bottom, Left
+	rotate		= null;	// Rotation to Apply to Tile
+	offset		= null;	// Tiles's origin is corner, need to re position after rot.
+	weight 		= 1;	// Changes to use the tile more often
+	weight_log 	= 0;	// Cache the Log of the weight for entropy calculations
+
+	constructor( idx, name, mesh, weight, sockets=null ){
+		this.index		= idx;
+		this.name		= name;
+		this.mesh		= mesh;
+		this.weight		= weight;
+		this.weight_log	= weight * Math.log( weight );
+		this.sockets	= ( sockets )? sockets : [0,0,0,0];
+	}
+	clone(){ return new Tile( 0, this.name, this.mesh, this.weight, this.sockets.slice(0) ); }
+}
+
+class TileSet{
+	static #build_steps = [
+		{ mode: BuildMode.Rotate90, pos: new Vec3( 0, 0, -3 ), rot: Quat.axis_angle( Vec3.UP, -90 * Math.PI / 180 ), shift_idx:3, },
+		{ mode: BuildMode.Rotate180, pos: new Vec3( 3, 0, -3 ), rot: Quat.axis_angle( Vec3.UP, -180 * Math.PI / 180 ), shift_idx:2, },
+		{ mode: BuildMode.Rotate270, pos: new Vec3( 3, 0, 0 ), rot: Quat.axis_angle( Vec3.UP, -270 * Math.PI / 180 ), shift_idx:1, },
+	];
+
+	items		= new Array();
+	#json		= null;
+	#bin		= null;
+	#mat 		= null;		
+	#entropy	= null;		// Total Entropy of all the tiles
+	#weight 	= null;		// Total Weight of all the Tiles
+
+	constructor( json, bin ){
+		this.#json	= json;
+		this.#bin	= bin;
+		this.#mat 	= App.new_mat( "LowPolyColor" );
+	}
+
+	get len(){ return this.items.length; }
+
+	add( name, mesh_name, weight, sockets, build ){
+		let mesh	= GltfUtil.mesh( this.#json, this.#bin, mesh_name );
+		let tile	= new Tile( this.items.length, name, mesh, weight, sockets );
+		this.items.push( tile );
+		//console.log( mesh );
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BUILD VARIATIONS OF THE TILE
+		if( build ){
+			let bs, t, i, ii;
+			for( bs of TileSet.#build_steps ){
+				if( !(build & bs.mode) ) continue;
+
+				// Clone Tile and set Rotation and Offset
+				t = tile.clone();
+				t.rotate = bs.rot;
+				t.offset = bs.pos;
+
+				// Shift Sockets because of rotation
+				if( bs.rot ){
+					ii = bs.shift_idx;
+					for( i=0; i < 4; i++ ){
+						t.sockets[ i ] = tile.sockets[ (ii++ & 3) ];
+					}
+				}
+				
+				// Save Modifed Tile to the list
+				t.index	= this.items.length;
+				t.name	= tile.name + "_" + bs.mode;
+				this.items.push( t );
+			}
+		}
+
+		/*
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// TEST RESULTS
+		for( let itm of this.items ){
+			let e = this.entity_from( itm.index );
+			e.Node.add_pos( 0, 0, itm.index * 3.1 );
+			console.log( itm.sockets );
+		}
+		*/
+		return this;
+	}
+
+	// Create Rendering Entity from a Tile
+	entity_from( idx ){
+		let t = this.items[ idx ];
+		let e = App.$Draw( t.name, t.mesh, this.#mat );
+		if( t.rotate ) e.Node.set_rot( t.rotate );
+		if( t.offset ) e.Node.set_pos( t.offset );
+		return e;
+	}
+
+	// https://en.wiktionary.org/wiki/Shannon_entropy
+	// Calculate some kind of probability based on a curve, I guess by what I've read.
+	entropy( refesh=false ){
+		if( this.#entropy != null && !refresh ) return this.#entropy;
+
+		let t,
+			sum_w		= 0,	// Total Weight
+			sum_w_log	= 0;	// Total (weight * log(weight))
+
+		for( t of this.items ){
+			sum_w		+= t.weight;
+			sum_w_log	+= t.weight_log;
+		}
+
+		this.#entropy	= Math.log( sum_w ) - ( sum_w_log / sum_w );
+		this.#weight 	= sum_w;
+		return this.#entropy;
+	}
+
+	// Get the total Weight of all the tiles
+	weight( refresh=false ){
+		if( this.#weight != null && !refresh ) return this.#weight;
+		this.entropy( refresh );
+		return this.#weight;
+	}
+}
+
+//#####################################################
+
+let tile_set = [ /**/
+	{ mesh:"roadTile_141", name:"cross", weight:5,
+		build 	: BuildMode.None,
+		sockets	: [ Sockets.Road, Sockets.Road, Sockets.Road, Sockets.Road ] },
+
+	{ mesh:"roadTile_150", name:"tee", weight:5,
+		build 	: BuildMode.RotateAll,
+		sockets	: [ Sockets.Road, Sockets.Road, Sockets.Road, Sockets.Grass ] },
+
+	{ mesh:"roadTile_162", name:"road", weight:15,
+		build 	: BuildMode.Rotate90,
+		sockets	: [ Sockets.Grass, Sockets.Road, Sockets.Grass, Sockets.Road ] },
+	
+	{ mesh:"roadTile_030", name:"park_open", weight:1,
+		build 	: BuildMode.RotateAll,
+		sockets	: [ Sockets.AsphaltSide, Sockets.Road, Sockets.AsphaltSide, Sockets.Asphalt ] },
+
+	{ mesh:"roadTile_027", name:"park_side", weight:1,
+		build 	: BuildMode.RotateAll,
+		sockets	: [ Sockets.AsphaltSide, Sockets.Asphalt, Sockets.AsphaltSide, Sockets.Grass ] },
+
+	{ mesh:"roadTile_035", name:"park_corner", weight:1,
+		build 	: BuildMode.RotateAll,
+		sockets	: [ Sockets.AsphaltSide, Sockets.AsphaltSide, Sockets.Grass, Sockets.Grass ] },
+	
+	{ mesh:"roadTile_034", name:"asphalt", weight:1,
+		build 	: BuildMode.None,
+		sockets	: [ Sockets.Asphalt, Sockets.Asphalt, Sockets.Asphalt, Sockets.Asphalt ] },
+	
+	{ mesh:"roadTile_163", name:"grass", weight:3,
+		build 	: BuildMode.None,
+		sockets	: [ Sockets.Grass, Sockets.Grass, Sockets.Grass, Sockets.Grass ] },
+];
+
+
+
+/*
+	neighbors[ TILE_IDX ] = [
+		top		= int[],	// List if tile Indexes that 					
+		right	= int[],	// fit each side of the the tile.
+		bottom	= int[],
+		left	= int[],
+	];
+*/
+function create_neightor_set( ts ){
+	let i, ii, j, jj, a, b, ary,
+		len			= ts.len,
+		stack 		= Array.from( {length:len}, (v,i)=>i ),
+		neighbors	= Array.from( {length:len}, (v,i)=>{
+			// Top, Right, Bottom, Left
+			return [ 
+				{ idx: new Array(), bit_mask: new Bitset( len ) },
+				{ idx: new Array(), bit_mask: new Bitset( len ) },
+				{ idx: new Array(), bit_mask: new Bitset( len ) },
+				{ idx: new Array(), bit_mask: new Bitset( len ) },
+			];
+		});
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	while( ( i = stack.pop() ) != undefined ){
+		a = ts.items[ i ];		// Tile we're looking neighbors for
+
+		for( ii of stack ){
+			b = ts.items[ ii ];	// Tile for neightbor testing.
+
+			// Check which sockets match between the 
+			for( j=0; j < 4; j++ ){
+				// Shift by two to match opposite sockets. Up->Down, Right->Left, etc
+				jj = ( j+2 ) & 3;
+
+				// If socket IDs are the same, then its a possible neighbors.
+				if( a.sockets[ j ] == b.sockets[ jj ] ){
+					// Save To A that B is a Neighbor
+					ary = neighbors[ i ][ j ].idx;
+					if( ary.indexOf( ii ) == -1 ) ary.push( ii );
+
+					// Save To B that A is a Neighbor
+					ary = neighbors[ ii ][ jj ].idx;
+					if( ary.indexOf( i ) == -1 ) ary.push( i );
+				}
+			}
+		}
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Create a Bitmask based on the Index Array.
+	for( i of neighbors ){
+		for( ii of i ){
+			ii.bit_mask.on_ary( ii.idx );
+		}
+	}
+
+	return neighbors;
+}
+
+
+class GridCell{
+	constructor( bit_tiles, count, entropy, weight ){
+		this.tiles			= bit_tiles;
+		this.count			= count;
+		this.entropy		= entropy;	// Total Entropy of Existing Tiles
+		this.weight 		= weight;	// Total Weight of Existing Tiles.
+		this.tile_index		= null;		
+		this.is_collapsed	= false;
+	}
+
+	collapse( ts, rng ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create a list of available Tile Weights.
+		let tile_idx,
+			weight_ary	= new Array( this.tiles.count ),
+			i			= 0;
+
+		// Use the Bitset Iterator to get all the Bit Indexes that are ON.
+		for( tile_idx of this.tiles ){
+			weight_ary[ i ] = {
+				idx		: tile_idx,
+				weight	: ts.items[ tile_idx ].weight
+			};
+			i++;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Since Random Weight is less then Total, this makes sure
+		// that at some point it'll be in the negative as it keeps subtracting
+		// weight before we run out of weights for the process.
+		// Since the random number gives an unpredicted reduction and tiles
+		// are not in order by their weight, its a nice way to randomly
+		// pick something, Larger weighted tiles will have a greater chance of
+		// winning out which is what we'd like to happen.
+		let w, weight_rnd = this.weight * rng.next();
+
+		for( w of weight_ary ){
+			if( ( weight_rnd -= w.weight ) < 0 ){
+				//console.log("Save tile", w.idx );
+				this.tiles.reset().on( w.idx ); // Leave only 1 bit open, which would allow
+				this.update();					// Update to set this cell as collapsed.
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Update cell information based on the tile's bitset value
+	update( ts ){
+		this.count = this.tiles.count;
+
+		if( this.count == 0 ){
+			this.weight			= 0;
+			this.entropy		= 0;
+			this.is_collapsed	= true;
+			console.error( "------- Bad Collapse" );
+
+		}else if( this.count == 1 ){
+			this.tile_index 	= this.tiles.get_iter()();
+			this.is_collapsed 	= true;
+			this.weight			= 0;
+			this.entropy		= 0;
+
+		}else{
+			if( !ts ){ console.error("TileSet was not passed to GridCell.update"); return; }
+
+			let t, i,
+				sum_w		= 0,	// Total Weight
+				sum_w_log	= 0;	// Total (weight * log(weight))
+
+			// Compute the Weight
+			for( i of this.tiles ){
+				t 			= ts.items[ i ];
+				sum_w		+= t.weight;
+				sum_w_log	+= t.weight_log;
+			}
+
+			// Compute the Weight
+			this.weight		= sum_w;
+			this.entropy	= Math.log( sum_w ) - ( sum_w_log / sum_w );
+		}
+	}
+
+	apply_bitmask( mask, ts ){
+		let modified = this.tiles.and( mask );
+		if( modified ) this.update( ts );
+		return modified;
+	}
+}
+
+class RandomLCG{
+	#init = 0;
+	#seed = 0;
+	constructor( seed ){ this.reseed( seed ); }
+	reseed( seed ){ this.#init = this.#seed = seed * 48271 % 2147483647; }
+	reset(){ this.#seed = this.#init; }
+	next(){
+		this.#seed = this.#seed * 48271 % 2147483647;
+		return this.#seed / 2147483648;
+	}
+}
+
+class Wfc{
+	#tile_set		= null;	// The collection of tiles
+	#neighor_set	= null;	// Map of compatible socketed tiles
+	#grid			= null;	// Main Grid
+	#bit_set		= null;	//
+	#rng 			= new RandomLCG( 4 );
+
+	propagate_limit = 40;
+	pass_limit		= 50;
+
+	constructor( ts, x, y ){
+		this.#tile_set		= ts;
+		this.#neighor_set	= create_neightor_set( ts );
+		this.#grid 			= new FlatGridXY( x, y );
+		this.#bit_set 		= new Bitset( ts.len ).on_range( 0, ts.len-1 );
+
+		this.pass_limit		= x * y + 10; // Give enough passes to cover the whole grid.
+		//console.log( this.#tile_set );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Fill the Grid with Tile Info.
+		let ts_entropy	= ts.entropy(),
+			ts_weight	= ts.weight(),
+			ts_len 		= ts.len;
+		this.#grid.fill((x,y,i)=>{
+			return new GridCell( this.#bit_set.clone(), ts_len, ts_entropy, ts_weight );
+		});
+	}
+
+	is_all_collapsed(){
+		let c;
+		for( c of this.#grid.cells ){
+			if( !c.is_collapsed ) return false;
+		}
+		return true;
+	}
+
+	get_grid(){ return this.#grid; };
+
+	build(){
+		let passes = 0;
+		let idx;
+
+		do{
+			idx = this.find_entropy_cell();
+
+			this.#grid.cells[ idx ].collapse( this.#tile_set, this.#rng );
+			
+			//console.log( "###########################################################" );
+			//console.log( "Find and Collapse", idx );
+			//console.log( this.#grid.cells[ idx ] );
+			//console.log( "###########################################################" );
+
+			this.propagate( idx );		
+			passes++;
+		}while( !this.is_all_collapsed() && passes <= this.pass_limit );
+
+		console.log( "Done-ish", passes, this.is_all_collapsed() );
+		//console.log( this.#grid );
+
+		this.final_pass();
+	}
+
+	find_entropy_cell( cells, tiles ){
+		let i, g, entropy_rnd, 
+			min = Infinity,
+			idx = null;
+
+		for( i=0; i < this.#grid.len; i++ ){
+			g = this.#grid.cells[ i ];		// Get Grid Item
+			//console.log( "CHECK", g );
+
+			if( g.is_collapsed ) continue;	// Skip any cells that have been collapsed.
+
+			// With many cells having the same low entropy value, use a bit
+			// of randomness to help pick which one to use.
+			entropy_rnd = g.entropy - ( this.#rng.next() * 0.001 );
+
+			// Found Cell with the least probability, meaning
+			// the cell that will most likely collapse the easiest.
+			if( entropy_rnd < min ){
+				min = entropy_rnd;
+				idx = i;
+			}
+		}
+		return idx;
+	}
+
+	propagate( start_idx ){
+		let cell_idx_a, cell_idx_b, cell_a, cell_b, dir_i, bit_mask, modified, tile_idx,
+			passes	= 0,
+			stack	= [ start_idx ];
+		let bit, mask = new Bitset();
+
+		while( (cell_idx_a = stack.pop()) && passes < this.propagate_limit ){
+			//console.log("-------------------------------------------");
+			//console.log( "index", cell_idx_a, "coord", this.#grid.pos_of( cell_idx_a ),  );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			cell_a = this.#grid.cells[ cell_idx_a ];
+			
+			if( cell_a.count == 0 ){ console.log("ERROR - MAIN TILES EMPTY"); return; }
+
+			let tile_ary = cell_a.tiles.get_bit_array();
+
+			/*
+			console.log( "Available Tiles", tile_ary );
+			console.log( "Is Collapsed", cell_a.is_collapsed );
+			if( cell_a.tile_index != null ){
+				let tile = this.#tile_set.items[ cell_a.tile_index ];
+				console.log( "Final Tile", tile.name, cell_a.tile_index );
+			}
+			*/
+
+			/*
+				for each cell, get list of tiles.
+				for each tile, create a complete direction masks
+				Apply this mask to the neightor cell's available tile bits.
+
+				todo, get tid of apply-mask, create functions like
+				bit_and
+				bit_or
+			*/
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Look at the cell's neighbors : Top, Right, Bottom, Left
+			for( dir_i=0; dir_i < 4; dir_i++ ){
+
+				//console.log( "-- dir ", dir_i );
+
+				//-----------------------------------------------------------
+				// Check if there is a cell in this direction
+				cell_idx_b = this.#grid.get_neightbor_idx( cell_idx_a, dir_i );
+				if( cell_idx_b == null ){ continue;  } // console.log( "Direction out of bounds", dir_i, this.#grid.pos_of( idx_a ) );
+				
+				//console.log( "---- Idx", cell_idx_b, "dir", dir_i,  "coord", this.#grid.pos_of( cell_idx_b ) );
+
+				//-----------------------------------------------------------
+				// Get the Neighbor Cell
+				cell_b = this.#grid.cells[ cell_idx_b ];
+				if( cell_b.count == 0 ){ console.log("---- ERROR - DIRECTION TILE EMPTY"); return; }
+
+				/*
+				console.log( "---- Is Collapsed", cell_b.is_collapsed );
+				if( cell_b.tile_index != null ){
+					let tile = this.#tile_set.items[ cell_b.tile_index ];
+					console.log( "---- Final Tile", tile.name, cell_b.tile_index );
+				}
+				*/
+
+				//-----------------------------------------------------------
+				// Create a Bit mask of all the tiles possible neighbor's in this direction
+				mask.reset();
+				for( tile_idx of tile_ary ){
+					mask.or( this.#neighor_set[ tile_idx ][ dir_i ].bit_mask );
+				}
+
+				//console.log( "---- Dir Mask ", mask.get_bit_array() );
+
+				//-----------------------------------------------------------
+				//console.log( "---- start ", cell_b.tiles.get_bit_array() );
+
+				modified	= cell_b.apply_bitmask( mask, this.#tile_set );
+
+				//if( modified ) console.log( "---- modified ", cell_b.tiles.get_bit_array() );
+
+				// If tiles where removed, then we need to filter out
+				// its neighbor's available tiles.
+				if( modified ){	stack.push( cell_idx_b );
+					//console.log( "---- Add to stack", cell_idx_b );
+				}
+
+				//bit_mask	= this.#neighor_set[ i ][ dir_i ].bit_mask;
+
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			//console.log( "-- Pass ", passes );
+			passes++;
+			//for( let tile of tile_ary ){
+			//	console.log("--", tile);
+			//}
+
+		
+
+			/*
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Look at the cell's neighbors : Top, Right, Bottom, Left
+			for( dir_i=0; dir_i < 4; dir_i++ ){
+				//-------------------------------------
+				// Check if there is a cell in this direction
+				idx_b = this.#grid.get_neightbor_idx( idx_a, dir_i );
+				if( idx_b == null ){ continue;  } // console.log( "Direction out of bounds", dir_i, this.#grid.pos_of( idx_a ) );
+				
+				console.log( "-- Idx", idx_b, "dir", dir_i,  "coord", this.#grid.pos_of( idx_b ), );
+
+				//-------------------------------------
+				// Get the Neighbor Cell
+				cell_b = this.#grid.cells[ idx_b ];
+				if( cell_b.count == 0 ){ console.log("---- ERROR - DIRECTION TILE EMPTY"); return; }
+
+				console.log( "---- Is Collapsed", cell_b.is_collapsed );
+				if( cell_b.tile_index != null ){
+					let tile = this.#tile_set.items[ cell_b.tile_index ];
+					console.log( "---- Final Tile", tile.name, cell_b.tile_index );
+				}
+
+				//-------------------------------------
+				bit_mask	= this.#neighor_set[ idx_a ][ dir_i ].bit_mask;
+				
+				console.log( "---- mask ", bit_mask.get_bit_array() );
+				console.log( "---- start ", cell_b.tiles.get_bit_array() );
+
+				modified	= cell_b.apply_bitmask( bit_mask, this.#tile_set );
+
+				if( modified ){
+					console.log( "---- modified ", cell_b.tiles.get_bit_array() );
+				}
+
+				// If tiles where removed, then we need to filter out
+				// its neighbor's available tiles.
+				if( modified ){	stack.push( idx_b );
+					console.log( "---- Add to stack", idx_b );
+				}
+			}
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			passes++;
+			*/
+		}
+	}
+
+	final_pass(){
+		// Find Any Cell that was not collapsed correctly.
+		let tile, gc, ngc, n_idx, dir_i, dir_ii, s;
+		let filter			= [ null, null, null, null ];
+		let filter_cnt 		= 0;
+		let find_cnt 		= 0;
+
+		for( gc of this.#grid ){
+			// Skip any cells that are properly Collapsed
+			if( gc.cell.count == 1 ) continue;
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Build a a Direction Socket Filter based on existing neighbors and what
+			// is their current socket of the opposite direction.
+			filter_cnt = 0;
+			for( dir_i = 0; dir_i < 4; dir_i++ ){
+				dir_ii	= (dir_i + 2) & 3;	// Opposite Direction
+				n_idx	= this.#grid.get_neightbor_idx( gc.i, dir_i ); 
+
+				// If neighbor found, get its opposite socket type
+				if( n_idx != null ){
+					// get Neighbor Cell
+					ngc				= this.#grid.cells[ n_idx ];	
+					// Get the cell's tile
+					tile 			= this.#tile_set.items[ ngc.tile_index ];
+					// Save the opposite side socket
+					filter[ dir_i ]	= tile.sockets[ dir_ii ];
+					filter_cnt++;
+
+				// Else ignore this direction when filtering.
+				}else filter[ dir_i ] = null;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Search the tile set that will find one that would fit into position
+			// based on the direction socket filter.
+			for( tile of this.#tile_set.items ){
+				s			= tile.sockets;
+				find_cnt	= 0;
+
+				if( filter[0] != null && filter[0] == s[0] ) find_cnt++;
+				if( filter[1] != null && filter[1] == s[1] ) find_cnt++;
+				if( filter[2] != null && filter[2] == s[2] ) find_cnt++;
+				if( filter[3] != null && filter[3] == s[3] ) find_cnt++;
+
+				// If socket found eq how many filter checks, then 
+				// we found our tile. Update cell as properly collapsed.
+				if( find_cnt == filter_cnt ){
+					gc.cell.tile_index	= tile.index;
+					gc.cell.count		= 1;
+					break;
+				}
+			}
+		}
+	}
+
+}
+
+
+
+
+// At a starting cell, check its neighbor cells to see if any tile does NOT
+// fit with any of the starting cell's tiles. If any tile is removed from
+// a cell, then its neighbors will also be checked in the same way for that
+// modified cell. It will then spread like wild fire to any cell that changes
+function propagate( start_pos, cells, tiles, rules ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos,
+		stack		= [ start_pos ];	// Start our process with a collapsed cell.
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOCAL FUNCTION AND CONSTANTS
+	const UP		= [ 0,-1];
+	const RIGHT		= [ 1, 0];
+	const DOWN		= [ 0, 1];
+	const LEFT		= [-1, 0];
+	const DIRS		= [ UP, RIGHT, DOWN, LEFT ];
+	const DIR_NAMES	= [ "UP", "RIGHT", "DOWN", "LEFT" ];
+
+	// Shift position in some direction
+	let get_dir_pos = ( p, d, out )=>{
+		out[ 0 ] = p[0] + d[0];
+		out[ 1 ] = p[1] + d[1];
+		return !( out[0] < 0 || out[0] >= WIDTH || out[1] < 0 || out[1] >= HEIGHT );
+	};
+
+	// Local function to get Tiles from a Cell
+	let get_tiles = p=>cells[ p[1] ][ p[0] ];
+
+	// Remove file from the cell matrix
+	let remove_tile	= ( p, t )=>{
+		let ary = cells[ p[1] ][ p[0] ];
+		let idx = ary.indexOf( t );
+		if( idx != -1 ) ary.splice( idx, 1 );
+		console.log( "---- FILTER", cells[ p[1] ][ p[0] ]  )	;
+	};
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let passes = 0,
+		dir_name, main_tiles, chk_tiles,  ct, mt, cti,
+		idx,  modified, compatible_cnt, key;
+
+	while( (pos = stack.pop()) && passes < PROP_LMT ){
+		// Get the Tiles available for the Cell we are going to process.
+		main_tiles = get_tiles( pos );
+		console.log("------------------------------------------");
+		console.log( "- MAIN CELL", pos, main_tiles );
+
+		if( main_tiles.length == 0 ){
+			console.log("ERROR - MAIN TILES EMPTY");
+			return;
+		}
+
+		// We process the cell by checking its neighbor cells from each known direction
+		for( idx=0; idx < 4; idx++ ){
+			//console.log( DIR_NAMES[ idx ], DIRS[ idx ] );
+
+			//-----------------------------------------
+			// Get a Neighbor Cell based on the current direction
+			// we are scanning.
+			let chk_pos = [0,0];	// Must LET, it gets saved to the stack, else we can cause errors modifing pointers
+			dir_name = DIR_NAMES[ idx ];
+			if( ! get_dir_pos( pos, DIRS[ idx ], chk_pos ) ){  console.log( "Direction out of bounds", chk_pos ); continue; break; }
+
+			//-----------------------------------------
+			// Get all the vailable tiles on the neighbor cell.
+			chk_tiles = get_tiles( chk_pos );
+			if( chk_tiles.length == 0 ){ console.log("ERROR - CHECK TILES EMPTY"); return; }
+
+			console.log( ":::::");
+			console.log( "-- DIR CHECK", dir_name, "OF", main_tiles );
+			console.log( "--- CHECK CELL", chk_pos, chk_tiles );
+
+			//-----------------------------------------
+			// Loop over all the Neighbor cells, Then check if any of them
+			// is allowed to exists at this direction from any of the MAIN CELL's tiles.
+			// Since we're deleting from the array by reference, work backwards to not mess up indexing.
+
+			modified = false;
+			for( cti = chk_tiles.length-1; cti >=0; cti-- ){ 
+				ct = chk_tiles[ cti ];
+
+				//.............................
+				// If the Tile is not compatible with NONE of the main tile list
+				compatible_cnt = 0;
+				for( mt of main_tiles ){	
+					key = mt + "_" + ct + "_" + dir_name;  // ex. L_C_UP
+					console.log( "---- CHK RULE", key, rules[ key ] );
+					//if( !rules[ key ] ) bad_tiles.add( ct );
+					if( rules[ key ] ){ compatible_cnt++; break; }
+				}
+
+				console.log( "---- COMPATIBLE COUNT:", ct, compatible_cnt );
+				//.............................
+				// if a tile is NOT compatible with any of the main tiles, Then its worthless
+				// so remove it from our tile array. This will effect the array in the cell matrix
+				// since the changed is done by reference.
+				if( compatible_cnt == 0 ){
+					remove_tile( chk_pos, ct );
+					modified = true;
+				}
+			}
+
+			//-----------------------------------------
+			// if we had to remove tiles, then add the cell to the stack 
+			// because its change, effects it's neighbors.
+			if( modified ) stack.push( chk_pos );
+			//break;
+		}
+
+		passes++;
+		//break;
+	}
+	console.log( "Propagate Pass Count", passes );
+}
+
+class FlatGridXY{
+	cells		= null;
+	#x_cnt		= 0;
+	#y_cnt		= 0;
+	#x_max		= 0;
+	#y_max		= 0;
+	#x_cnt_inv	= 0;
+
+	constructor( x, y ){
+		this.#x_cnt 	= x;
+		this.#y_cnt 	= y;
+		this.#x_max 	= x-1;
+		this.#y_max		= y-1;
+		this.#x_cnt_inv	= 1 / this.#x_cnt;
+
+		this.cells		= new Array( x*y );
+	}
+
+	get len(){ return this.cells.length; }
+	get( x, y ){ return this.cells[ y * this.#x_cnt + x ]; }
+	set( x, y, v ){ return this.cells[ y * this.#x_cnt + x ] = v; return this; }
+	is_edge( x, y ){ return ( x == 0 || x == this.#x_max || y == 0 || y == this.#y_max ); }
+
+	index_of( x, y ){ return y * this.#x_cnt + x; }
+	pos_of( idx ){ 
+		let y = Math.floor( idx * this.#x_cnt_inv ),
+			x = idx - y * this.#x_cnt;
+		return [x,y];
+	}
+
+	get_neightbor_idx( idx, dir=0 ){
+		let y = Math.floor( idx * this.#x_cnt_inv ),
+			x = idx - y * this.#x_cnt;
+
+		// Which Side to shift from
+		switch( dir ){
+			case 0 : y--; break; // UP
+			case 1 : x++; break; // Right
+			case 2 : y++; break; // Bottom;
+			case 3 : x--; break; // Left;
+		}
+
+		// Out of Bounds Check, return null
+		if( x < 0 || x > this.#x_max || y < 0 || y > this.#y_max ) return null;
+
+		// Return the cell next to the requested index.
+		return y * this.#x_cnt + x;
+	}
+
+	fill( fn ){
+		let i, x, y;
+		for( i=0; i < this.cells.length; i++ ){
+			y = Math.floor( i * this.#x_cnt_inv );
+			x = i - y * this.#x_cnt; // i % this.#x_cnt;
+			this.cells[ i ] = fn( i, x, y );
+		}
+		return this;
+	}
+
+	
+	[Symbol.iterator](){
+		let i=0, len = this.cells.length;
+		return {
+			next : ()=>{
+				let rtn = { value:null, done:true };
+
+				if( i < len ){
+					let y = Math.floor( i * this.#x_cnt_inv ),
+						x = i - y * this.#x_cnt;
+
+					rtn.value	= { i, x, y, cell:this.cells[ i ] };
+					rtn.done	= false;
+					i++;
+				}
+
+				return rtn;
+			},
+		};
+	}
+}
+
+
+
+async function init(){
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Initialize 
+    App.Debug.set_depth_test( true );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let dl = await XhrQueue.url( "../../files/models" )
+		.push( "kenny_road_tiles.gltf", "kenny_road_tiles.bin" )
+		.then();
+	
+	//let mat = App.new_mat( "LowPoly" );
+	//let mesh = GltfUtil.mesh( dl[0], dl[1], "roadTile_150" );
+	//let e = App.$Draw( "tile", mesh, mat );
+
+	//let e = GltfUtil.get_mesh( "src", dl[0], dl[1], mat, ["roadTile_141"] ); //cross
+	//let q = GltfUtil.get_mesh( "src", dl[0], dl[1], mat, ["roadTile_150"] );	//T
+	//let e = GltfUtil.get_mesh( "src", dl[0], dl[1], mat, ["roadTile_162"] );	//Straight
+	//let q = GltfUtil.get_mesh( "src", dl[0], dl[1], mat, ["roadTile_030"] );	//Enter
+	//q.Node.set_rot( ROT270 );
+	//e.Node.set_pos( POS270 );
+	//roadTile_027 - Side
+	//roadTile_034 - Assfalt
+	//roadTile_035 - Corner
+	//roadTile_030 - Opener
+	//163 = Grass
+
+	let ts = new TileSet( dl[0], dl[1] );
+	for( let t of tile_set ){
+		ts.add( t.name, t.mesh, t.weight, t.sockets, t.build );
+	}
+
+	let wfc = new Wfc( ts, 10, 10 );
+	wfc.build();
+
+	let grid = wfc.get_grid();
+
+
+	for( let itm of grid ){
+		if( itm.cell.count != 1 ) continue;
+		//console.log( itm );
+		let e = ts.entity_from( itm.cell.tile_index );
+
+
+		e.Node.add_pos(
+			itm.x * 3,
+			0,
+			itm.y * 3,
+		);
+		
+	}
+
+
+
+	//console.log( wfc );
+
+	//console.log( ts.items );
+	//gen_rules_v1( ts );
+	//gen_rules_v2( ts );
+	//let t = tile_set[ 0 ];
+	//ts.add( t.name, t.mesh, t.sockets, t.build );
+
+	return true;
+}
+
+</script><page-layout></page-layout>

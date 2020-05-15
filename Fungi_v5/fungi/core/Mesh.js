@@ -153,6 +153,13 @@ class Mesh{
 				vao.add_buf( m.buf.uv, Shader.UV_LOC );
 			}
 
+			// COLOR
+			if( json.color ){
+				o = json.color;
+				m.buf.color = Buf.new_array_bin( dv, o.byte_start, o.byte_cnt, o.comp_len, true, false );
+				vao.add_buf( m.buf.color, Shader.COL_LOC );
+			}			
+
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// BONE INDICES AND WEIGHTS
 			if( load_skin && json.joints && json.weights ){

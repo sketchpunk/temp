@@ -76,3 +76,9 @@ IRREGULAR HEX GRID
 https://www.kchapelier.com/hexagrid-relaxing/
 https://github.com/kchapelier/hexagrid-relaxing
 https://github.com/CedricGuillemet/HexagridRelaxing
+
+
+FULL BODY IK
+https://github.com/yamahigashi/fabric-fabrik-fullbody-ik
+https://www.youtube.com/watch?time_continue=46&v=wjn19jBzJCE&feature=emb_logo
+http://www.andreasaristidou.com/FABRIK.html
