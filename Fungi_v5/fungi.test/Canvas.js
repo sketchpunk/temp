@@ -44,6 +44,13 @@ class Canvas{
 		}
 		return this;
 	}
+
+	on_mouse_up( fn ){
+		this.canvas.addEventListener("mouseup", (e)=>{
+			e.preventDefault(); e.stopPropagation();
+			fn(e, e.clientX - this.offsetX, e.clientY - this.offsetY);
+		});
+	}
 	// #endregion //////////////////////////////////////////////////////////////////
 
 	// #region Coord System
