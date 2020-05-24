@@ -82,3 +82,36 @@ FULL BODY IK
 https://github.com/yamahigashi/fabric-fabrik-fullbody-ik
 https://www.youtube.com/watch?time_continue=46&v=wjn19jBzJCE&feature=emb_logo
 http://www.andreasaristidou.com/FABRIK.html
+
+
+MISC
+https://www.redblobgames.com/x/1947-dyson-hatching/  3D Hatching in JS canvas.
+https://www.patreon.com/posts/hatching-in-1pdg-31716880 original hatching
+https://bl.ocks.org/mbostock/6675193
+
+https://simblob.blogspot.com/2019/10/chaikin-curves.html#more
+
+https://simblob.blogspot.com/2018/10/map-generation-on-sphere.html#more
+
+https://simblob.blogspot.com/2016/02/updating-my-introduction-to-a.html
+https://simblob.blogspot.com/2016/06/minor-page-improvements.html *A Path finding
+https://simblob.blogspot.com/2015/02/optimizing-for-grid-maps.html
+https://www.redblobgames.com/pathfinding/grids/algorithms.html
+
+
+https://github.com/thi-ng/umbrella/ 	// Large collection of Structures, Algorithms, Etc.
+
+HEX
+https://simblob.blogspot.com/2019/03/improving-hexagon-map-storage-diagram.html#more
+https://www.redblobgames.com/grids/hexagons/#map-storage
+https://www.redblobgames.com/grids/hexagons/
+
+IMPOSTERS
+https://www.shaderbits.com/blog/octahedral-impostors
+https://www.youtube.com/watch?v=_x88tvkAGuo&feature=youtu.be&t=232
+
+
+BLOCKCHAIN IN JS
+https://www.youtube.com/watch?time_continue=31&v=zVqczFZr124&feature=emb_logo
+https://medium.com/@spenserhuang/learn-build-a-javascript-blockchain-part-1-ca61c285821e
+

@@ -113,6 +113,12 @@ class Vec2 extends Float32Array{
 	from_add( a, b ){ this[0] = a[0] + b[0]; this[1] = a[1] + b[1]; return this; }
 	from_sub( a, b ){ this[0] = a[0] - b[0]; this[1] = a[1] - b[1]; return this; }
 	from_scale( a, s ){ this[0] = a[0] * s; this[1] = a[1] * s; return this; }
+	from_lerp( a, b, t ){
+		let tt = 1 - t;
+		this[0] = a[0] * tt + b[0] * t;
+		this[1] = a[1] * tt + b[1] * t;
+		return this;
+	}
 
 	//----------------------------------------------
 	// Math

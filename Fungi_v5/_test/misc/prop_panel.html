@@ -1,0 +1,418 @@
+1<!DOCTYPE html>
+<html><head><title></title><style>
+/* ========================================================== */
+prop-panel{
+	position	: fixed;
+	z-index		: 1000;
+	display		: block;
+	box-sizing	: border-box;
+	transition	: transform 0.3s ease-out;
+}
+
+prop-panel.left_side{ left:0px; top:10px; }
+prop-panel.left_side.close{ transform: translate( -100%, 0% ); }
+prop-panel.right_side{ right:0px; top:10px;  }
+prop-panel.right_side.close{ transform: translate( 100%, 0% ); }
+
+prop-panel > div{ position:absolute; top:0px; left:0px; cursor:pointer; user-select: none; writing-mode:vertical-rl; transform:translate(-100%, 0%); }
+
+prop-panel > main { display:flex; flex-direction:column; }
+
+prop-node{ display:flex; box-sizing:border-box; }
+prop-node > label{ flex:0 0 40%; }
+prop-node > main{ flex:1 1 auto; display:flex; }
+prop-node > main > *{ flex: 1 1 auto; }
+
+prop-group{ display:flex; flex-direction:column; }
+prop-group > header { display:flex; flex-direction:row; cursor:pointer; user-select: none; }
+prop-group > main{ display:flex; flex-direction:column; overflow:hidden; max-height:1500px; transition: all 1.5s ease-in; }
+prop-group.close > main{ max-height:0px; transition: all 0.9s; transition-timing-function: cubic-bezier(.07,1.07,0,1.01); }
+
+prop-range{ display:flex; }
+prop-range > input{ flex:1 1 auto; }
+prop-range > label{ flex:0 0 25%; }
+
+prop-checkstack{ display:flex; flex-direction:row; flex-flow:row wrap; }
+prop-checkstack input{ position:absolute !important; clip:rect(0, 0, 0, 0); overflow:hidden; height:1px; width:1px; border:0px; }
+prop-checkstack label{ cursor:pointer; }
+prop-checkstack.space20 label{ flex:1 1 20%; }
+prop-checkstack.space25 label{ flex:1 1 25%; }
+prop-checkstack.space45 label{ flex:1 1 45%; }
+
+
+
+/* ========================================================== */
+prop-panel.Theme{
+	border				: 0px solid orange; 
+	background-color	: #202020;
+	color				: #909090;
+	font-family			: "Lucida Console", Monaco, monospace;
+	font-size			: 13px;
+}
+
+prop-panel.Theme > header{ text-align:center; font-size:14px; padding:4px 6px; background-color:#333333; }
+prop-panel.Theme > footer{ font-size:12px; padding:2px 6px; background-color:#333333; }
+
+prop-panel.Theme > div{
+	background-color:#333333; padding: 8px 4px 6px 4px; letter-spacing: 2px; border-radius:5px 0px 0px 5px;
+	text-transform:uppercase;
+}
+
+/* BUTTONS */
+prop-panel.Theme > main button { cursor:pointer; background-color:#202020; color:#909090;
+	border-top:1px solid #373737;
+	border-width:1px 0px 0px 0px;
+	text-align:left; font-family : "Lucida Console", Monaco, monospace;
+	padding:6px 6px 6px 6px; font-size:13px;
+}
+prop-panel.Theme > main button:hover{ color:white; }
+prop-panel.Theme > main button:before{ content:'[ '; }
+prop-panel.Theme > main button:after{ content:' ]'; }
+
+prop-panel.Theme > main button:active{ background-color:#404040; }
+prop-panel.Theme > main button:focus{ outline:0; }
+
+/* TEXT BOX */
+prop-panel.Theme input[ type="text" ],
+prop-panel.Theme input[ type="number" ]{
+	border:1px solid #555555; background-color:#333333; padding:2px 6px; color:gray;
+	transition: all .3s ease-out; }
+
+prop-panel.Theme input[ type="text" ]:focus,
+prop-panel.Theme input[ type="number" ]:focus
+	{ outline:0; background-color:#404040; border-color:#c0c0c0; color:white; } 
+
+/* RANGE */
+prop-panel.Theme input[type=range] { margin:0px; box-sizing: border-box; -webkit-appearance: none; }
+prop-panel.Theme input[type=range]:focus{ outline:0; background-color:#404040; border-color:#c0c0c0; color:white; }
+prop-panel.Theme input[type=range]::-webkit-slider-thumb{ -webkit-appearance: none; height:100%; width:14px; background: #727272; cursor: pointer; }
+prop-panel.Theme input[type=range]::-webkit-slider-runnable-track{ height: 20px; cursor: ew-resize; background: #303030; border:1px solid #555555; transition: all 0.3s ease-out; }
+prop-panel.Theme input[type=range]:focus::-webkit-slider-runnable-track{ background-color:#404040; border-color:#c0c0c0; }
+
+/* PROP NODE */
+prop-panel.Theme prop-node{ border-top: 1px solid #373737; align-items:center; }
+prop-panel.ThemeX prop-node:last-of-type{ border-bottom: 1px solid #373737; }
+prop-panel.Theme prop-node > label{ padding:4px 8px 4px 8px; flex:0 0 30%; }
+prop-panel.Theme prop-node > main{ padding:4px 6px 4px 0px; }
+
+/* PROP GROUP */
+prop-panel.Theme prop-group > header{ background-color:#333333; color:white; font-size:12px; display:flex; align-items:center; }
+prop-panel.Theme prop-group > header > i{ border:1px solid gray; width:10px; height:10px; margin:4px 5px 4px 8px; background-color:gray; }
+prop-panel.Theme prop-group > header > span{ margin:2px 0px 0px 0px; text-transform:uppercase; }
+prop-panel.Theme prop-group.close > header > i{ background-color:transparent; }
+
+/* PROP RANGE */
+prop-panel.Theme prop-range > label{ border:1px solid #555555; margin-left:5px; text-align:center; padding-top:3px; }
+
+/* PROP CHECK STACK */
+prop-panel.Theme prop-checkstack label{ margin: 3px 0px 0px 3px; padding:3px 2px 3px 2px; background-color: #363636; color:gray; text-align:center; word-wrap: break-word; }
+prop-panel.Theme prop-checkstack input:checked + label{ background-color: #626262; color:white; }
+
+/*
+input[type="color" i]::-webkit-color-swatch-wrapper {
+    display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    -webkit-user-modify: read-only !important;
+	padding: 4px 2px;
+	background-color:black;
+	border:0px solid #c0c0c0;
+}
+
+input[type="color" i] {
+    -webkit-appearance: square-button;
+    width: 44px;
+    height: 23px;
+    background-color: buttonface;
+    cursor: default;
+    border-width: 0px;
+    border-style: solid;
+    border-color: rgb(169, 169, 169);
+    border-image: initial;
+    padding: 0px 0px;
+}
+*/
+</style></head><body>
+
+<center>
+	<button onClick="document.getElementById('test').toggle()">toggle</button>
+</center>
+
+<prop-panel id="test" side="right" width="300px" class="Theme" open="true">
+	<prop-node><div>Put Whatever</div></prop-node>
+	
+	<input type="text" name="var_1" label="Text"/>
+	<input type="number" name="var_2" value="50" label="Number">
+	<input type="range" name="range" value="30" min="10" max="50" step="10" onChange="console.log('done',this.value);" onInput="console.log('imp',this.value);">
+	<input type="color" name="color" value="#e66465" >
+	<input type="date" name="date" value="2018-07-22" min="2018-01-01" max="2018-12-31">
+	<button>Btn</button>
+	
+	<prop-range title="prop range" name="prange"></prop-range>
+	<prop-group label="Prop Group" open="true">
+		<input type="text" name="var_3" title="Text"/>
+		<button>Button Two</button>
+		<prop-checkstack class="space45" name="ChkStack" label="Check Stack">
+			<input type="checkbox" id="opt_a" title="A">
+			<input type="checkbox" id="opt_b" title="B">
+			<input type="checkbox" id="opt_c" title="C">
+			<input type="checkbox" id="opt_d" title="D">
+		</prop-checkstack>
+	</prop-group>
+</prop-panel>
+
+<input type="text" list="dlist" />
+
+<datalist id="dlist">
+    <option value="a">
+    <option value="b">
+    <option value="c">
+    <option value="d">
+    <option value="e">
+</datalist>
+
+
+<script>
+// https://github.com/dy/settings-panel
+// https://github.com/freeman-lab/control-panel
+// https://github.com/automat/controlkit.js
+// https://github.com/colejd/guify
+// https://github.com/wearekuva/oui
+
+
+class PropNode extends HTMLElement{
+	#label	= null;
+	#main	= null;
+	constructor( title ){
+		super();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if there is already elements attached
+		let elm, elm_ary = new Array();
+		for( let i = this.children.length-1; i >= 0; i-- ){
+			elm = this.children[ i ];
+			if( elm.parentNode ) elm.parentNode.removeChild( elm );
+			elm_ary.push( elm );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.#label	= document.createElement( "label" );
+		this.#main	= document.createElement( "main" );
+		this.appendChild( this.#label );
+		this.appendChild( this.#main );
+		this.set_label( title || this.getAttribute( "label" ) );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Move The starting elements to main.
+		for( let i=elm_ary.length-1; i >= 0; i-- ) this.append_control( elm_ary[ i ] );
+	}
+
+	set_label( txt ){ this.#label.innerHTML = txt; return this; }
+	append_control( elm ){ this.#main.appendChild( elm ); return this; }
+}
+window.customElements.define( "prop-node", PropNode );
+
+
+class PropPanel extends HTMLElement{
+	#main	= null;
+	#nodes	= new Array();
+	vars	= {};
+	
+	constructor(){ super(); }
+	
+	// #region WebComponent
+	connectedCallback(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let elm, elm_ary = new Array();
+		for( let i = this.children.length-1; i >= 0; i-- ){
+			elm = this.children[ i ];
+			if( elm.parentNode ) elm.parentNode.removeChild( elm );
+			elm_ary.push( elm );
+		}
+
+		this.appendChild( document.importNode( PropPanel.Template.content, true ) );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.#main = this.querySelector( "main" );
+		this.style.width = this.getAttribute( "width" ) || "300px";
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( let i=elm_ary.length-1; i >= 0; i-- ) this.append_node( elm_ary[ i ] );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let div = this.querySelector( ":scope > div" );
+		div.addEventListener( "click", ()=>{ this.toggle(); } );
+	}
+
+	// Observed Attribute
+	static observedAttributes = [ "side", "open" ];
+	attributeChangedCallback( name, old_value, new_value ){
+		switch( name ){
+			case "side":
+				if( new_value == "right" ){
+					this.classList.remove( "left_side" );
+					this.classList.add( "right_side" );
+				}else{
+					this.classList.remove( "right_side" );
+					this.classList.add( "left_side" );
+				}
+			break;
+			case "open":
+				if( new_value == "true" )	this.open();
+				else 						this.close();
+			break;
+		}
+		// console.log( "attributeChangedCallback : name - %s : old value - %s : new value - %s", name, old_value, new_value );
+	}
+	// #endregion //////////////////////////////////////////////////////////////
+
+	// #region Methods
+	append_node( elm ){ this.#main.append( this.node_wrap( elm ) ); }
+
+	toggle(){
+		if( this.classList.contains("close") )	this.open();
+		else									this.close();
+	}
+
+	open(){ this.classList.remove( "close" ); }
+	close(){ this.classList.add( "close" ); }
+
+	node_wrap( elm ){
+		// console.log( "WrapNOde", elm.getAttribute("name"), elm )
+		switch( elm.nodeName ){
+			case "PROP-NODE":
+			case "PROP-GROUP":
+			case "BUTTON":
+				return elm;
+				break;
+			default:
+				let name	= elm.getAttribute( "name" );	
+				let n		= new PropNode( elm.getAttribute( "label" ) || name );
+				n.append_control( elm );
+
+				if( name ) this.vars[ name ] = elm;
+				return n;
+		}
+	}
+} 
+PropPanel.Template = document.createElement( "template" );
+PropPanel.Template.innerHTML = `<div>panel</div><header>Property Panel</header><main></main><footer></footer>`;
+window.customElements.define( "prop-panel", PropPanel );
+
+
+class PropGroup extends HTMLElement{
+	#header = null;
+	#main	= null;
+	#icon	= null;
+	#label	= null;
+	#header_click_bind = this.header_click.bind( this );
+
+	constructor(){
+		super();
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if there is already elements attached
+		let elm, elm_ary = new Array();
+		for( let i = this.children.length-1; i >= 0; i-- ){
+			elm = this.children[ i ];
+			if( elm.parentNode ) elm.parentNode.removeChild( elm );
+			elm_ary.push( elm );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.#icon		= document.createElement( "i" );
+		this.#label		= document.createElement( "span" );
+		this.#main		= document.createElement( "main" );
+		this.#header	= document.createElement( "header" );
+		this.#header.appendChild( this.#icon );
+		this.#header.appendChild( this.#label );
+		this.appendChild( this.#header );
+		this.appendChild( this.#main );
+
+		this.#header.addEventListener( "click", this.#header_click_bind );
+		this.#label.innerHTML = this.getAttribute( "label" ) || "Prop Group";
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Move The starting elements to main.
+		customElements.whenDefined( "prop-node" ).then( ()=>{
+			for( let i=elm_ary.length-1; i >= 0; i-- ) this.append_node( elm_ary[ i ] );
+		});
+	}
+
+	// Observed Attribute
+	static observedAttributes = [ "open" ];
+	attributeChangedCallback( name, old_value, new_value ){
+		console.log( "attributeChangedCallback : name - %s : old value - %s : new value - %s", name, old_value, new_value );
+		switch( name ){
+			case "open":
+				if( new_value == "true" )	this.open();
+				else 						this.close();
+			break;
+		}
+	}
+
+	open(){ this.classList.remove( "close" ); return this; }
+	close(){ this.classList.add( "close" ); return this; }
+
+	header_click( e ){
+		if( this.classList.contains( "close") )	this.open();
+		else									this.close();
+	}
+
+	append_node( elm ){
+		let panel = this.closest("prop-panel");
+		this.#main.append( panel.node_wrap( elm ) );
+	}
+}
+window.customElements.define( "prop-group", PropGroup );
+
+
+class PropRange extends HTMLElement{
+	#range = null;
+	#label = null;
+	#on_input_bind = this.on_input.bind( this );
+	constructor(){
+		super();
+		this.#label = document.createElement("label");
+		this.#range = document.createElement("input");
+		this.#range.type = "range";
+		this.#range.addEventListener( "input", this.#on_input_bind );
+		this.on_input();
+
+		this.appendChild( this.#range );
+		this.appendChild( this.#label );
+	}
+	get value(){ return this.#range.value; }
+	set value(v){ this.#range.value = v; }
+	on_input( e ){ this.#label.innerHTML = this.#range.value; }
+}
+window.customElements.define( "prop-range", PropRange );
+
+
+class PropCheckStack extends HTMLElement{
+	constructor(){
+		super();
+		let elm, lbl;
+		for( let i=this.children.length-1; i >= 0; i-- ){
+			elm = this.children[ i ];
+			if( elm.tagName != "INPUT" || elm.type != "checkbox" ) continue;
+			
+			lbl = document.createElement( "label" );
+			lbl.innerHTML = elm.title || elm.id;
+			lbl.setAttribute( "for", elm.id );
+
+			this.insertBefore( lbl, elm.nextSibling );
+		}
+	}
+	get value(){ return null; };
+}
+window.customElements.define( "prop-checkstack", PropCheckStack );
+
+
+window.onload = function(){
+	let panel = document.getElementById( "test" );
+	console.log( panel.vars );
+}
+</script>
+
+</body></html>

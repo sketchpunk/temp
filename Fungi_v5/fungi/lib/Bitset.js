@@ -43,6 +43,19 @@ class Bitset{
 			return this;
 		}
 	
+		copy( bs ){
+			let a_len = this.bits.length,
+				b_len = this.bits.length,
+				max_len = Math.max( a_len, b_len );
+	
+			for( let i=0; i < max_len; i++ ){
+				if( i < a_len && i < b_len )	this.bits[ i ] = bs.bits[ i ];
+				else if( i < a_len )			this.bits[ i ] = 0;
+			}
+	
+			return this;
+		}
+
 		clone(){
 			let bs	= new Bitset( null );
 			bs.bits	= this.bits.slice( 0 );

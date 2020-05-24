@@ -1,0 +1,131 @@
+<!DOCTYPE html><script type="module">
+import PageLayout 		from "../../fungi/webcom/PageLayout.js";
+import Canvas			from "../../fungi.test/Canvas.js";
+import Vec2 			from "../../fungi/maths/Vec2.js";
+
+//https://www.youtube.com/watch?v=l-07BXzNdPw
+
+// https://www.youtube.com/watch?v=flQgnCUxHlw Poisson-disc Sampling
+
+// http://gregschlom.com/devlog/2014/06/29/Poisson-disc-sampling-Unity.html
+// https://riptutorial.com/javascript/example/8330/random--with-gaussian-distribution
+
+//#####################################################
+let $
+window.onload = function(){
+	$ = new Canvas( "pg_canvas" )
+		.center()
+		.font( "16px verdana" )
+		.style( "#00ff00", "#00FF00", 1 );
+		
+	console.log( $.width, $.height );
+
+	$.circle( 0, 0, 5 );
+
+
+	let rng = simple_rng();
+	for( let x = 0; x < 20; x++ ){
+		//console.log( rng.next() );
+		//console.log( poisson_small( 2, rng.next) );
+	}
+	
+
+
+}	
+
+
+
+function poisson_small( lambda, rng ){
+	let p = 1.0,
+		k = 0,
+		l = Math.exp( -lambda );
+	do{
+		k++;
+		p *= Math.random(); //rng();
+	}while ( p < l );
+	return k - 1;
+}
+
+function simple_rng(){
+	// https://www.codeproject.com/script/Articles/ViewDownloads.aspx?aid=25172
+	let m_w		= 521288629;
+	let m_z		= 362436069;
+	let uint	= new Uint32Array(1);
+	return{
+		next : function(){
+			m_z			= 36969 * (m_z & 65535) + (m_z >> 16);
+			m_w			= 18000 * (m_w & 65535) + (m_w >> 16);
+			uint[ 0 ]	= (m_z << 16) + m_w;
+			return (uint[ 0 ] + 1) * 2.328306435454494e-10;
+		},
+		seed : function( w=null, z=null ){
+			m_w = w;
+			m_z = z ?? 362436069;
+			return this;
+		}
+	};
+}
+
+	/*
+
+	let radius = 10;
+	let k = 30; // Max Passes
+	let w = radius / sqrt( 2 ); // Size of cell of canvas.
+
+// v is the number of times random is summed and should be over >= 1
+// return a random number between 0-1 exclusive
+function randomG(v){ 
+    var r = 0;
+    for(var i = v; i > 0; i --){
+        r += Math.random();
+    }
+    return r / v;
+}
+
+	https://wiki.q-researchsoftware.com/wiki/How_to_Generate_Random_Numbers:_Poisson_Distribution
+	// Change Mean to whatever you want.
+	var mean = 5;
+
+var L = Math.exp(-mean);
+var p = 1.0;
+var k = 0;
+
+do {
+    k++;
+    p *= Math.random();
+} while (p > L);
+
+k - 1;
+
+
+//@method randomGaussian
+ //* @param  {Number} mean  the mean
+ //* @param  {Number} sd    the standard deviation
+ //* @return {Number} the random number
+
+p5.prototype.randomGaussian = function(mean, sd) {
+  let y1, x1, x2, w;
+  if (this._gaussian_previous) {
+    y1 = y2;
+    this._gaussian_previous = false;
+  } else {
+    do {
+      x1 = this.random(2) - 1;
+      x2 = this.random(2) - 1;
+      w = x1 * x1 + x2 * x2;
+    } while (w >= 1);
+    w = Math.sqrt(-2 * Math.log(w) / w);
+    y1 = x1 * w;
+    y2 = x2 * w;
+    this._gaussian_previous = true;
+  }
+
+  const m = mean || 0;
+  const s = sd || 1;
+  return y1 * s + m;
+};
+
+
+*/
+
+</script><page-layout></page-layout>
