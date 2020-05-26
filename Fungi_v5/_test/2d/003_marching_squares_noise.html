@@ -17,24 +17,63 @@ import Noise            from "../../lib/Noise.js";
 // An alternative to marching squares : https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
 
 //########################################################################################################
-const WIDTH     = 600;
-const HEIGHT    = 400;
-const WSIZE     = 10;
-const HSIZE     = 7;
+const SQ_SIZE		= 20;
+const WSIZE			= 30;
+const HSIZE			= 20;
+const WIDTH			= WSIZE * SQ_SIZE;
+const HEIGHT		= HSIZE * SQ_SIZE;
+const DOT_RADIUS	= 2;
+
 let $layer1,							// Drawing Layer  
 	$grid,								// Grid Object
-	$pos		= [0, 0];	
+	$running	= false,
+	$origin		= [0, 0];	
 
 //########################################################################################################
 
 window.onload = function(){
 	$layer1	= new Canvas( "layer01" ).center();
 	$grid 	= new Grid2D( WSIZE, HSIZE, WIDTH, HEIGHT, [-WIDTH/2, -HEIGHT/2] );
+	
+	console.log( WIDTH, HEIGHT );
 
-    //$grid.fill( (i,x,y)=>{ return new Voxel( x, y ); } );
-    
+	window.addEventListener( "keydown", (e)=>{
+		if( $running ) return;
+
+		switch( e.keyCode ){
+			case 87: $origin[1]--; break; // w
+			case 65: $origin[0]--; break; // a
+			case 83: $origin[1]++; break; // s
+			case 68: $origin[0]++; break; // d
+		}
+
+		run();
+	});
+
+	run();
+}
+
+function run(){
+	$running = true;
     compute_noise();
-    draw_grid();
+	draw_grid();
+	draw_march_sqr();
+	$running = false;
+}
+
+function compute_noise(){
+	let c, n;
+	let freq	= 0.3;	// Steps to travel between points in noise
+	let lmt		= 0.5;	// Min value to be considered on.
+
+	for( c of $grid.cells ){
+		n = Noise.perlin2( 
+			( $origin[0] + c.coord[0] ) * freq, 
+			( $origin[1] + c.coord[1] ) * freq
+		) * 0.5 + 0.5;
+
+		c.data = ( n >= lmt )? 1 : 0;
+	}
 }
 
 function draw_grid(){
@@ -43,446 +82,75 @@ function draw_grid(){
 	let c;
 	for( c of $grid.cells ){
 		$layer1.fill( (c.data == 1)? "#707070":"#303030" );
-		$layer1.circle_vec( c.pos, 5 );
+		$layer1.circle_vec( c.pos, DOT_RADIUS );
 	}
 }
 
-function compute_noise(){
-    let c, n;
-    let freq = 0.3;
-	let step = 0.5;
-	
-    for( c of $grid.cells ){
-        n = Noise.perlin2( c.coord[0] * freq, c.coord[1] * freq ) * 0.5 + 0.5;
-        c.data = ( n >= step )? 1 : 0;
-    }
-}
+function draw_march_sqr(){
+	$layer1.both( "#00ffff" ).line_width( 1 );
 
-//########################################################################################################
+	let ci, i, bits, map,
+		mid_a = new Vec2(),
+		mid_b = new Vec2();
 
-async function run(){
-	run.active = true;
-
-	$layer2.stroke( "#808080" ).line_width( 1.3 );
-	draw_grid();
-
-	$smooth.length = 0;	// Clear out smoothing animation data
-
-	//===================================================================
-	let v, bit, col, qlen = [0,0,0,0];
-	for( v of $grid.cell_iter( $offset ) ){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		$layer2.clear()
-			// Draw Target
-			.stroke( "#ffffff" )
-			.circle_vec( $target, $radius, 2 )
-
-			// Draw Scanning Square
-			.stroke( "#808080" )
-			.line_vec( v[0], v[1] )
-			.line_vec( v[1], v[2] )
-			.line_vec( v[2], v[3] )
-			.line_vec( v[3], v[0] );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		bit = voxel_bit( v, qlen );
-		if( bit ){
-
-			//--------------------------------------
-			// Draw Which Points are in or out of range in our scanning.
-			for( let i=0; i < 4; i++ ){
-				col = ( !(SquareLUT.Sides[ i ] & bit) )? "#ff0000" : "#00ff00";
-				$layer2.fill( col ).circle_vec( v[i], 4 );
-			}
-
-			//--------------------------------------
-			draw_bits( bit, v, qlen );
+	for( ci of $grid.cell_iter() ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute the bit value based on which corners is on.
+		bits = 0;
+		for( i in MarchingSquares.Corners ){
+			if( ci[ i ].data == 1 ) bits += MarchingSquares.Corners[ i ];
 		}
 
-		await async_timeout( SPEED_MS );
-	}
-	//===================================================================
-	// Draw points to its smoothed out position.
-	draw_grid();
-	$layer2.both( "#00ffff" ).line_width( 1.5 );
+		// Find the Drawing Rules for this specific square configuration
+		map = MarchingSquares.map[ bits ];
+		if( !map ) continue;
 
-	let t, j, a = new Vec2(), b = new Vec2();
-	for( let i=1; i <= 20; i++ ){
-		$layer2.clear()
-		t = elastic_out( i / 40 );
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( i=0; i < map.length; i+=4 ){
+			// Compute the mid point of two edges at a time.
+			mid_a.from_lerp( ci[ map[i]  ].pos,		ci[ map[i+1] ].pos, 0.5 );
+			mid_b.from_lerp( ci[ map[i+2]  ].pos,	ci[ map[i+3] ].pos, 0.5 );
 
-		for( j of $smooth ){
-			a.from_lerp( j.a_from, j.a_to, t );
-			b.from_lerp( j.b_from, j.b_to, t );
-			$layer2
-				.circle_vec( a, 3 )
-				.circle_vec( b, 3 )
-				.line_vec( a, b );
-		}
-
-		await async_timeout( 50 );
-	}
-
-	//===================================================================
-	//$layer2.clear();
-	run.active = false;
-}
-
-function voxel_bit( quad, vlen ){
-	let bit = 0;
-	// Is the square corner within the range of our target?
-	for( let i=0; i < 4; i++ ){
-		// Save the distance from target for "smoothing" out the lines.
-		vlen[ i ] = Vec2.len_sqr( quad[i], $target );
-
-		// Test if the Quad Corder is within the circle radius
-		if( vlen[ i ] <= $radius_sq ){
-			bit += SquareLUT.Sides[ i ];
+			// Draw a line between the two mid points
+			$layer1
+				.circle_vec( mid_a, 1 )
+				.circle_vec( mid_b, 1 )
+				.line_vec( mid_a, mid_b );
 		}
 	}
-	return bit;
 }
 
-function draw_bits( bit, quad, qlen ){
-	let edges = SquareLUT.map[ bit ];
-	if( !edges ) return; // Some bits have NO Edge Assignements
-
-	//if( bit != 11 ) return; // Test one Tile at a time
-
-	let a = new Vec2(),
-		b = new Vec2();
-
-	let a0, a1, b0, b1, aa, bb;
-
-	// Instead of mid points, get lerp values that gets the
-	// mid point closer to the border of the circle.
-	// We get back an array of time values to each for each
-	// edge but for X and Y. Depending on the edge we only
-	// lerp closer on one axis then only halfway on the other.
-	let lerb = smooth_lerp_bits( bit, qlen ); 
-
-	// Loop the Point Index that form Edges for the square
-	$layer1.both( "#00ffff" ).line_width( 1.5 );
-	for( let i=0; i < edges.length; i += 4 ){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Get the Mid Point of the defined Edges
-		Vec2.lerp( quad[ edges[i] ],	quad[ edges[i+1] ], 0.5, a );
-		Vec2.lerp( quad[ edges[i+2] ],	quad[ edges[i+3] ], 0.5, b );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		if( lerb  ){
-			// Get the positions of the current corners in relation
-			// to the edges that we need to sample some point between
-			aa		= new Vec2();
-			a0		= quad[ edges[i] ];	
-			a1		= quad[ edges[i+1] ];
-			aa.x	= lerp( a0.x, a1.x, lerb[0] );
-			aa.y	= lerp( a0.y, a1.y, lerb[1] );
-
-			bb		= new Vec2();
-			b0		= quad[ edges[i+2] ];
-			b1		= quad[ edges[i+3] ];
-			bb.x	= lerp( b0.x, b1.x, lerb[2] );
-			bb.y	= lerp( b0.y, b1.y, lerb[3] );
-
-			$smooth.push({
-				a_from	: a.clone(),
-				b_from	: b.clone(),
-				a_to	: aa,
-				b_to	: bb,
-			});
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Draw Edge between Mid Points
-		$layer1
-			.circle_vec( a, 3 )
-			.circle_vec( b, 3 )
-			.line_vec( a, b );
-	}
-}
-
-function smooth_lerp_bits( bit, qlen ){
-	let l = null;
-
-	// TODO, Can probably simplify it down to Which Edge is the mid coming from.
-	// like Bit 1, 14, 2, 13 all share the edge 0,1 which does the same lerp.
-
-	switch( bit ){
-		case 3: case 12:	// Vertical, both points can only move on the x Axias [ 0,3, 1,2 ],
-			l = new Array( 4 );
-			l[ 0 ] = norm( qlen[0], qlen[3], $radius_sq );
-			l[ 1 ] = 0.5;
-			l[ 2 ] = norm( qlen[1], qlen[2], $radius_sq );
-			l[ 3 ] = 0.5;
-		break;
-
-		case 6: case 9:	// Horizontal, both lines can only move on the Y Axias [ 0,1, 2,3 ],
-			l = new Array( 4 );
-			l[ 0 ] = 0.5;
-			l[ 1 ] = norm( qlen[0], qlen[1], $radius_sq );
-			l[ 2 ] = 0.5;
-			l[ 3 ] = norm( qlen[2], qlen[3], $radius_sq );
-		break;
-
-		case 1: case 14:	// Top Left diagonal [ 0,1, 0,3 ],
-			l = new Array( 4 );
-			l[ 0 ] = 0.5
-			l[ 1 ] = norm( qlen[0], qlen[1], $radius_sq );
-			l[ 2 ] = norm( qlen[0], qlen[3], $radius_sq );
-			l[ 3 ] = 0.5;
-			console.log( "BIT 1");
-		break;
-
-		case 7: case 8:	// Top Right diagonal [ 2,3, 3,0 ]
-			l = new Array( 4 );
-			l[ 0 ] = 0.5
-			l[ 1 ] = norm( qlen[2], qlen[3], $radius_sq );
-			l[ 2 ] = norm( qlen[3], qlen[0], $radius_sq );
-			l[ 3 ] = 0.5;
-		break;
-
-		case 2: case 13: // Bottom Left diagonal [ 0,1, 1,2 ]
-			l = new Array( 4 );
-			l[ 0 ] = 0.5;
-			l[ 1 ] = norm( qlen[0], qlen[1], $radius_sq );
-			l[ 2 ] = norm( qlen[1], qlen[2], $radius_sq );
-			l[ 3 ] = 0.5;
-		break;
-
-		case 4: case 11: // Bottom Right diagonal [ 1,2, 2,3 ]
-			l = new Array( 4 );
-			l[ 0 ] = norm( qlen[1], qlen[2], $radius_sq );
-			l[ 1 ] = 0.5;
-			l[ 2 ] = 0.5;
-			l[ 3 ] = norm( qlen[2], qlen[3], $radius_sq );
-		break;
-
-		// case 5:	break
-		// case 10: break;
-	}
-	return l;
-}
-
-//########################################################################################################
-
-// Define the Bit Values of each corner of a quad
-// Then for each bit combination, Which edges are 
-// needed to get its mid point OR lerped point on
-class SquareLUT{
-	static Sides	= [ 1, 2, 4, 8 ];
+class MarchingSquares{
 	static TopL		= 1;
 	static BotL		= 2;
 	static BotR		= 4;
 	static TopR		= 8;
+	static Corners	= [ this.TopL, this.BotL, this.BotR, this.TopR ];
 
 	// https://www.boristhebrave.com/content/2018/04/mc_combinations.svg
 	// Mapping based on this image.
 	// [ EDGE_CORNER_A1, EDGE_CORNER_A2, etc ]
-	static map	= {
-		0	: null,
-		15	: null,
-		1	: [ 0,1, 0,3 ],
-		14	: [ 0,1, 0,3 ],
-		2	: [ 0,1, 1,2 ],
-		13	: [ 0,1, 1,2 ],
-		4	: [ 1,2, 2,3 ],
-		11	: [ 1,2, 2,3 ],
-		8	: [ 2,3, 3,0 ],
-		7	: [ 2,3, 3,0 ],
-		6	: [ 0,1, 2,3 ],
-		9	: [ 0,1, 2,3 ],
-		12	: [ 0,3, 1,2 ],
-		3	: [ 0,3, 1,2 ],
-		5	: [ 0,1, 1,2, 2,3, 3,0 ],
-		10	: [ 0,1, 0,3, 1,2, 2,3 ],
-	}
-
-	/*
-	static draw( pnts, bit ){
-		let ary = this.map[ bit ];
-		if( !ary ) return;
-
-		let a = new Vec2();
-		let b = new Vec2();
-
-		for( let i=0; i < ary.length; i+=4 ){
-			Vec2.lerp( pnts[ ary[i] ], pnts[ ary[i+1] ], 0.5, a );
-			Vec2.lerp( pnts[ ary[i+2] ], pnts[ ary[i+3] ], 0.5, b );
-
-			$.circle_vec( a, 2 );
-			$.circle_vec( b, 2 );
-			$.line_vec( a, b );
-		}
-		console.log( bit, ary );
-	}
-	*/
+	static map	= [
+		null,
+		[ 0,1, 0,3 ],
+		[ 0,1, 1,2 ],
+		[ 0,3, 1,2 ],
+		[ 1,2, 2,3 ],
+		[ 0,1, 1,2, 2,3, 3,0 ],
+		[ 0,1, 2,3 ],
+		[ 2,3, 3,0 ],
+		[ 2,3, 3,0 ],
+		[ 0,1, 2,3 ],
+		[ 0,1, 0,3, 1,2, 2,3 ],
+		[ 1,2, 2,3 ],
+		[ 0,3, 1,2 ],
+		[ 0,1, 1,2 ],
+		[ 0,1, 0,3 ],
+		null,
+	];
 }
 
-class PointGrid2D{
-	pnts		= null;
-	#len 		= 0;	// Total Count of Points
-	#x_cnt_inv	= 0;	// X Count Inverted
-	#x_cnt		= 0;	// How many Points on the X Axis
-	#y_cnt		= 0;	// How many Points on the Y Axis
-	#x_max		= 0;	// Max Index for X Direction
-	#y_max		= 0;	// Max Index for Y Direction
-	#width		= 0;	// Width of the Grid
-	#height		= 0;	// Height of the Grid
-	#x_inc 		= 0;	// Distance between points on X Axis
-	#y_inc		= 0;	// Distance between points on Y Axis
-
-	constructor( x, y, w, h ){
-		this.#width		= w;
-		this.#height	= h;
-		this.resize( x, y );
-	}
-
-	// #region METHODS
-	resize( x, y ){
-		// if Already that size, dont bother.
-		if( this.#x_cnt == x && this.#y_cnt == y ) return false;
-
-		this.#len		= x * y;				// Total Point Count
-		this.#x_cnt		= x;					// Total Points on X Axis
-		this.#y_cnt		= y;					// Total Points on Y Axis
-		this.#x_max		= x-1;					// Index of Last X
-		this.#y_max		= y-1;					// Index of last Y
-		this.#x_cnt_inv	= 1 / x;				// Column Count Inverted.
-		this.#x_inc		= this.#width / (x-1);	// Increment Length per X
-		this.#y_inc		= this.#height / (y-1);	// Increment Length per Y
-
-		// Create new Array, if exists, resize it
-		if( !this.pnts )	this.pnts			= new Array( this.#len );
-		else				this.pnts.length	= this.#len;
-
-		return true;
-	}
-    
-    fill( fn ){
-		let i, x, y;
-		for( i=0; i < this.pnts.length; i++ ){
-			y = Math.floor( i * this.#x_cnt_inv );
-			x = i - y * this.#x_cnt; // i % this.#x_cnt;
-			this.pnts[ i ] = fn( i, x, y );
-		}
-		return this;
-	}
-    // #endregion /////////////////////////////////////////////////////////////////////
-
-	// #region ITERATORS
-	cell_iter( offset = null ){
-		let i		= 0,
-			end		= this.#len - this.#x_cnt,
-			x_edge	= this.#x_max - 1,
-			a		= new Vec2(),
-			b		= new Vec2(),
-			c		= new Vec2(),
-			d		= new Vec2(),
-			pnts	= [ a, b, c, d ];
-
-		return {
-			[Symbol.iterator]	: function(){ return this; },
-			next				: ()=>{
-				if( i >= end ) return { done:true };
-				
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// What is the X,Y coord of the index
-				let y = Math.floor( i * this.#x_cnt_inv ),
-					x = i - y * this.#x_cnt;
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// Compute the Drawing Position of the coord of the quad.
-				a.set( x * this.#x_inc, y * this.#y_inc );
-				b.set( x * this.#x_inc, (y+1) * this.#y_inc );
-				c.set( (x+1) * this.#x_inc, (y+1) * this.#y_inc );
-				d.set( (x+1) * this.#x_inc, y * this.#y_inc );
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// Add offset to position if available
-				if( offset ){
-					a.add( offset );
-					b.add( offset );
-					c.add( offset );
-					d.add( offset );
-				}
-	
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				i++;					// Next Index
-				if( x == x_edge ) i++;	// Skip to next line when on Right Edge
-
-				return { done:false, value: pnts };
-			}
-		};
-	}
-
-	pos_iter( offset = null ){
-		let v = new Vec2(),
-			i = 0;
-
-		return {
-			[Symbol.iterator]	: function(){ return this; },
-			next				: ()=>{
-				if( i >= this.#len ) return { done:true };
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// What is the X,Y coord of the index
-				let y = Math.floor( i * this.#x_cnt_inv ),
-					x = i - y * this.#x_cnt;
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// Compute the Drawing Position of the coord of the quad.
-				v[ 0 ] = this.#x_inc * x;
-				v[ 1 ] = this.#y_inc * y;
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// Add offset to position if available
-				if( offset ) v.add( offset );
-
-				i++;
-				return { done:false, value:v };				
-			}
-		};
-    }
-    
-	itm_iter(){
-		let out = { x:0, y:0, v:null },
-			i = 0;
-
-		return {
-			[Symbol.iterator]	: function(){ return this; },
-			next				: ()=>{
-				if( i >= this.#len ) return { done:true };
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// What is the X,Y coord of the index
-				out.y = Math.floor( i * this.#x_cnt_inv ),
-                out.x = i - out.y * this.#x_cnt;
-				i++;
-				return { done:false, value:out };				
-			}
-		};
-	}
-	// #endregion /////////////////////////////////////////////////////////////////////
-	
-	/*
-	[Symbol.iterator](){
-		let i = 0;
-		return {
-			next : ()=>{
-				let rtn = { value:null, done:true };
-
-				if( i < this.#len ){
-					let y = Math.floor( i * this.#x_cnt_inv ),
-						x = i - y * this.#x_cnt;
-
-				}
-				return rtn;
-			},
-		};
-	}
-	*/
-}
+//########################################################################################################
 
 class Grid2DCell{
     coord	= [ 0, 0 ];
@@ -492,18 +160,22 @@ class Grid2DCell{
 
 class Grid2D{
 	cells = new Array();
+	x_len = 0;
+	y_len = 0;
 	
 	constructor( x_cnt, y_cnt, w, h, offset=null ){
 		this.resize( x_cnt, y_cnt, w, h, offset );
 	}
-
+	// #region METHODS
 	resize( x_cnt, y_cnt, w, h, offset=null ){
-		let x, y, i, c;
-		let len 	= x_cnt * y_cnt;
-		let x_inc	= w / ( x_cnt - 1 );
-		let y_inc	= h / ( y_cnt - 1 );
+		let x, y, i, c,
+			len 	= x_cnt * y_cnt,		// How Many Total Points
+			x_inc	= w / ( x_cnt - 1 ),	// 
+			y_inc	= h / ( y_cnt - 1 );
 		
-		this.cells.length = len;
+		this.cells.length	= len;
+		this.x_len			= x_cnt;
+		this.y_len			= y_cnt;
 
 		for( i=0; i < len; i++ ){
 			y = ( i / x_cnt ) | 0;
@@ -525,7 +197,39 @@ class Grid2D{
 
 		return this;
 	}
+	// #endregion /////////////////////////////////////////////////////////////////////
+
+	// #region ITERATORS
+	cell_iter(){
+		let i 		= 0,
+			x_end	= this.x_len-2,						// Skip Last Column
+			i_end	= this.cells.length - this.x_len,	// Skip Final Row
+			pnts	= [ null, null, null, null ];
+
+		return {
+			[Symbol.iterator]	: function(){ return this; },
+			next				: ()=>{
+				if( i >= i_end ) return { done:true };
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				pnts[ 0 ] = this.cells[ i ];					// TOP LEFT
+				pnts[ 1 ] = this.cells[ i + this.x_len ];		// BOT LEFT
+				pnts[ 2 ] = this.cells[ i + this.x_len + 1 ];	// BOT RIGHT
+				pnts[ 3 ] = this.cells[ i+1 ];					// TOP RIGHT
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				i++; // Next Element
+
+				// Skip Final Column Element, to to next row
+				if( pnts[0].coord[0] == x_end ) i++;
+
+				return { done:false, value:pnts };
+			},
+		};
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////
 }
 
+//########################################################################################################
 
 </script></body></html>
