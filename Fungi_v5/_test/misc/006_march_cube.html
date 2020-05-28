@@ -1,5 +1,8 @@
 <!DOCTYPE html><script type="module">
-import App		from "../../fungi/App.js";
+import App, {Vec3}		from "../../fungi/App.js";
+import VecBuffer		from "../../fungi/data/VecBuffer.js";
+//import DynamicMesh 		from "../../fungi/engine/com/DynamicMesh.js";
+
 
 /*
 https://www.boristhebrave.com/2018/04/15/marching-cubes-3d-tutorial/
@@ -15,7 +18,8 @@ https://catlikecoding.com/unity/tutorials/marching-squares-2/
 */
 
 //#####################################################
-App.builder( true )
+App.builder( true, true )
+	//.load_shaders( "./shaders/LowPoly.js")
 	.set_camera( 0, 20, 3, 0, 0.0, 0 )
 	.add( init )
 	.render_on_mouse()
@@ -23,14 +27,168 @@ App.builder( true )
 
 //#####################################################
 async function init(){
-	//let [ ftext, fimg ] = await XhrQueue.url( "../../files/fonts/", "Roboto.txt", "Roboto.png" ).then();
+	/*
+	let verts	= new Float32Array( [ 1,0,1, 1,0,0, 0,0,0 ] );
+	let idx		= new Uint16Array( [ 0,1,2 ] );
+	let e		= DynamicMesh.$( "dm", App.new_mat("LowPoly"), 3, 3 );
+	e.DynamicMesh
+		.update_verts( verts )
+		.update_index( idx );
+	*/
+
+	let $grid = new Grid3D( 2, 2, 2, 1, 1, 1, [0,0,0] );
+
+	let p;
+	for( p of $grid.points ){
+		App.Debug.pnt( p.pos, "green" );
+	}
+
+	for( p of $grid.cell_iter() ){
+		for( let e of MarchingCubes.edges ){
+			App.Debug.ln( p[ e[0] ].pos, p[ e[1] ].pos, "red" );
+		}
+
+		let map = MarchingCubes.map[ 4 ];
+		for( let i=0; i < map.length; i+=3 ){
+			let ea = MarchingCubes.edges[ map[ i ] ];
+			let eb = MarchingCubes.edges[ map[ i+1 ] ];
+			let ec = MarchingCubes.edges[ map[ i+2 ] ];
+
+			let pa = Vec3.lerp( p[ ea[0] ].pos, p[ ea[1] ].pos, 0.5 );
+			let pb = Vec3.lerp( p[ eb[0] ].pos, p[ eb[1] ].pos, 0.5 );
+			let pc = Vec3.lerp( p[ ec[0] ].pos, p[ ec[1] ].pos, 0.5 );
+
+			App.Debug.pnt( pa, "cyan" );
+			App.Debug.pnt( pb, "cyan" );
+			App.Debug.pnt( pc, "cyan" );
+
+			App.Debug.ln( pa, pb, "cyan" );
+			App.Debug.ln( pb, pc, "cyan" );
+			App.Debug.ln( pc, pa, "cyan" );
+		}
+	}
+
+	return true;
+}
+
+class Grid3DPoint{
+	index	= 0;
+	coord	= [ 0, 0, 0 ];
+	pos		= [ 0, 0, 0 ];
+	data	= null;
+}
+
+class Grid3D{
+	points	= new Array();
+	x_len	= 0;
+	y_len	= 0;
+	z_len	= 0;
+	xz_len	= 0;
 	
+	constructor( x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset=null){
+		this.resize( x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset );
+	}
 
-	let $grid = new Grid3D( 3, 3, 3, 1, 1, 1, [0,0,0] );
+	get( x, y, z ){
+		let i = y * this.xz_len + z * z_len + x;
+		return this.points[ i ];
+	}
 
-	let c;
-	for( c of $grid.cells ){
-		App.Debug.pnt( c.pos, "green" );
+	// #region METHODS
+	resize( x_cnt, y_cnt, z_cnt, x_len, y_len, z_len,  offset=null ){
+		let x, y, z, i, p,
+			len 	= x_cnt * y_cnt * z_cnt,	// How Many Total Points
+			x_inc	= x_len / ( x_cnt - 1 ),	// 
+			y_inc	= y_len / ( y_cnt - 1 ),
+			z_inc	= z_len / ( z_cnt - 1 );
+		
+		this.points.length	= len;
+		this.x_len			= x_cnt;
+		this.y_len			= y_cnt;
+		this.z_len			= z_cnt;
+		this.xz_len 		= x_cnt * z_cnt;
+
+		for( i=0; i < len; i++ ){
+			y = ( i / this.xz_len ) | 0;
+			z = ( i - y * this.xz_len ) / z_cnt | 0;
+			x = i - y * this.xz_len - z * z_cnt;
+
+			if( !this.points[ i ] ) this.points[ i ] = new Grid3DPoint();
+
+			p				= this.points[ i ];
+			p.index			= i;
+			p.coord[ 0 ]	= x;
+			p.coord[ 1 ]	= y;
+			p.coord[ 2 ]	= z;
+			p.pos[ 0 ]		= x_inc * x;
+			p.pos[ 1 ]		= y_inc * y;
+			p.pos[ 2 ]		= z_inc * z;
+
+			if( offset ){
+				p.pos[ 0 ] += offset[ 0 ];
+				p.pos[ 1 ] += offset[ 1 ];
+				p.pos[ 2 ] += offset[ 2 ];
+			}
+		}
+		return this;
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////
+
+	// #region ITERATORS
+	cell_iter(){
+		let i 		= 0,				// Points Index
+			iz 		= 0,				// Index of one level
+			x_end	= this.x_len-2,		// Skip Last Column
+			z_end 	= this.xz_len - this.x_len,	
+			i_end	= this.points.length - this.xz_len,	// Skip Final Row
+			pnts	= [ null, null, null, null, null, null, null, null ];
+		return {
+			[Symbol.iterator]	: function(){ return this; },
+			next				: ()=>{
+				if( i >= i_end ) return { done:true };
+				let ii = i + this.xz_len;
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				pnts[ 0 ] = this.points[ i ];					// BOT - TOP LEFT
+				pnts[ 1 ] = this.points[ i + 1 ];				// BOT - TOP RIGHT
+				pnts[ 2 ] = this.points[ i + this.x_len + 1 ];	// BOT - BOT RIGHT
+				pnts[ 3 ] = this.points[ i + this.x_len ];		// BOT - BOT LEFT
+
+				pnts[ 4 ] = this.points[ ii ];					// TOP - TOP LEFT
+				pnts[ 5 ] = this.points[ ii + 1 ];				// TOP - TOP RIGHT
+				pnts[ 6 ] = this.points[ ii + this.x_len + 1 ];	// TOP - BOT RIGHT
+				pnts[ 7 ] = this.points[ ii + this.x_len ];		// TOP - BOT LEFT
+
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				i++;	// Next Element
+				iz++;	// Next Element at this level
+				
+				// Skip Final Column Element, to to next row
+				if( pnts[0].coord[0] == x_end ){ i++; iz++; }
+
+				// Skip final row, Shift to the next level (y++)
+				if( iz >= z_end ){
+					i += this.x_len;
+					iz = 0;
+				}
+
+				return { done:false, value:pnts };
+			},
+		};
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////
+}
+
+// Only going to cache points at two levels at a time.
+class Cache{
+	a = new Map();	// Level 1
+	b = new Map();	// Level 2
+
+	swap(){
+		let t	= this.a;	// Old Cache
+		this.a	= this.b;	// Saving B to lower level.
+		this.b	= t;		// Move Old Cache to new
+		this.b.clear();		// then clear it out for use
 	}
 
 	/*
@@ -44,104 +202,7 @@ async function init(){
 	Number of rows and min rows is
 		(z_cnt - 1) * main_row_count +
 		(z_cnt - 1) * x_cnt
-
-
 	4 - 1 = 3, 3 * 2  = 6
-
-	*/
-
-	return true;
-}
-
-class Grid3DCell{
-   coord	= [ 0, 0, 0 ];
-	pos		= [ 0, 0, 0 ];
-	data	= null;
-}
-
-class Grid3D{
-	cells	= new Array();
-	x_len	= 0;
-	y_len	= 0;
-	z_len	= 0;
-	xz_len	= 0;
-	
-	constructor( x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset=null){
-		this.resize( x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset );
-	}
-	// #region METHODS
-	resize( x_cnt, y_cnt, z_cnt, x_len, y_len, z_len,  offset=null ){
-		let x, y, z, i, c,
-			len 	= x_cnt * y_cnt * z_cnt,	// How Many Total Points
-			x_inc	= x_len / ( x_cnt - 1 ),	// 
-			y_inc	= y_len / ( y_cnt - 1 ),
-			z_inc	= z_len / ( z_cnt - 1 );
-		
-		this.cells.length	= len;
-		this.x_len			= x_cnt;
-		this.y_len			= y_cnt;
-		this.z_len			= z_cnt;
-		this.xz_len 		= x_cnt * z_cnt;
-
-		for( i=0; i < len; i++ ){
-			y = ( i / this.xz_len ) | 0;
-			z = ( i - y * this.xz_len ) / z_cnt | 0;
-			x = i - y * this.xz_len - z * z_cnt;
-
-			if( !this.cells[ i ] ) this.cells[ i ] = new Grid3DCell();
-
-			c				= this.cells[ i ];
-			c.coord[ 0 ]	= x;
-			c.coord[ 1 ]	= y;
-			c.coord[ 2 ]	= z;
-			c.pos[ 0 ]		= x_inc * x;
-			c.pos[ 1 ]		= y_inc * y;
-			c.pos[ 2 ]		= z_inc * z;
-
-			if( offset ){
-				c.pos[ 0 ] += offset[ 0 ];
-				c.pos[ 1 ] += offset[ 1 ];
-				c.pos[ 2 ] += offset[ 2 ];
-			}
-		}
-		return this;
-	}
-	// #endregion /////////////////////////////////////////////////////////////////////
-
-	// #region ITERATORS
-	cell_iter(){
-		let i 		= 0,
-			x_end	= this.x_len-2,						// Skip Last Column
-			i_end	= this.cells.length - this.xy_len,	// Skip Final Row
-			pnts	= [ null, null, null, null ];
-
-		return {
-			[Symbol.iterator]	: function(){ return this; },
-			next				: ()=>{
-				if( i >= i_end ) return { done:true };
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				pnts[ 0 ] = this.cells[ i ];					// TOP LEFT
-				pnts[ 1 ] = this.cells[ i + this.x_len ];		// BOT LEFT
-				pnts[ 2 ] = this.cells[ i + this.x_len + 1 ];	// BOT RIGHT
-				pnts[ 3 ] = this.cells[ i+1 ];					// TOP RIGHT
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				i++; // Next Element
-
-				// Skip Final Column Element, to to next row
-				if( pnts[0].coord[0] == x_end ) i++;
-
-				return { done:false, value:pnts };
-			},
-		};
-	}
-	// #endregion /////////////////////////////////////////////////////////////////////
-}
-
-class Cache{
-	
-	/*
 	- store by y Level
 	*/
 }
@@ -180,10 +241,10 @@ class MarchingCubes{
 		[ 10,2,1 ],
 		[ 8,0,3 , 1,10,2 ],
 		[ 9,2,0, 9,10,2 ],
-		[ 3,8,2, 2,8,10 , 10,8,9],
+		[ 3,8,2, 2,8,10 , 10,8,9 ],
 		[ 3,2,11 ],
 		[ 0,2,8, 2,11,8 ],
-		[ 1,0,9, 2,11,3],
+		[ 1,0,9, 2,11,3 ],
 		[ 2,9,1, 11,9,2, 8,9,11 ],
 		[ 3,10,11, 3,1,10 ],
 		[ 1,10,0, 0,10,8, 8,10,11 ],
@@ -431,7 +492,5 @@ class MarchingCubes{
 		null,
 	]
 }
-
-
 
 </script><page-layout></page-layout>

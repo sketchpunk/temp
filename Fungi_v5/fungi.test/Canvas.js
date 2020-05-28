@@ -207,6 +207,17 @@ class Canvas{
 		this.width 					= w;
 		this.height 				= h;
 
+		/* FIXES BLURRYNESS ON HIGHER DPI SCREENS.
+		let dpi					= window.devicePixelRatio;
+		this.elm.width			= w * dpi;
+		this.elm.height			= h * dpi;
+		this.elm.style.width	= w + "px";
+		this.elm.style.height	= h + "px";
+		this.width				= w;
+		this.height				= h;
+		this.ctx.scale( dpi, dpi );
+		*/
+
 		return this;
 	}
 

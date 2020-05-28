@@ -296,5 +296,5 @@ console.log("-- Fungi.App");
 window.App = App;	// Put App in the Global Scope.
 export default App;
 export { 
-	Maths, Quat, Vec3, Mat4, Transform
+	Maths, Quat, Vec3, Mat4, Transform, Buf, Vao, Mesh
 };

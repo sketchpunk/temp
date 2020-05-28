@@ -92,7 +92,7 @@ class Buf{
 			return b;
 		}
 
-		static empty_array( byte_cnt, comp_len=3, is_static=true, unbind=true ){
+		static empty_array( byte_cnt, comp_len=3, is_static=false, unbind=true ){
 			let b = new Buf( Buf.ARRAY, is_static ).bind().from_empty( byte_cnt );
 			b.comp_len = comp_len;
 
@@ -113,6 +113,12 @@ class Buf{
 
 		static new_element_bin( data_view, b_start, b_len, is_static=true, unbind=true ){
 			let b = new Buf( Buf.ELEMENT, is_static ).bind().from_bin( data_view, b_start, b_len );
+			if( unbind ) b.unbind();
+			return b;
+		}
+
+		static empty_element( byte_cnt, is_static=false, unbind=true ){
+			let b = new Buf( Buf.ELEMENT, is_static ).bind().from_empty( byte_cnt );
 			if( unbind ) b.unbind();
 			return b;
 		}
