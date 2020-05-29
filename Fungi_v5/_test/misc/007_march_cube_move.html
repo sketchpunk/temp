@@ -25,72 +25,55 @@
 	//#####################################################
 	App.builder(true, true)
 		.load_shaders( "./shaders/LowPoly.js")
-		.set_camera(0, 20, 3, 0, 0.0, 0)
+		//.set_camera( 30, 5, 5, 0, 1.0, 0 )
+		.set_camera( 45, 25, 8, 0, 1.0, 0 )
 		.add(init)
 		.render_on_mouse()
 		.build();
 
 	//#####################################################
-	let $grid, $dmesh, $origin = [0,0,0];
+	const SPEED = 400;
 
-	async function init() {
-		/*
-		let verts	= new Float32Array( [ 1,0,1, 1,0,0, 0,0,0 ] );
-		let idx		= new Uint16Array( [ 0,1,2 ] );
-		let e		= DynamicMesh.$( "dm", App.new_mat("LowPoly"), 3, 3 );
-		e.DynamicMesh
-			.update_verts( verts )
-			.update_index( idx );
-		*/
-		
-		$dmesh = DynamicMesh.$( "dm", App.new_mat("LowPoly").opt_cullface( false ), 3, 3 );
+	let $grid, $dmesh, $vec_buf, $int_buf, $cache, $origin = [0,0,0];
 
-		$grid = new Grid3D( 6, 6, 6, 2, 2, 2, [-1, 0, -1]);
-		
-		compute_noise();
+	let async_timeout = ( ms )=>new Promise( r=>setTimeout( r, ms ) );
 
-		/*
-		let p;
-		for (p of $grid.points) {
-			App.Debug.pnt(p.pos, ( p.data == 1 )? "white" : "darkgray", 0.05 );
-		}
-		for (p of $grid.cell_iter()) {
-			for (let e of MarchingCubes.edges) {
-				App.Debug.ln(p[e[0]].pos, p[e[1]].pos, "darkgray");
-			}
-		}
-		*/
+	async function init() {		
+		$dmesh		= DynamicMesh.$( "dm", App.new_mat("LowPoly").opt_cullface( false ), 3, 3 );
+		$grid		= new Grid3D( 6, 6, 6, 2, 2, 2, [-1, 0, -1]);		
+		$vec_buf	= new Vec3Buffer( 50 ),
+		$int_buf	= new UintBuffer( 10 )
+		$cache		= new LayerCache();
+		$vec_buf.auto_expand = 50;
+		$int_buf.auto_expand = 50;
 
 		App.Debug.box( [-1,0,-1], [1,2,1], "black" );
+		
+		compute_noise();
+		draw();
 
-		run();
 		return true;
 	}
 
-	function run(){
+	async function draw(){
 		let i, key, c, idx, map, map_idx, 
+			vec_used, int_used,
 			pa, pb,
 			mp = new Vec3();
-
-		let cache	= new LayerCache(),
-			vec_buf	= new Vec3Buffer( 10 ),
-			int_buf	= new UintBuffer( 10 );
-		vec_buf.auto_expand = 50;
-		int_buf.auto_expand = 50;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		let fn_add_mid_vert = ( edge )=>{
 			pa	= c[ edge[0] ];
 			pb	= c[ edge[1] ];
 			key	= ( pa.index < pb.index )? pa.index + "_" + pb.index : pb.index + "_" + pa.index;
-			idx = cache.get( key );
+			idx = $cache.get( key );
 
-			if( idx != undefined ) int_buf.push( idx );
+			if( idx != undefined ) $int_buf.push( idx );
 			else{
 				mp.from_lerp( pa.pos , pb.pos, 0.5 );	// Compute Mid Point
-				idx = vec_buf.push( mp );				// Add to Buffer + Get Index
-				cache.set( key, idx );					// Save Vertex Index to Cache
-				int_buf.push( idx );					// Save Index as a Triangle Indice
+				idx = $vec_buf.push( mp );				// Add to Buffer + Get Index
+				$cache.set( key, idx );					// Save Vertex Index to Cache
+				$int_buf.push( idx );					// Save Index as a Triangle Indice
 			}
 		};
 
@@ -100,17 +83,30 @@
 
 		for( c of $grid.cell_iter() ){
 			// After every floor of the grid, swap the cache
-			if( cnt >= lmt ){ cnt = 0; cache.swap(); }
+			if( cnt >= lmt ){ cnt = 0; $cache.swap(); }
+
+			App.Debug.reset();
+			App.Debug.box( [-1,0,-1], [1,2,1], "black" );
+			App.Debug.box( c[0].pos, c[6].pos, "gray" );
 
 			//---------------------------------------------
 			map_idx = 0;
 			for( i in c ){
-				if( c[i].data == 1 ) map_idx += MarchingCubes.corner_bit[ i ];
+				if( c[i].data == 1 ){
+					map_idx += MarchingCubes.corner_bit[ i ];
+					App.Debug.pnt( c[i].pos, "green" );
+				}else{
+					App.Debug.pnt( c[i].pos, "red" );
+				}
 			}
 
 			cnt++;
 			map = MarchingCubes.map[ map_idx ];
-			if( map == null ) continue;
+			if( map == null ){
+				window.requestAnimationFrame( App.render ); 
+				await async_timeout( SPEED );
+				continue;
+			}
 			
 			//---------------------------------------------
 			// Get the Edges positions to use to compute a Triangle.
@@ -120,16 +116,22 @@
 				fn_add_mid_vert( MarchingCubes.edges[ map[i + 1] ] );
 				fn_add_mid_vert( MarchingCubes.edges[ map[i + 2] ] );
 			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Get USED View of the ArrayBuffer.
+			vec_used	= $vec_buf.get_used(),
+			int_used	= $int_buf.get_used();
+
+			$dmesh.DynamicMesh
+				.update_verts( vec_used )
+				.update_index( int_used );
+
+			window.requestAnimationFrame( App.render ); 
+			await async_timeout( SPEED );
 		}
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Get USED View of the ArrayBuffer.
-		let vec_used	= vec_buf.get_used(),
-			int_used	= int_buf.get_used();
-
-		$dmesh.DynamicMesh
-			.update_verts( vec_used )
-			.update_index( int_used );
+		App.Debug.reset();
+		window.requestAnimationFrame( App.render ); 
 	}
 
 	function compute_noise(){
@@ -571,6 +573,5 @@
 			null,
 		]
 	}
-
 </script>
 <page-layout></page-layout>

@@ -45,6 +45,9 @@ class MovePoints{
 	points		= new Array();
 	updated		= true;
 	sel_idx 	= null;
+	ray_range	= 0.06;
+	dot_color	= 0xff0000;
+	sel_color	= 0x00ff00;
 	// #endregion //////////////////////////////////////////////
 	
 	// #region GETTERS / SETTERS
@@ -57,7 +60,6 @@ class MovePoints{
 
 	// #region METHODS
 	ray_hit( ray ){
-		const range = 0.06;
 		let i, p, len,
 			idx		= null,
 			pos 	= null,
@@ -67,7 +69,7 @@ class MovePoints{
 		// Find A Point that the ray touches
 		for( i=0; i < this.points.length; i++ ){
 			p = this.points[ i ];
-			len = line_near_point( ray, p.pos, range );
+			len = line_near_point( ray, p.pos, this.ray_range );
 
 			if( len != null && len < len_min ){
 				len_min	= len;
@@ -90,7 +92,7 @@ class MovePoints{
 		// Deselect Previous Item
 		let was_selected = false;
 		if( this.sel_idx != null ){
-			this.points[ this.sel_idx ].color = 0xff0000;
+			this.points[ this.sel_idx ].color = this.dot_color;
 			this.sel_idx = null;
 			was_selected = true;
 		}
@@ -99,7 +101,7 @@ class MovePoints{
 		// Select Point
 		if( idx != null ){
 			let p	= this.points[ idx ];
-			p.color	= 0x00ff00;
+			p.color	= this.sel_color;
 			pos		= p.pos;
 			this.sel_idx = idx;
 		}
@@ -130,6 +132,14 @@ class MovePoints{
 		return this;
 	}
 
+	remove( idx ){
+		if( idx == this.sel_idx ) this.set_index( null );
+
+		this.points.splice( idx, 1 );
+		this.updated = true;
+		return this;
+	}
+
 	move( pos, idx=null ){
 		if( idx == null ){
 			if( this.sel_idx == null ){ console.error( "Can not move point, no index or selection." ); return this; }
@@ -138,6 +148,13 @@ class MovePoints{
 
 		this.points[ idx ].pos.copy( pos );
 		this.updated = true;
+		return this;
+	}
+
+	clear(){
+		if( this.sel_idx != null ) this.set_index( null );
+		this.points.length	= 0;
+		this.updated		= true;
 		return this;
 	}
 
@@ -151,6 +168,32 @@ class MovePoints{
 		}
 
 		this.updated = false;
+	}
+
+	serialize(){
+		let p, ii = 0,
+			len = this.points.length,
+			ary = new Array( len * 3 );
+
+		for( let i=0; i < len; i++ ){
+			p = this.points[ i ].pos;
+			ary[ ii++ ] = p[ 0 ];
+			ary[ ii++ ] = p[ 1 ];
+			ary[ ii++ ] = p[ 2 ];
+		}
+		return JSON.stringify( ary );
+	}
+
+	deserialize( txt ){
+		let ary = JSON.parse( txt );
+		if( !Array.isArray( ary ) ){ console.error( "Deserialize MovePoints not an array."); return this; }
+
+		this.clear();
+		let pos = new Vec3();
+		for( let i=0; i < ary.length; i+= 3 ){
+			this.add( pos.from_buf( ary, i ) );
+		}
+		return this;
 	}
 	// #endregion //////////////////////////////////////////////
 } App.Components.reg( MovePoints );

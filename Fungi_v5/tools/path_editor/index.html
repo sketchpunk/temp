@@ -14,28 +14,50 @@ App.builder( true )
 	.build();
 
 //#####################################################
+// #region MAIN
 let $ui = {};
 
 function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SETUP
+	App.cam_ctrl
+		.set_orbit_scale( 0.2 )
+		.set_wheel_scale( 0.2 );
+
 	PathEdit.init();
 	Notify.top_offset  = 10;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// APPLICATION EVENTS
 	App.events
 		.on( "movepoint_selection", on_movepoint_selection );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// HTML ELEMENTS
 	$ui.label = document.querySelector( "label[name='lbl_sel']" );
 
-	on_evt( "btn_add", "click", ()=>{ PathEdit.add_point(); } );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// HTML EVENTS
+	on_evt( "btn_add",	"click", ()=>{ PathEdit.add_point(); } );
+	on_evt( "btn_rm",	"click", ()=>{ PathEdit.remove_point(); } );
+	on_evt( "btn_reset","click", ()=>{ Notify.confirm( "Are you sure you want to reset?", _=>PathEdit.reset() ); } );
+	on_evt( "btn_save","click", ()=>{ PathEdit.save_local(); } );
+	on_evt( "btn_load","click", ()=>{ Notify.confirm( "Are you sure you want to load from local storage?", _=>PathEdit.load_local() ); } );
+
+	on_evt( "btn_top",	"click", ()=>{ App.cam_ctrl.set_target( 0, 0, 0 ).set_orbit( 0, 90, 5 ); App.request_frame(); } );
+	on_evt( "btn_left",	"click", ()=>{ App.cam_ctrl.set_target( 0, 0, 0 ).set_orbit( 90, 0, 5 ); App.request_frame(); } );
+	on_evt( "btn_front","click", ()=>{ App.cam_ctrl.set_target( 0, 0, 0 ).set_orbit( 0, 0, 5 ); App.request_frame(); } );
 
 	return true;
 }
 
+// Quick way to wire up events to HTML Elements.
 function on_evt( id, evt, fn ){
 	let elm = document.getElementById( id );
 	elm.addEventListener( evt, fn );
 }
+
+// #endregion /////////////////////////////////////////////////////////////////
 
 // #region EVENTS
 function on_movepoint_selection( info ){ set_selection( info.index ); }
@@ -52,8 +74,17 @@ function set_selection( i ){ $ui.label.innerHTML = ( i != null )? "Selected Inde
 </script><page-layout pg_title="Curves"></page-layout>
 <nav-panel class="Btns top">
 	<button slot="left" title="Add Node" id="btn_add">&#10010;</button>
-	<button slot="left" title="Remove node">&#9866;</button>
-	<button slot="right" title="Save">&#10004;</button>
+	<button slot="left" title="Remove node" id="btn_rm">&#9866;</button>
+
+	<button slot="center" id="btn_top">TOP</button>
+	<button slot="center" id="btn_left">LEFT</button>
+	<button slot="center" id="btn_front">FRONT</button>
+
+	<button slot="right" id="btn_reset">Reset</button>
+	<button slot="right" id="btn_load">Load</button>
+	<button slot="right" id="btn_save">Save</button>
+
+	<!--<button slot="right" title="Save">&#10004;</button>-->
 </nav-panel>
 <nav-panel class="Footer">
 	<label slot="left" name="lbl_sel">No Selection</label>

@@ -90,9 +90,9 @@ let App = {
 		///////////////////////////////////////////////////////
 			add( f ){ this.task_queue.push( f ); return this; }
 			
-			build(){ 
-				return new Promise( ( r , e)=>this.run( r, e ) )
-					.catch( err=>console.error( "PromiseError :", err ) ); }
+			build(){ return new Promise( ( r , e)=>this.run( r, e ) )
+				.catch( err=>console.error( "PromiseError :", err ) );
+			}
 			
 			async run( r, e ){
 				let task, ok;

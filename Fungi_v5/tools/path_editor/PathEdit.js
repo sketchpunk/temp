@@ -13,6 +13,8 @@ let $PntEntity,
 	$GizEntity,
 	$Gizmo;
 
+let $line_color = 0xbbbb00;
+
 function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Activate Systems
@@ -36,16 +38,16 @@ function init(){
 	$PntMove	 	= $PntEntity.MovePoints;		// Ref to MovePoint Component
 	$Spline			= Spline.from_hermite( true );	// Hermite Spline
 
+	$PntMove.ray_range = 0.1; // Increase Range.
+
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Setup Starting Point
-	$PntMove
-		.add( [0,0,-1] )
-		.add( [1,0,0] )
-		.add( [0,0,1] )
-		.add( [-1,0,0] );
+
+
+	//$PntMove.serialize();
 
 	// Visualize the Spline
-	spline_refresh();
+	reset();
 }
 // #endregion ///////////////////////////////////////////////////////////////////////
 
@@ -56,6 +58,7 @@ function on_mouse_ray( info ){ $PntMove.ray_hit( info ); }
 
 // Event when a Point is selected or when all have been deselected.
 function on_movepoint_selection( info ){
+	console.log( "onsel", info );
 	if( info.state == null || info.state == MovePoints.DESELECTED ) $Gizmo.hide();
 	else $Gizmo.show( info.pos );
 }
@@ -68,17 +71,12 @@ function on_gizmo_drag_state( is_drag ){ App.cam_ctrl.active = !is_drag; }
 function on_gizmo_drag_move( pos ){
 	if( $PntMove.sel_idx != null ){
 		$PntMove.move( pos );
-		spline_refresh();
+		update();
 	}
 }
 // #endregion ///////////////////////////////////////////////////////////////////////
 
 // #region SPLINE
-function spline_refresh(){
-	spline_load();
-	spline_draw();
-}
-
 function spline_load(){
 	// Reset the spline and feed it new point positions.
 	$Spline.clear();
@@ -92,28 +90,52 @@ function spline_load(){
 // this instead of drawing the whole spline so that we can
 // get a better looking rendered line with less edges.
 function spline_draw(){
+	App.Debug.reset();
+	if( $Spline.point_count() == 0 ) return;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	const STEPS = 5;
 	let i, t, v0 = new Vec3(), v1 = new Vec3();
-	
-	App.Debug.reset();
 	$Spline.at_curve( 0, 0, v0 );	// Get the first point of the spline
 	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Loop through each curve.
 	for( let c = 0; c < $Spline.curve_count(); c++ ){
-		
 		// For Each curve, divide it up by segments.
 		for( i=1; i <= STEPS; i++ ){
-			t = i / STEPS;						// Normalize Step
-			$Spline.at_curve( c, t, v1 );		// At the Curve, Get position at T
-			App.Debug.ln( v0, v1, 0xbbbb00 );	// Draw line between This + Prev Point
-			v0.copy( v1 );						// Save pos as Prev Position for next iteration
+			t = i / STEPS;							// Normalize Step
+			$Spline.at_curve( c, t, v1 );			// At the Curve, Get position at T
+			App.Debug.ln( v0, v1, $line_color );	// Draw line between This + Prev Point
+			v0.copy( v1 );							// Save pos as Prev Position for next iteration
 		}
 	}
 }
 // #endregion ///////////////////////////////////////////////////////////////////////
 
+// #region MISC
+function update( msg=null ){
+	spline_load();
+	spline_draw();
+	if( msg ) Notify.msg( msg );
+}
+
+function reset(){
+	$PntMove
+		.clear()
+		.add( [0,0,-1] )
+		.add( [1,0,0] )
+		.add( [0,0,1] )
+		.add( [-1,0,0] );
+
+	update();
+	App.request_frame();
+}
+// #endregion ///////////////////////////////////////////////////////////////////////
+
+
 export default {
-	init,
+	init, reset,
+
 	add_point : ()=>{
 		// $Spline.is_loop;
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -124,8 +146,7 @@ export default {
 			if( i == $PntMove.last_index ) i--;
 
 			let pos = $Spline.at_curve( i, 0.5 );
-			$PntMove.add( pos, i+1 );
-
+			$PntMove.set_index( null ).add( pos, i+1 );
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		}else{
 			// Nothing selected, Grab the last two points to determine
@@ -140,9 +161,31 @@ export default {
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		$PntMove.set_index( null );
-		Notify.msg( "New Point Added" );
-		spline_refresh();
+		update( "New Point Added" );
 		App.request_frame();
+	},
+
+	remove_point : ()=>{
+		if( $PntMove.count <= 4 ){ Notify.err( "Can not delete point, curve needs at least 4 points." ); return this; }
+		if( $PntMove.sel_idx == null ){ Notify.err( "No point selected for removing." ); return this; }
+
+		$PntMove.remove( $PntMove.sel_idx );
+		update( "Point Deleted Added" );
+		App.request_frame();
+	},
+
+	save_local : ()=>{
+		let txt = $PntMove.serialize();
+		localStorage.setItem( "path", txt );
+		Notify.msg( "Path saved to localStorage" );
+	},
+
+	load_local : ()=>{
+		let txt = localStorage.getItem( "path" );
+		if( txt ){
+			$PntMove.deserialize( txt );
+			update( "Curve has been loaded." );
+			App.request_frame();
+		}
 	},
 };

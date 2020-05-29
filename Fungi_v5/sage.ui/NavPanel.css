@@ -3,7 +3,7 @@ nav-panel.top{ top:0px; left:0px; right:0px; height:30px; flex-direction:row; }
 nav-panel.bot{ bottom:0px; left:0px; right:0px; height:30px; flex-direction:row; }
 
 nav-panel > header { flex:1 1 33%; display:flex; }
-nav-panel > main { flex:1 1 33%; display:flex;  }
+nav-panel > main { flex:1 1 33%; display:flex; justify-content: center;  }
 nav-panel > footer { flex:1 1 33%; display:flex; justify-content: flex-end; }
 
 /* ============================================================== 

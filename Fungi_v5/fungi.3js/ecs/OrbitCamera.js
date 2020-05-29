@@ -3,9 +3,9 @@ import Maths, { Vec3, Quat }	from "../../fungi/maths/Maths.js";
 
 const VEC = new THREE.Vector3(); // Temp var used to convert Fungi.Vec3 to THREE.Vector3
 
-const ORBIT_SCALE 		= 0.07;
-const WHEEL_SCALE 		= 0.1;
-const PAN_SCREEN_SCALE	= 0.003;
+let ORBIT_SCALE 		= 0.07;
+let WHEEL_SCALE 		= 0.1;
+let PAN_SCREEN_SCALE	= 0.003;
 
 const MODE_ORBIT		= 0;
 const MODE_PAN_SCREEN	= 1;
@@ -33,6 +33,10 @@ class OrbitCamera{
 
 		this.mode 			= 0;
 	}
+
+	set_orbit_scale( v ){ ORBIT_SCALE = v; return this; }
+	set_wheel_scale( v ){ WHEEL_SCALE = v; return this; }
+	set_pan_scale( v ){ PAN_SCREEN_SCALE = v; return this; }
 
 	run( ecs ){
 		if( !this.active ) return;

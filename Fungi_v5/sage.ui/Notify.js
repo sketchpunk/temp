@@ -7,34 +7,67 @@ class Notify{
 	static top_offset 	= 29;	// Starting Top Position
 	static edge_offset 	= 5;
 	static spacing 		= 2;	// How much space to put between notifications.
+
+	static MSG 			= 0;
+	static CONFIRM 		= 1;
 	
 	/////////////////////////////////////////////////////////////////////////////////
 	// Element Pool
 	static pool = [];
-	static get_item(){
+	static get_item( itm_type=this.MSG ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		for( let i=0; i < this.pool.length; i++ ){
-			if( !this.pool[i].active ){
+			if( this.pool[i].itm_type == itm_type && !this.pool[i].active ){
 				this.pool[i].active = true;
 				return this.pool[i];
 			}
 		}
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let div = document.createElement( "div" );
-		div.className = "NotifyItem";
+		let itm, div = document.createElement( "div" );
 		document.body.appendChild( div );
-		
-		let itm = { active : true, elm : div };
-		this.pool.push( itm );
 
-		div.addEventListener( "click", function(){ Notify.hide_item( itm ); });
+		switch( itm_type ){
+			case this.MSG :
+				itm = { 
+					active		: true, 
+					elm			: div, 
+					itm_type	: itm_type,
+					set_text	: function( txt ){ this.elm.innerHTML = txt; return this; },
+					set_cls		: function( txt ){ this.elm.className = txt; return this; },
+				};
+				div.addEventListener( "click", function(){ Notify.hide_item( itm ); });
+				break;
+			case this.CONFIRM :
+				itm = { 
+					active		: true, 
+					elm			: div,
+					itm_type	: itm_type,
+					fn_ok		: null,
+					lbl			: document.createElement( "div" ),
+					btn_yes		: document.createElement( "button" ),
+					btn_no		: document.createElement( "button" ),
+					set_text	: function( txt ){ this.lbl.innerHTML = txt; return this; },
+					set_cls		: function( txt ){ this.elm.className = txt; return this; },
+				};
+
+				itm.btn_yes.innerHTML	= "Yes";
+				itm.btn_no.innerHTML	= "No";
+				itm.btn_no.addEventListener( "click", function(){ Notify.hide_item( itm ); });
+				itm.btn_yes.addEventListener( "click", function(){ itm.fn_ok(); Notify.hide_item( itm ); });
+				div.appendChild( itm.lbl );
+				div.appendChild( itm.btn_yes );
+				div.appendChild( itm.btn_no );
+				break;
+		}
+		
+		this.pool.push( itm );
 		return itm;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
 	// Handle viewing
-	static show_item( itm, delay_s ){
+	static show_item( itm, delay_s=null ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Figure out the Top Position
 		let box, p, y = this.top_offset;	
@@ -49,17 +82,21 @@ class Notify{
 		let elm = itm.elm;
 		elm.style.right		= this.edge_offset + "px";
 		elm.style.top		= y + "px";
-		elm.style.display	= "inline-block";
 
 		// Auto Close
-		itm.timer = setTimeout( ()=>{ Notify.hide_item( itm ); }, delay_s * 1000 );
+		if( delay_s != null ){
+			itm.timer = setTimeout( ()=>{ Notify.hide_item( itm ); }, delay_s * 1000 );
+		}
 	}
 
 	static hide_item( itm ){
 		if( itm.timer ) clearTimeout( itm.timer );
-		itm.elm.style.display	= "none";
+		if( itm.fn_ok ) itm.fn_ok = null;
+
+		itm.elm.style.top 		= "-500px";
 		itm.timer				= null;
 		itm.active				= false;
+
 		return false;
 	}
 	
@@ -67,17 +104,25 @@ class Notify{
 	// Messaging Methods
 
 	static msg( txt, delay ){
-		let itm = this.get_item();
-		itm.elm.innerHTML = txt;
-		itm.elm.className = "NotifyItem msg";
+		let itm = this.get_item()
+			.set_cls( "NotifyItem msg" )
+			.set_text( txt );
 		this.show_item( itm, delay || this.delay_msg );
 	}
 
 	static err( txt, delay ){
-		let itm = this.get_item();
-		itm.elm.innerHTML = txt;
-		itm.elm.className = "NotifyItem err";
+		let itm = this.get_item()
+			.set_cls( "NotifyItem err" )
+			.set_text( txt );
 		this.show_item( itm, delay || this.delay_err );
+	}
+
+	static confirm( txt, fn_ok ){
+		let itm = this.get_item( this.CONFIRM )
+			.set_cls( "NotifyItem confirm" )
+			.set_text( txt );
+		itm.fn_ok = fn_ok;
+		this.show_item( itm );
 	}
 }
 

@@ -69,6 +69,7 @@ class Spline{
 	gen_map( samp_cnt=5 ){ return new SplineMap( this, samp_cnt ); }
 	
 	curve_count(){ return this.curve.spline_count( this.points.length, this.is_loop ); }
+	point_count(){ return this.points.length; }
 
     static debug_points( d, s ){ for( let p of s.points ) d.pnt( p.pos, 0x00ffff, 2, 15 ); return this; }
     static debug_path( d, s, samp=10 ){
