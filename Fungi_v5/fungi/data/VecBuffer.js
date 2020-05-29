@@ -8,6 +8,8 @@ class VecBuffer{
 	}
 
 	// #region manage data
+	reset(){ this.len = 0; return this; }
+
 	push(){
 		// Check of push will go over compacity.
 		if( this.len + arguments.length > this.capacity ){
@@ -18,7 +20,8 @@ class VecBuffer{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let offset = this.len * this.comp_len;
+		let idx 	= this.len;
+		let offset	= this.len * this.comp_len;
 		for( let i=0; i < arguments.length; i++ ){
 			if( arguments[ i ].length != this.comp_len ){
 				console.log( "VecBuffer Push: Array's Len does not equal component len.");
@@ -31,7 +34,7 @@ class VecBuffer{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		return this;
+		return idx;
 	}
 
 	set( i, v ){
@@ -43,6 +46,12 @@ class VecBuffer{
 		i *= this.comp_len;
 		this.buffer.set( v, i );
 		return this;
+	}
+
+	get( i, out ){
+		i *= this.comp_len;
+		for( let ii=0; ii < this.comp_len; ii++ ) out[ ii ] = this.buffer[ i++ ];
+		return out;
 	}
 
 	set_raw( i, ...arg ){
@@ -71,9 +80,12 @@ class VecBuffer{
 
 	// #region Getters
 	get byte_capacity(){ return this.buffer.byteLength; }	// Get the Capacity Length in Bytes
-	get byte_len(){ return this.len * this.comp_len * 4; }
-	get buf_len(){ return this.len * this.comp_len; }
-	get buf_capacity(){ return this.buffer.length; }
+	get byte_len(){ return this.len * this.comp_len * 4; }	// How much space is used in Bytes
+	get buf_len(){ return this.len * this.comp_len; }		// How many floats being used
+	get buf_capacity(){ return this.buffer.length; }		// Total floats available
+
+	// Create a new View into the Buffer, but only up to whats being used, not total capacity.
+	get_used(){ return new Float32Array( this.buffer.buffer, 0, this.len * this.comp_len ); }
 	// #endregion ////////////////////////////////////////////////////////////////////
 }
 

@@ -9,6 +9,7 @@ let COLORS = {
 	"yellow"	: "#ffff00",
 	"orange"	: "#ff8000",
 	"gray"		: "#808080",
+	"darkgray"	: "#303030",
 };
 
 const NORMALIZE_RGB = 1 / 255.0;

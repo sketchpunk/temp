@@ -22,6 +22,10 @@ https://threejs.org/examples/#webgl_loader_gltf
 https://learnopengl.com/PBR/Theory
 https://github.com/KhronosGroup/glTF-Sample-Viewer
 https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/glTF-WebGL-PBR
+https://github.com/KhronosGroup/glTF-Sample-Viewer#physically-based-materials-in-gltf-20
+
+https://oframe.github.io/ogl/examples/?src=load-gltf.html
+https://github.com/oframe/ogl/blob/master/examples/load-gltf.html // Krono PBR Shader in source.
 
 https://github.com/toji/webgpu-test  Multiple Lights and PBR
 

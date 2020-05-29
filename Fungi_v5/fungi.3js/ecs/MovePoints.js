@@ -21,20 +21,20 @@ function line_near_point( info, p, rng=0.1 ){
 
 //###########################################################################################
 
-class DragPoints{
+class MovePoints{
 	// #region STATIC
 	static DESELECTED		= 0;
 	static NEW_SELECTION	= 1;
     static SELECTION		= 2;
 
     static init( priority=800 ){
-		App.ecs.sys_add( DragPointSys, priority );
-		App.events.reg( "dragpoint_selection", 0, true );
+		App.ecs.sys_add( MovePointSys, priority );
+		App.events.reg( "movepoint_selection", 0, true );
     }
 
 	static $( name, e=null ){
 		e = Points.$( name  );
-		e.add_com( "DragPoints" );
+		e.add_com( "MovePoints" );
 		e.Points.use_size 	= 8;
 		e.Points.use_shape 	= 1;
 		return e;
@@ -45,7 +45,15 @@ class DragPoints{
 	points		= new Array();
 	updated		= true;
 	sel_idx 	= null;
-     // #endregion //////////////////////////////////////////////
+	// #endregion //////////////////////////////////////////////
+	
+	// #region GETTERS / SETTERS
+	get count(){ return this.points.length; }
+	
+	get last_index(){ return this.points.length-1; }
+	
+	get_pos( idx, out=null ){ return ( out || new Vec3() ).copy( this.points[ idx ].pos ); }
+	// #endregion //////////////////////////////////////////////
 
 	// #region METHODS
 	ray_hit( ray ){
@@ -69,6 +77,16 @@ class DragPoints{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let was_selected = ( this.sel_idx != null ); // Deselect Previous Item
+		
+		this.set_index( idx );
+		this.updated = ( idx != null || was_selected ); // Only update if there is a reason too.
+	}
+
+	set_index( idx=null ){
+		let pos = null;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Deselect Previous Item
 		let was_selected = false;
 		if( this.sel_idx != null ){
@@ -80,37 +98,41 @@ class DragPoints{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Select Point
 		if( idx != null ){
-			p = this.points[ idx ];
-			p.color = 0x00ff00;
+			let p	= this.points[ idx ];
+			p.color	= 0x00ff00;
+			pos		= p.pos;
 			this.sel_idx = idx;
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Event Handling
 		let evt = null;
-		if( idx == null && was_selected )		evt = DragPoints.DESELECTED;
-		else if( idx != null && was_selected )	evt = DragPoints.SELECTION;
-		else if( idx != null && !was_selected )	evt = DragPoints.NEW_SELECTION;
+		if( idx == null && was_selected )		evt = MovePoints.DESELECTED;
+		else if( idx != null && was_selected )	evt = MovePoints.SELECTION;
+		else if( idx != null && !was_selected )	evt = MovePoints.NEW_SELECTION;
 
-		App.events.emit( "dragpoint_selection", { state:evt, index:idx, pos:pos } );
+		App.events.emit( "movepoint_selection", { state:evt, index:idx, pos:pos } );
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.updated = ( idx != null || was_selected ); // Only update if there is a reason too.
+		return this;
 	}
 
-	add( pos ){
+	add( pos, idx=null ){
 		let o = {
 			pos		: new Vec3( pos ),
 			color 	: 0xff0000,
 			data	: null,
 		};
-		this.points.push( o );
+
+		if( idx != null )	this.points.splice( idx, 0, o );
+		else				this.points.push( o );
+
+		this.updated = true;
 		return this;
 	}
 
 	move( pos, idx=null ){
 		if( idx == null ){
-			if( this.sel_idx == null ){ console.error( "Can not move drag point, no index or selection." ); return this; }
+			if( this.sel_idx == null ){ console.error( "Can not move point, no index or selection." ); return this; }
 			idx = this.sel_idx;
 		}
 
@@ -131,15 +153,14 @@ class DragPoints{
 		this.updated = false;
 	}
 	// #endregion //////////////////////////////////////////////
-} App.Components.reg( DragPoints );
+} App.Components.reg( MovePoints );
 
 
-function DragPointSys( ecs ){
-	let c, ary = ecs.query_comp( "DragPoints" );
+function MovePointSys( ecs ){
+	let c, ary = ecs.query_comp( "MovePoints" );
 	if( !ary ) return;
 	for( c of ary ) if( c.updated ) c.update();
 }
 
 //###########################################################################################
-
-export default DragPoints;
+export default MovePoints;

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<script type="module">
+	import App, { Vec3 } from "../../fungi/App.js";
+	import VecBuffer from "../../fungi/data/VecBuffer.js";
+	import DynamicMesh 		from "../../fungi/engine/com/DynamicMesh.js";
+
+
+	/*
+	https://www.boristhebrave.com/2018/04/15/marching-cubes-3d-tutorial/
+	https://www.boristhebrave.com/2018/04/15/marching-cubes-tutorial/
+	An alternative to marching squares : https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
+	
+	https://www.youtube.com/watch?v=M3iI2l0ltbE
+	http://paulbourke.net/geometry/polygonise/
+	https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
+	
+	https://catlikecoding.com/unity/tutorials/marching-squares/
+	https://catlikecoding.com/unity/tutorials/marching-squares-2/
+	*/
+
+	//#####################################################
+	App.builder(true, true)
+		.load_shaders( "./shaders/LowPoly.js")
+		.set_camera(0, 20, 3, 0, 0.0, 0)
+		.add(init)
+		.render_on_mouse()
+		.build();
+
+	//#####################################################
+	let $grid, $dmesh;
+
+	async function init() {
+		/*
+		let verts	= new Float32Array( [ 1,0,1, 1,0,0, 0,0,0 ] );
+		let idx		= new Uint16Array( [ 0,1,2 ] );
+		let e		= DynamicMesh.$( "dm", App.new_mat("LowPoly"), 3, 3 );
+		e.DynamicMesh
+			.update_verts( verts )
+			.update_index( idx );
+		*/
+
+		$dmesh = DynamicMesh.$( "dm", App.new_mat("LowPoly"), 3, 3 );
+
+		$grid = new Grid3D( 3, 3, 3, 1, 1, 1, [0, 0, 0]);
+
+		let p;
+		for (p of $grid.points) {
+			App.Debug.pnt(p.pos, "green");
+		}
+
+		for (p of $grid.cell_iter()) {
+			for (let e of MarchingCubes.edges) {
+				App.Debug.ln(p[e[0]].pos, p[e[1]].pos, "gray");
+			}
+
+			/*
+			let map = MarchingCubes.map[4];
+			for (let i = 0; i < map.length; i += 3) {
+				let ea = MarchingCubes.edges[map[i]];
+				let eb = MarchingCubes.edges[map[i + 1]];
+				let ec = MarchingCubes.edges[map[i + 2]];
+
+				let pa = Vec3.lerp(p[ea[0]].pos, p[ea[1]].pos, 0.5);
+				let pb = Vec3.lerp(p[eb[0]].pos, p[eb[1]].pos, 0.5);
+				let pc = Vec3.lerp(p[ec[0]].pos, p[ec[1]].pos, 0.5);
+
+				App.Debug.pnt(pa, "cyan");
+				App.Debug.pnt(pb, "cyan");
+				App.Debug.pnt(pc, "cyan");
+
+				App.Debug.ln(pa, pb, "cyan");
+				App.Debug.ln(pb, pc, "cyan");
+				App.Debug.ln(pc, pa, "cyan");
+			}
+			*/
+		}
+
+		run();
+		return true;
+	}
+
+	function run(){
+		let i, key, c, vary = new VecBuffer( 10 );
+		vary.auto_expand = 50;
+
+		let cache = {}; // TODO, Not the final caching solution.
+		let idx, indices = new Array();
+		let map, map_idx, 
+			pa, pb,
+			mp = new Vec3();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let fn_add_mid_vert = ( edge )=>{
+			pa	= c[ edge[0] ];
+			pb	= c[ edge[1] ];
+			key	= ( pa.index < pb.index )? pa.index + "_" + pb.index : pb.index + "_" + pa.index;
+			idx = cache[ key ];
+
+			if( idx != undefined ) indices.push( idx );
+			else{
+				mp.from_lerp( pa.pos , pb.pos, 0.5 );
+				idx				= vary.push( mp );
+				cache[ key ]	= idx
+				indices.push( idx );
+			}
+		};
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( c of $grid.cell_iter() ){
+			//---------------------------------------------
+			// TODO - compute map index based on corner data
+			map_idx	= 4;
+			map		= MarchingCubes.map[ map_idx ];
+
+			//---------------------------------------------
+			// Get the Edges positions to use to compute a Triangle.
+			// Map is a flat array, grouped in 3 Edge Indices
+			for( i=0; i < map.length; i+=3 ){				
+				fn_add_mid_vert( MarchingCubes.edges[ map[i] ] );
+				fn_add_mid_vert( MarchingCubes.edges[ map[i + 1] ] );
+				fn_add_mid_vert( MarchingCubes.edges[ map[i + 2] ] );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		console.log( cache )
+		let used = vary.get_used();	// Get USED View of the ArrayBuffer.
+		$dmesh.DynamicMesh
+			.update_verts( used )
+			.update_index( new Uint16Array( indices ) );
+	}
+
+	class Grid3DPoint {
+		index = 0;
+		coord = [0, 0, 0];
+		pos = [0, 0, 0];
+		data = null;
+	}
+
+	class Grid3D {
+		points = new Array();
+		x_len = 0;
+		y_len = 0;
+		z_len = 0;
+		xz_len = 0;
+
+		constructor(x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset = null) {
+			this.resize(x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset);
+		}
+
+		get(x, y, z) {
+			let i = y * this.xz_len + z * z_len + x;
+			return this.points[i];
+		}
+
+		// #region METHODS
+		resize(x_cnt, y_cnt, z_cnt, x_len, y_len, z_len, offset = null) {
+			let x, y, z, i, p,
+				len = x_cnt * y_cnt * z_cnt,	// How Many Total Points
+				x_inc = x_len / (x_cnt - 1),	// 
+				y_inc = y_len / (y_cnt - 1),
+				z_inc = z_len / (z_cnt - 1);
+
+			this.points.length = len;
+			this.x_len = x_cnt;
+			this.y_len = y_cnt;
+			this.z_len = z_cnt;
+			this.xz_len = x_cnt * z_cnt;
+
+			for (i = 0; i < len; i++) {
+				y = (i / this.xz_len) | 0;
+				z = (i - y * this.xz_len) / z_cnt | 0;
+				x = i - y * this.xz_len - z * z_cnt;
+
+				if (!this.points[i]) this.points[i] = new Grid3DPoint();
+
+				p = this.points[i];
+				p.index = i;
+				p.coord[0] = x;
+				p.coord[1] = y;
+				p.coord[2] = z;
+				p.pos[0] = x_inc * x;
+				p.pos[1] = y_inc * y;
+				p.pos[2] = z_inc * z;
+
+				if (offset) {
+					p.pos[0] += offset[0];
+					p.pos[1] += offset[1];
+					p.pos[2] += offset[2];
+				}
+			}
+			return this;
+		}
+		// #endregion /////////////////////////////////////////////////////////////////////
+
+		// #region ITERATORS
+		cell_iter() {
+			let i = 0,				// Points Index
+				iz = 0,				// Index of one level
+				x_end = this.x_len - 2,		// Skip Last Column
+				z_end = this.xz_len - this.x_len,
+				i_end = this.points.length - this.xz_len,	// Skip Final Row
+				pnts = [null, null, null, null, null, null, null, null];
+			return {
+				[Symbol.iterator]: function () { return this; },
+				next: () => {
+					if (i >= i_end) return { done: true };
+					let ii = i + this.xz_len;
+
+					//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+					pnts[0] = this.points[i];					// BOT - TOP LEFT
+					pnts[1] = this.points[i + 1];				// BOT - TOP RIGHT
+					pnts[2] = this.points[i + this.x_len + 1];	// BOT - BOT RIGHT
+					pnts[3] = this.points[i + this.x_len];		// BOT - BOT LEFT
+
+					pnts[4] = this.points[ii];					// TOP - TOP LEFT
+					pnts[5] = this.points[ii + 1];				// TOP - TOP RIGHT
+					pnts[6] = this.points[ii + this.x_len + 1];	// TOP - BOT RIGHT
+					pnts[7] = this.points[ii + this.x_len];		// TOP - BOT LEFT
+
+					//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+					i++;	// Next Element
+					iz++;	// Next Element at this level
+
+					// Skip Final Column Element, to to next row
+					if (pnts[0].coord[0] == x_end) { i++; iz++; }
+
+					// Skip final row, Shift to the next level (y++)
+					if (iz >= z_end) {
+						i += this.x_len;
+						iz = 0;
+					}
+
+					return { done: false, value: pnts };
+				},
+			};
+		}
+		// #endregion /////////////////////////////////////////////////////////////////////
+	}
+
+	// Only going to cache points at two levels at a time.
+	class Cache {
+		a = new Map();	// Level 1
+		b = new Map();	// Level 2
+
+		swap() {
+			let t = this.a;	// Old Cache
+			this.a = this.b;	// Saving B to lower level.
+			this.b = t;		// Move Old Cache to new
+			this.b.clear();		// then clear it out for use
+		}
+
+		/*
+		Caching
+		per x row, For Every point there is a mid point, minus  the last one.
+		(x_cnt-1) * 2 + 1
+	
+		between rows, there is mid points for the z edges
+		x_cnt
+	
+		Number of rows and min rows is
+			(z_cnt - 1) * main_row_count +
+			(z_cnt - 1) * x_cnt
+		4 - 1 = 3, 3 * 2  = 6
+		- store by y Level
+		*/
+	}
+
+	class MarchingCubes {
+		static corner_bit = [1, 2, 4, 8, 16, 32, 64, 128];
+		static corner_pos = [
+			[0, 0, 0],
+			[1, 0, 0],
+			[1, 0, 1],
+			[0, 0, 1],
+			[0, 1, 0],
+			[1, 1, 0],
+			[1, 1, 1],
+			[0, 1, 1],
+		];
+
+		// Each Edge defined by a Corner Index.
+		static edges = [
+			[0, 1],	// Bottom
+			[1, 2],
+			[2, 3],
+			[3, 0],
+			[4, 5],	// Top
+			[5, 6],
+			[6, 7],
+			[7, 4],
+			[0, 4],	// Sides
+			[1, 5],
+			[2, 6],
+			[3, 7],
+		];
+
+		// Edge Index in Groups of 3s
+		// The mid point of the 3 edges will form a triangle.
+		static map = [
+			null,
+			[8, 0, 3],
+			[1, 0, 9],
+			[8, 1, 3, 8, 9, 1],
+			[10, 2, 1],
+			[8, 0, 3, 1, 10, 2],
+			[9, 2, 0, 9, 10, 2],
+			[3, 8, 2, 2, 8, 10, 10, 8, 9],
+			[3, 2, 11],
+			[0, 2, 8, 2, 11, 8],
+			[1, 0, 9, 2, 11, 3],
+			[2, 9, 1, 11, 9, 2, 8, 9, 11],
+			[3, 10, 11, 3, 1, 10],
+			[1, 10, 0, 0, 10, 8, 8, 10, 11],
+			[0, 11, 3, 9, 11, 0, 10, 11, 9],
+			[8, 9, 11, 11, 9, 10],
+			[7, 4, 8],
+			[3, 7, 0, 7, 4, 0],
+			[7, 4, 8, 9, 1, 0],
+			[9, 1, 4, 4, 1, 7, 7, 1, 3],
+			[7, 4, 8, 2, 1, 10],
+			[4, 3, 7, 4, 0, 3, 2, 1, 10],
+			[2, 0, 10, 0, 9, 10, 7, 4, 8],
+			[9, 10, 4, 4, 10, 3, 3, 10, 2, 4, 3, 7],
+			[4, 8, 7, 3, 2, 11],
+			[7, 4, 11, 11, 4, 2, 2, 4, 0],
+			[1, 0, 9, 2, 11, 3, 8, 7, 4],
+			[2, 11, 1, 1, 11, 9, 9, 11, 7, 9, 7, 4],
+			[10, 11, 1, 11, 3, 1, 4, 8, 7],
+			[4, 0, 7, 7, 0, 10, 0, 1, 10, 7, 10, 11],
+			[7, 4, 8, 0, 11, 3, 9, 11, 0, 10, 11, 9],
+			[4, 11, 7, 9, 11, 4, 10, 11, 9],
+			[9, 4, 5],
+			[9, 4, 5, 0, 3, 8],
+			[0, 5, 1, 0, 4, 5],
+			[4, 3, 8, 5, 3, 4, 1, 3, 5],
+			[5, 9, 4, 10, 2, 1],
+			[8, 0, 3, 1, 10, 2, 4, 5, 9],
+			[10, 4, 5, 2, 4, 10, 0, 4, 2],
+			[3, 10, 2, 8, 10, 3, 5, 10, 8, 4, 5, 8],
+			[9, 4, 5, 11, 3, 2],
+			[11, 0, 2, 11, 8, 0, 9, 4, 5],
+			[5, 1, 4, 1, 0, 4, 11, 3, 2],
+			[5, 1, 4, 4, 1, 11, 1, 2, 11, 4, 11, 8],
+			[3, 10, 11, 3, 1, 10, 5, 9, 4],
+			[9, 4, 5, 1, 10, 0, 0, 10, 8, 8, 10, 11],
+			[5, 0, 4, 11, 0, 5, 11, 3, 0, 10, 11, 5],
+			[5, 10, 4, 4, 10, 8, 8, 10, 11],
+			[9, 7, 5, 9, 8, 7],
+			[0, 5, 9, 3, 5, 0, 7, 5, 3],
+			[8, 7, 0, 0, 7, 1, 1, 7, 5],
+			[7, 5, 3, 3, 5, 1],
+			[7, 5, 8, 5, 9, 8, 2, 1, 10],
+			[10, 2, 1, 0, 5, 9, 3, 5, 0, 7, 5, 3],
+			[8, 2, 0, 5, 2, 8, 10, 2, 5, 7, 5, 8],
+			[2, 3, 10, 10, 3, 5, 5, 3, 7],
+			[9, 7, 5, 9, 8, 7, 11, 3, 2],
+			[0, 2, 9, 9, 2, 7, 7, 2, 11, 9, 7, 5],
+			[3, 2, 11, 8, 7, 0, 0, 7, 1, 1, 7, 5],
+			[11, 1, 2, 7, 1, 11, 5, 1, 7],
+			[3, 1, 11, 11, 1, 10, 8, 7, 9, 9, 7, 5],
+			[11, 7, 0, 7, 5, 0, 5, 9, 0, 10, 11, 0, 1, 10, 0],
+			[0, 5, 10, 0, 7, 5, 0, 8, 7, 0, 10, 11, 0, 11, 3],
+			[10, 11, 5, 11, 7, 5],
+			[5, 6, 10],
+			[8, 0, 3, 10, 5, 6],
+			[0, 9, 1, 5, 6, 10],
+			[8, 1, 3, 8, 9, 1, 10, 5, 6],
+			[1, 6, 2, 1, 5, 6],
+			[6, 2, 5, 2, 1, 5, 8, 0, 3],
+			[5, 6, 9, 9, 6, 0, 0, 6, 2],
+			[5, 8, 9, 2, 8, 5, 3, 8, 2, 6, 2, 5],
+			[3, 2, 11, 10, 5, 6],
+			[0, 2, 8, 2, 11, 8, 5, 6, 10],
+			[3, 2, 11, 0, 9, 1, 10, 5, 6],
+			[5, 6, 10, 2, 9, 1, 11, 9, 2, 8, 9, 11],
+			[11, 3, 6, 6, 3, 5, 5, 3, 1],
+			[11, 8, 6, 6, 8, 1, 1, 8, 0, 6, 1, 5],
+			[5, 0, 9, 6, 0, 5, 3, 0, 6, 11, 3, 6],
+			[6, 9, 5, 11, 9, 6, 8, 9, 11],
+			[7, 4, 8, 6, 10, 5],
+			[3, 7, 0, 7, 4, 0, 10, 5, 6],
+			[7, 4, 8, 6, 10, 5, 9, 1, 0],
+			[5, 6, 10, 9, 1, 4, 4, 1, 7, 7, 1, 3],
+			[1, 6, 2, 1, 5, 6, 7, 4, 8],
+			[6, 1, 5, 2, 1, 6, 0, 7, 4, 3, 7, 0],
+			[4, 8, 7, 5, 6, 9, 9, 6, 0, 0, 6, 2],
+			[2, 3, 9, 3, 7, 9, 7, 4, 9, 6, 2, 9, 5, 6, 9],
+			[2, 11, 3, 7, 4, 8, 10, 5, 6],
+			[6, 10, 5, 7, 4, 11, 11, 4, 2, 2, 4, 0],
+			[1, 0, 9, 8, 7, 4, 3, 2, 11, 5, 6, 10],
+			[1, 2, 9, 9, 2, 11, 9, 11, 4, 4, 11, 7, 5, 6, 10],
+			[7, 4, 8, 11, 3, 6, 6, 3, 5, 5, 3, 1],
+			[11, 0, 1, 11, 4, 0, 11, 7, 4, 11, 1, 5, 11, 5, 6],
+			[6, 9, 5, 0, 9, 6, 11, 0, 6, 3, 0, 11, 4, 8, 7],
+			[5, 6, 9, 9, 6, 11, 9, 11, 7, 9, 7, 4],
+			[4, 10, 9, 4, 6, 10],
+			[10, 4, 6, 10, 9, 4, 8, 0, 3],
+			[1, 0, 10, 10, 0, 6, 6, 0, 4],
+			[8, 1, 3, 6, 1, 8, 6, 10, 1, 4, 6, 8],
+			[9, 2, 1, 4, 2, 9, 6, 2, 4],
+			[3, 8, 0, 9, 2, 1, 4, 2, 9, 6, 2, 4],
+			[0, 4, 2, 2, 4, 6],
+			[8, 2, 3, 4, 2, 8, 6, 2, 4],
+			[4, 10, 9, 4, 6, 10, 2, 11, 3],
+			[11, 8, 2, 2, 8, 0, 6, 10, 4, 4, 10, 9],
+			[2, 11, 3, 1, 0, 10, 10, 0, 6, 6, 0, 4],
+			[8, 4, 1, 4, 6, 1, 6, 10, 1, 11, 8, 1, 2, 11, 1],
+			[3, 1, 11, 11, 1, 4, 1, 9, 4, 11, 4, 6],
+			[6, 11, 1, 11, 8, 1, 8, 0, 1, 4, 6, 1, 9, 4, 1],
+			[3, 0, 11, 11, 0, 6, 6, 0, 4],
+			[4, 11, 8, 4, 6, 11],
+			[6, 8, 7, 10, 8, 6, 9, 8, 10],
+			[3, 7, 0, 0, 7, 10, 7, 6, 10, 0, 10, 9],
+			[1, 6, 10, 0, 6, 1, 7, 6, 0, 8, 7, 0],
+			[10, 1, 6, 6, 1, 7, 7, 1, 3],
+			[9, 8, 1, 1, 8, 6, 6, 8, 7, 1, 6, 2],
+			[9, 7, 6, 9, 3, 7, 9, 0, 3, 9, 6, 2, 9, 2, 1],
+			[7, 6, 8, 8, 6, 0, 0, 6, 2],
+			[3, 6, 2, 3, 7, 6],
+			[3, 2, 11, 6, 8, 7, 10, 8, 6, 9, 8, 10],
+			[7, 9, 0, 7, 10, 9, 7, 6, 10, 7, 0, 2, 7, 2, 11],
+			[0, 10, 1, 6, 10, 0, 8, 6, 0, 7, 6, 8, 2, 11, 3],
+			[1, 6, 10, 7, 6, 1, 11, 7, 1, 2, 11, 1],
+			[1, 9, 6, 9, 8, 6, 8, 7, 6, 3, 1, 6, 11, 3, 6],
+			[9, 0, 1, 11, 7, 6],
+			[0, 11, 3, 6, 11, 0, 7, 6, 0, 8, 7, 0],
+			[7, 6, 11],
+			[11, 6, 7],
+			[3, 8, 0, 11, 6, 7],
+			[1, 0, 9, 6, 7, 11],
+			[1, 3, 9, 3, 8, 9, 6, 7, 11],
+			[10, 2, 1, 6, 7, 11],
+			[10, 2, 1, 3, 8, 0, 6, 7, 11],
+			[9, 2, 0, 9, 10, 2, 11, 6, 7],
+			[11, 6, 7, 3, 8, 2, 2, 8, 10, 10, 8, 9],
+			[2, 6, 3, 6, 7, 3],
+			[8, 6, 7, 0, 6, 8, 2, 6, 0],
+			[7, 2, 6, 7, 3, 2, 1, 0, 9],
+			[8, 9, 7, 7, 9, 2, 2, 9, 1, 7, 2, 6],
+			[6, 1, 10, 7, 1, 6, 3, 1, 7],
+			[8, 0, 7, 7, 0, 6, 6, 0, 1, 6, 1, 10],
+			[7, 3, 6, 6, 3, 9, 3, 0, 9, 6, 9, 10],
+			[7, 8, 6, 6, 8, 10, 10, 8, 9],
+			[8, 11, 4, 11, 6, 4],
+			[11, 0, 3, 6, 0, 11, 4, 0, 6],
+			[6, 4, 11, 4, 8, 11, 1, 0, 9],
+			[1, 3, 9, 9, 3, 6, 3, 11, 6, 9, 6, 4],
+			[8, 11, 4, 11, 6, 4, 1, 10, 2],
+			[1, 10, 2, 11, 0, 3, 6, 0, 11, 4, 0, 6],
+			[2, 9, 10, 0, 9, 2, 4, 11, 6, 8, 11, 4],
+			[3, 4, 9, 3, 6, 4, 3, 11, 6, 3, 9, 10, 3, 10, 2],
+			[3, 2, 8, 8, 2, 4, 4, 2, 6],
+			[2, 4, 0, 6, 4, 2],
+			[0, 9, 1, 3, 2, 8, 8, 2, 4, 4, 2, 6],
+			[1, 2, 9, 9, 2, 4, 4, 2, 6],
+			[10, 3, 1, 4, 3, 10, 4, 8, 3, 6, 4, 10],
+			[10, 0, 1, 6, 0, 10, 4, 0, 6],
+			[3, 10, 6, 3, 9, 10, 3, 0, 9, 3, 6, 4, 3, 4, 8],
+			[9, 10, 4, 10, 6, 4],
+			[9, 4, 5, 7, 11, 6],
+			[9, 4, 5, 7, 11, 6, 0, 3, 8],
+			[0, 5, 1, 0, 4, 5, 6, 7, 11],
+			[11, 6, 7, 4, 3, 8, 5, 3, 4, 1, 3, 5],
+			[1, 10, 2, 9, 4, 5, 6, 7, 11],
+			[8, 0, 3, 4, 5, 9, 10, 2, 1, 11, 6, 7],
+			[7, 11, 6, 10, 4, 5, 2, 4, 10, 0, 4, 2],
+			[8, 2, 3, 10, 2, 8, 4, 10, 8, 5, 10, 4, 11, 6, 7],
+			[2, 6, 3, 6, 7, 3, 9, 4, 5],
+			[5, 9, 4, 8, 6, 7, 0, 6, 8, 2, 6, 0],
+			[7, 3, 6, 6, 3, 2, 4, 5, 0, 0, 5, 1],
+			[8, 1, 2, 8, 5, 1, 8, 4, 5, 8, 2, 6, 8, 6, 7],
+			[9, 4, 5, 6, 1, 10, 7, 1, 6, 3, 1, 7],
+			[7, 8, 6, 6, 8, 0, 6, 0, 10, 10, 0, 1, 5, 9, 4],
+			[3, 0, 10, 0, 4, 10, 4, 5, 10, 7, 3, 10, 6, 7, 10],
+			[8, 6, 7, 10, 6, 8, 5, 10, 8, 4, 5, 8],
+			[5, 9, 6, 6, 9, 11, 11, 9, 8],
+			[11, 6, 3, 3, 6, 0, 0, 6, 5, 0, 5, 9],
+			[8, 11, 0, 0, 11, 5, 5, 11, 6, 0, 5, 1],
+			[6, 3, 11, 5, 3, 6, 1, 3, 5],
+			[10, 2, 1, 5, 9, 6, 6, 9, 11, 11, 9, 8],
+			[3, 11, 0, 0, 11, 6, 0, 6, 9, 9, 6, 5, 1, 10, 2],
+			[0, 8, 5, 8, 11, 5, 11, 6, 5, 2, 0, 5, 10, 2, 5],
+			[11, 6, 3, 3, 6, 5, 3, 5, 10, 3, 10, 2],
+			[3, 9, 8, 6, 9, 3, 5, 9, 6, 2, 6, 3],
+			[9, 6, 5, 0, 6, 9, 2, 6, 0],
+			[6, 5, 8, 5, 1, 8, 1, 0, 8, 2, 6, 8, 3, 2, 8],
+			[2, 6, 1, 6, 5, 1],
+			[6, 8, 3, 6, 9, 8, 6, 5, 9, 6, 3, 1, 6, 1, 10],
+			[1, 10, 0, 0, 10, 6, 0, 6, 5, 0, 5, 9],
+			[3, 0, 8, 6, 5, 10],
+			[10, 6, 5],
+			[5, 11, 10, 5, 7, 11],
+			[5, 11, 10, 5, 7, 11, 3, 8, 0],
+			[11, 10, 7, 10, 5, 7, 0, 9, 1],
+			[5, 7, 10, 10, 7, 11, 9, 1, 8, 8, 1, 3],
+			[2, 1, 11, 11, 1, 7, 7, 1, 5],
+			[3, 8, 0, 2, 1, 11, 11, 1, 7, 7, 1, 5],
+			[2, 0, 11, 11, 0, 5, 5, 0, 9, 11, 5, 7],
+			[2, 9, 5, 2, 8, 9, 2, 3, 8, 2, 5, 7, 2, 7, 11],
+			[10, 3, 2, 5, 3, 10, 7, 3, 5],
+			[10, 0, 2, 7, 0, 10, 8, 0, 7, 5, 7, 10],
+			[0, 9, 1, 10, 3, 2, 5, 3, 10, 7, 3, 5],
+			[7, 8, 2, 8, 9, 2, 9, 1, 2, 5, 7, 2, 10, 5, 2],
+			[3, 1, 7, 7, 1, 5],
+			[0, 7, 8, 1, 7, 0, 5, 7, 1],
+			[9, 5, 0, 0, 5, 3, 3, 5, 7],
+			[5, 7, 9, 7, 8, 9],
+			[4, 10, 5, 8, 10, 4, 11, 10, 8],
+			[3, 4, 0, 10, 4, 3, 10, 5, 4, 11, 10, 3],
+			[1, 0, 9, 4, 10, 5, 8, 10, 4, 11, 10, 8],
+			[4, 3, 11, 4, 1, 3, 4, 9, 1, 4, 11, 10, 4, 10, 5],
+			[1, 5, 2, 2, 5, 8, 5, 4, 8, 2, 8, 11],
+			[5, 4, 11, 4, 0, 11, 0, 3, 11, 1, 5, 11, 2, 1, 11],
+			[5, 11, 2, 5, 8, 11, 5, 4, 8, 5, 2, 0, 5, 0, 9],
+			[5, 4, 9, 2, 3, 11],
+			[3, 4, 8, 2, 4, 3, 5, 4, 2, 10, 5, 2],
+			[5, 4, 10, 10, 4, 2, 2, 4, 0],
+			[2, 8, 3, 4, 8, 2, 10, 4, 2, 5, 4, 10, 0, 9, 1],
+			[4, 10, 5, 2, 10, 4, 1, 2, 4, 9, 1, 4],
+			[8, 3, 4, 4, 3, 5, 5, 3, 1],
+			[1, 5, 0, 5, 4, 0],
+			[5, 0, 9, 3, 0, 5, 8, 3, 5, 4, 8, 5],
+			[5, 4, 9],
+			[7, 11, 4, 4, 11, 9, 9, 11, 10],
+			[8, 0, 3, 7, 11, 4, 4, 11, 9, 9, 11, 10],
+			[0, 4, 1, 1, 4, 11, 4, 7, 11, 1, 11, 10],
+			[10, 1, 4, 1, 3, 4, 3, 8, 4, 11, 10, 4, 7, 11, 4],
+			[9, 4, 1, 1, 4, 2, 2, 4, 7, 2, 7, 11],
+			[1, 9, 2, 2, 9, 4, 2, 4, 11, 11, 4, 7, 3, 8, 0],
+			[11, 4, 7, 2, 4, 11, 0, 4, 2],
+			[7, 11, 4, 4, 11, 2, 4, 2, 3, 4, 3, 8],
+			[10, 9, 2, 2, 9, 7, 7, 9, 4, 2, 7, 3],
+			[2, 10, 7, 10, 9, 7, 9, 4, 7, 0, 2, 7, 8, 0, 7],
+			[10, 4, 7, 10, 0, 4, 10, 1, 0, 10, 7, 3, 10, 3, 2],
+			[8, 4, 7, 10, 1, 2],
+			[4, 1, 9, 7, 1, 4, 3, 1, 7],
+			[8, 0, 7, 7, 0, 1, 7, 1, 9, 7, 9, 4],
+			[0, 7, 3, 0, 4, 7],
+			[8, 4, 7],
+			[9, 8, 10, 10, 8, 11],
+			[3, 11, 0, 0, 11, 9, 9, 11, 10],
+			[0, 10, 1, 8, 10, 0, 11, 10, 8],
+			[11, 10, 3, 10, 1, 3],
+			[1, 9, 2, 2, 9, 11, 11, 9, 8],
+			[9, 2, 1, 11, 2, 9, 3, 11, 9, 0, 3, 9],
+			[8, 2, 0, 8, 11, 2],
+			[11, 2, 3],
+			[2, 8, 3, 10, 8, 2, 9, 8, 10],
+			[0, 2, 9, 2, 10, 9],
+			[3, 2, 8, 8, 2, 10, 8, 10, 1, 8, 1, 0],
+			[1, 2, 10],
+			[3, 1, 8, 1, 9, 8],
+			[9, 0, 1],
+			[3, 0, 8],
+			null,
+		]
+	}
+
+</script>
+<page-layout></page-layout>

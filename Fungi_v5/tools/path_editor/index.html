@@ -1,0 +1,60 @@
+<!DOCTYPE html><script type="module">
+import App, { THREE, Vec3 } from "../../fungi.3js/App.js";
+import NavPanel		from "../../sage.ui/NavPanel.js";
+import Notify		from "../../sage.ui/Notify.js";
+import PathEdit 	from "./PathEdit.js";
+
+//#####################################################
+App.builder( true )
+	.use_events()
+	.set_camera( 0, 90, 5, 0, 0, 0 )
+	.add( init )
+    //.render_loop()
+    .render_on_mouse()
+	.build();
+
+//#####################################################
+let $ui = {};
+
+function init(){
+	PathEdit.init();
+	Notify.top_offset  = 10;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.events
+		.on( "movepoint_selection", on_movepoint_selection );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$ui.label = document.querySelector( "label[name='lbl_sel']" );
+
+	on_evt( "btn_add", "click", ()=>{ PathEdit.add_point(); } );
+
+	return true;
+}
+
+function on_evt( id, evt, fn ){
+	let elm = document.getElementById( id );
+	elm.addEventListener( evt, fn );
+}
+
+// #region EVENTS
+function on_movepoint_selection( info ){ set_selection( info.index ); }
+// #endregion /////////////////////////////////////////////////////////////////
+
+// #region UI CONTROLLERS
+
+// Sets the label of which point is currently selected.
+function set_selection( i ){ $ui.label.innerHTML = ( i != null )? "Selected Index : " + i : "No Selection"; }
+
+// #endregion /////////////////////////////////////////////////////////////////
+
+//#####################################################
+</script><page-layout pg_title="Curves"></page-layout>
+<nav-panel class="Btns top">
+	<button slot="left" title="Add Node" id="btn_add">&#10010;</button>
+	<button slot="left" title="Remove node">&#9866;</button>
+	<button slot="right" title="Save">&#10004;</button>
+</nav-panel>
+<nav-panel class="Footer">
+	<label slot="left" name="lbl_sel">No Selection</label>
+</nav-panel>

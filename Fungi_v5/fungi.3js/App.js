@@ -63,6 +63,8 @@ let App = {
 		App.ecs.sys_run();								// Run Systems
 		App.renderer.render( App.scene, App.camera );	// Run Three.JS Renderer
 	},
+
+	request_frame : ()=>{ window.requestAnimationFrame( App.render ); },
 };
 
 

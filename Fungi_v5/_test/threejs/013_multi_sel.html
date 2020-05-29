@@ -7,6 +7,8 @@ import RaySystem	from "../../fungi.3js/lib/RaySystem.js";
 
 import Spline		from "../../fungi/maths/Spline.js";
 
+import NavPanel		from "../../sage.ui/NavPanel.js";
+
 //#####################################################
 App.builder( true )
 	.use_events()
@@ -96,4 +98,14 @@ function spline_draw(){
 	}
 }
 
-</script><page-layout pg_title="Curves"></page-layout>
+</script>
+<page-layout pg_title="Curves"></page-layout>
+<nav-panel class="Btns top">
+	<button slot="left" title="Add Node">&#10010;</button>
+	<button slot="left" title="Remove node">&#9866;</button>
+	<button slot="right" title="Save">&#10004;</button>
+</nav-panel>
+
+<nav-panel class="Footer">
+	<label slot="left" name="p1">xxx</label>
+</nav-panel>

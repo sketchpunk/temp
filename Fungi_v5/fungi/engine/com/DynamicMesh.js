@@ -51,6 +51,7 @@ class DynamicMesh{
 	}
 
 	update_index( tary ){
+		if( !this.mesh.buf.idx ){ console.error( "Dynamic Mesh does not have an index buffer" ); return this; }
 		this.mesh.buf.idx.update( tary );
 		this.mesh.elm_cnt = tary.length;
 		return this;
