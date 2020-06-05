@@ -89,6 +89,18 @@ https://www.redblobgames.com/x/1947-dyson-hatching/  3D Hatching in JS canvas.
 https://www.patreon.com/posts/hatching-in-1pdg-31716880 original hatching
 https://bl.ocks.org/mbostock/6675193
 
+
+https://2pha.com/demos/threejs/shaders/voronoise.html Good One.
+https://2pha.com/demos/threejs/shaders/voronoi_with_borders.html
+https://2pha.com/demos/threejs/shaders/voronoi_point_lights.html // Sparkle
+https://2pha.com/demos/threejs/shaders/polkadot_3d.html VERY VERY COOL
+https://2pha.com/demos/threejs/shaders/wood_grain.html
+https://2pha.com/demos/threejs/shaders/matrix.html
+
+
+https://codepen.io/anon/pen/JdXmBz  // ORGANIC MOVEMENT EQUATIONS EFFING AWESOME
+
+
 https://simblob.blogspot.com/2019/10/chaikin-curves.html#more
 
 https://simblob.blogspot.com/2018/10/map-generation-on-sphere.html#more
@@ -101,6 +113,11 @@ https://www.redblobgames.com/pathfinding/grids/algorithms.html
 https://lexdev.net/tutorials/case_studies/civilization_fogofwar.html
 
 https://github.com/thi-ng/umbrella/ 	// Large collection of Structures, Algorithms, Etc.
+
+
+http://ibreakdownshaders.blogspot.com/
+
+https://github.com/Lexpartizan/Godot_sky_shader
 
 HEX
 https://simblob.blogspot.com/2019/03/improving-hexagon-map-storage-diagram.html#more
@@ -116,3 +133,5 @@ BLOCKCHAIN IN JS
 https://www.youtube.com/watch?time_continue=31&v=zVqczFZr124&feature=emb_logo
 https://medium.com/@spenserhuang/learn-build-a-javascript-blockchain-part-1-ca61c285821e
 
+DISTRIBUTION SAMPLING 
+https://bost.ocks.org/mike/algorithms/ TONS OF GOOD STUFF

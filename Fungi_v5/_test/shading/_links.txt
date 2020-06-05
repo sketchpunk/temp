@@ -29,6 +29,14 @@ https://github.com/oframe/ogl/blob/master/examples/load-gltf.html // Krono PBR S
 
 https://github.com/toji/webgpu-test  Multiple Lights and PBR
 
+https://2pha.com/demos/threejs/shaders/single_color_point_lights.html // Simple Multiple Point Lights, good.
+https://2pha.com/demos/threejs/shaders/2_color_fresnel.html
+https://2pha.com/demos/threejs/shaders/fresnel_cube_env.html
+https://2pha.com/demos/threejs/shaders/fresnel_cube_env_2.html
+
+https://2pha.com/demos/threejs/shaders/cel.html Nice Toon Shader
+https://2pha.com/demos/threejs/shaders/cel2.html
+
 //--------------------------------------
 https://www.youtube.com/watch?v=TpWI2rU8iF0  TOON SHADER, multi parts. Even has shiny TOON
 https://www.youtube.com/watch?v=kxWWBmIUxbc  AWESOME TOON HAIR SHADER
