@@ -137,6 +137,9 @@ class XhrQueue{
 			let keys	= Object.keys( this.complete ),
 				rtn		= ( keys.length == 1 && keys[0] == "ary" )? this.complete.ary : this.complete;
 
+			// If just a single element array, just return that object.
+			if( Array.isArray( rtn ) && rtn.length == 1 ) rtn = rtn[ 0 ];
+
 			this.resolve( rtn );
 			if( this.callback ) this.callback( rtn );
 		}

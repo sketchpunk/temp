@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<script type="module">
+	import App, { Maths, Vec3 } from "../../fungi/App.js";
+	import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
+	import Motion			from "../../fungi.test/Motion.js";
+
+	// https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
+
+	//#####################################################
+	App.builder( true, true )
+		.set_camera(0, 20, 8, 0, 2.0, 0)
+		.add(init)
+		.render_loop( on_render )
+		//.render_on_mouse()
+		.build();
+
+	//#####################################################
+	let gAnim;
+	function on_render( dt, ss ){
+
+		gAnim( dt );
+
+	}
+
+	async function init(){
+		let img = await XhrQueue.add( "../../_tmp/map.jpg").then();
+
+		console.log( img.width, img.height );
+		let canvas 		= document.createElement( "canvas" );
+		//canvas.style.position = "absolute";
+		//document.body.appendChild( canvas );
+
+		let ctx			= canvas.getContext( "2d" );
+		canvas.width	= img.width;
+		canvas.height	= img.height;
+		canvas.style.width = img.width + "px";
+		canvas.style.height = img.height + "px";
+
+		ctx.drawImage( img, 0, 0 );
+		
+		let px_ary = ctx.getImageData( 0, 0, img.width, img.height );
+
+		console.log( px_ary );
+
+		
+		//globe_points( px_ary, img.width, img.height );
+
+		fibonacci_sphere( px_ary, img.width, img.height );
+
+		gAnim = Motion.rot_by( App.Debug.ePnt, -30, "y" );
+		return true;
+	}
+
+	function globe_points( rgba_ary, px_w, px_h ){
+		const PI_2		= Math.PI * 2;
+		const Y_OFFSET	= 2.5;
+
+		let radius		= 2;			// Sphere Radius
+		let pos			= [0,0,0];
+		let pnt_space	= 0.1;
+		let pi_steps	= Math.floor( (PI_2 * radius * 0.5) / pnt_space );
+
+		let angle, ring_steps, arc_len, ring_radius, offset, vert_t, hori_t;
+		let px_y, px_x, px, color, size;
+
+		for( let i=1; i < pi_steps; i++ ){
+			// Angle going Vertical
+			vert_t	= ( i / pi_steps );							// Lerp Time
+			angle	= 180 * vert_t - 90;						// Horizontal Angle
+			px_y	= Math.floor( px_h * (1-vert_t) ) * px_w;	// How many pixel rows down?
+			Maths.polar_to_cartesian( 90, angle, radius, pos );
+
+			// using the X axis of the point as the radius of the ring.
+			ring_radius = pos[ 0 ];
+
+			// Using Arc Length to help figure out distance around the ring.
+			arc_len = PI_2 * ring_radius;
+
+			// How many steps to try to keep the spacing of the points
+			ring_steps	= Math.floor( arc_len / pnt_space );
+
+			// Try to keep the rings divisible by 8
+			let re = (ring_steps % 8);
+			if( re > 4 )	ring_steps += 8 - re;
+			else 			ring_steps -= re;
+			
+			// spiral the points out a lil angle
+			offset = vert_t * PI_2 * 0.3;
+
+			// Move the sphere up away from origin.
+			pos[ 1 ] += Y_OFFSET;
+
+			// Create Ring			
+			for( let j=0; j < ring_steps; j++ ){
+				hori_t	= ( j / ring_steps )						// Vertical Lerp Time
+				angle	= PI_2 * hori_t + offset;					// Horizontal Angle
+				px_x	= Math.floor( px_w * (1-hori_t) ) + px_y;	// Pixel Index
+				px		= rgba_ary.data[ px_x * 4 ];				// Pixel's R value
+
+				pos[ 0 ] = ring_radius * Math.cos( angle );			// 2D Circle Coords
+				pos[ 2 ] = ring_radius * Math.sin( angle );
+
+				color = ( px < 128 )? "#00ff00" : "#006666";
+				size = ( px < 128 )? 0.04 : 0.03;
+				App.Debug.pnt( pos, color, size, 1 );
+			}
+		}
+	}
+
+	function fibonacci_sphere( rgba_ary, px_w, px_h ){
+		// http://extremelearning.com.au/evenly-distributing-points-on-a-sphere/
+
+		const GOLDEN_RATIO	= ( 1 + 5**0.5 ) / 2;
+		const PI_2 			= Math.PI * 2;
+		const OFFSET_Y		= 1.2;
+		
+		let n 	= 1700;
+		let pos = [0,0,0];
+		let phi, theta,x, y, z;
+
+		// NOTES: if i += 1, get less spiral but looks more like a random pack.
+
+		for( let i=0; i < n; i+=0.5 ){
+			phi		= Math.acos( 1 - 2 * i / n );
+			theta	= PI_2 * i / GOLDEN_RATIO;
+			
+			pos[0]	= Math.cos( theta ) * Math.sin( phi ), 
+			pos[1]	= Math.cos( phi ) + OFFSET_Y;
+			pos[2]	= Math.sin( theta ) * Math.sin( phi );
+
+			// Compute UV for Point
+			let ty = phi / Math.PI;	// Vertical Time
+			let tx = ( theta % PI_2 ) / PI_2;	// Horizontal Time
+			let uy = Math.floor( px_h * ty ) * px_w;	// UV Y
+			let ux = Math.floor( px_w * (1-tx) ) + uy;	// UV X
+			let px = rgba_ary.data[ ux * 4 ];	// Pixel's R value
+
+			if( px < 128 )	App.Debug.pnt( pos, "green", 0.035 );
+			else 			App.Debug.pnt( pos, "#006666", 0.03 );
+		}
+	}
+
+	function test(){
+		var radius = 6, segments = 68, rings = 38;
+		//var geometry = new THREE.Geometry();
+		var width = 4, height = 2, size = .1, aStep = .1;
+
+		// 6, 12, 18
+		for( var a = - Math.PI / 2; a < Math.PI / 2; a += aStep ){
+
+			var y = .5 * height * Math.sin( a );
+			var r = .5 * height * Math.cos( a );
+			var l = 2 * Math.PI * r;
+			//var size = size;
+			var steps = Math.floor( l / size );
+			var offset = ( ( width - ( Math.ceil( steps * size ) ) ) * 2 * Math.PI ) / width;
+
+			console.log( r, l, steps );
+			App.Debug.pnt( [r, y, 0], "white", 0.05 );
+			//continue;
+			
+			for( var x = 0; x < steps; x++ ) {
+
+				var radius = r;
+				var ta = x * 2 * Math.PI / steps;
+				ta += offset;
+
+				//var sx = ta * texture.width / ( 2 * Math.PI ),
+				//	sy = ( y + .5 * height ) * texture.height / height,
+				//	ptr = Math.floor( sy ) * texture.width * 4 + Math.floor( sx ) * 4;
+
+				//if( data.data[ ptr ] < 128 ) {
+
+					var vx = - radius * Math.cos( ta ),
+					vy = -y,
+					vz = radius * Math.sin( ta );
+					//geometry.vertices.push( new THREE.Vector3( vx, vy, vz ) );
+					//console.log( vx, vy, vz );
+					App.Debug.pnt( [vx, vy, vz], "green", 0.04 );
+				//
+			}
+		}
+
+	}
+
+</script>
+<page-layout></page-layout>

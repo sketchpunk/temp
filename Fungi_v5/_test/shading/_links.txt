@@ -37,6 +37,9 @@ https://2pha.com/demos/threejs/shaders/fresnel_cube_env_2.html
 https://2pha.com/demos/threejs/shaders/cel.html Nice Toon Shader
 https://2pha.com/demos/threejs/shaders/cel2.html
 
+
+https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-lights/
+
 //--------------------------------------
 https://www.youtube.com/watch?v=TpWI2rU8iF0  TOON SHADER, multi parts. Even has shiny TOON
 https://www.youtube.com/watch?v=kxWWBmIUxbc  AWESOME TOON HAIR SHADER

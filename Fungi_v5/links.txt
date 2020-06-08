@@ -14,6 +14,8 @@ https://csherratt.github.io/blog/posts/specs-and-legion/
 
 https://github.com/unity3d-jp/NVIDIAHairWorksIntegration/tree/master/HairWorksIntegration/Assets/Standard%20Assets/Effects/ImageEffects/Textures
 
+https://www.redblobgames.com/x/1830-jittered-grid/  Point Distribution
+
 VERY AWSOME Way to bring down meshes into movable Voxels
 https://www.gamasutra.com/blogs/PhiDinh/20180523/318444/Game_Design_Deep_Dive_Rendering_the_player_as_a_form_of_pure_energy_in_Recompile.php
 
