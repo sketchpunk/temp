@@ -1,0 +1,107 @@
+/* ==========================================================
+SKELETON CSS */
+prop-panel{
+	position	: fixed;
+	z-index		: 1000;
+	display		: block;
+	box-sizing	: border-box;
+	transition	: transform 0.3s ease-out;
+}
+
+prop-panel.left_side{ left:0px; top:10px; }
+prop-panel.left_side.close{ transform: translate( -100%, 0% ); }
+prop-panel.right_side{ right:0px; top:10px;  }
+prop-panel.right_side.close{ transform: translate( 100%, 0% ); }
+
+prop-panel > div{ position:absolute; top:0px; left:0px; cursor:pointer; user-select: none; writing-mode:vertical-rl; transform:translate(-100%, 0%); }
+prop-panel > main { display:flex; flex-direction:column; }
+
+prop-node{ display:flex; box-sizing:border-box; }
+prop-node > label{ flex:0 0 40%; }
+prop-node > main{ flex:1 1 auto; display:flex; }
+prop-node > main > *{ flex: 1 1 auto; }
+
+prop-group{ display:flex; flex-direction:column; }
+prop-group > header { display:flex; flex-direction:row; cursor:pointer; user-select: none; }
+prop-group > main{ display:flex; flex-direction:column; overflow:hidden; max-height:1500px; transition: all 1.5s ease-in; }
+prop-group.close > main{ max-height:0px; transition: all 0.9s; transition-timing-function: cubic-bezier(.07,1.07,0,1.01); }
+
+prop-range{ display:flex; }
+prop-range > input{ flex:1 1 auto; }
+prop-range > label{ flex:0 0 25%; }
+
+prop-checkstack{ display:flex; flex-direction:row; flex-flow:row wrap; }
+prop-checkstack input{ position:absolute !important; clip:rect(0, 0, 0, 0); overflow:hidden; height:1px; width:1px; border:0px; }
+prop-checkstack label{ cursor:pointer; }
+prop-checkstack.space20 label{ flex:1 1 20%; }
+prop-checkstack.space25 label{ flex:1 1 25%; }
+prop-checkstack.space45 label{ flex:1 1 45%; }
+
+
+/* ========================================================== 
+BASIC THEME */
+prop-panel.Theme{
+	border				: 0px solid orange; 
+	background-color	: #202020;
+	color				: #909090;
+	font-family			: "Lucida Console", Monaco, monospace;
+	font-size			: 13px;
+}
+
+prop-panel.Theme > header{ text-align:center; font-size:14px; padding:4px 6px; background-color:#333333; }
+prop-panel.Theme > footer{ font-size:12px; padding:2px 6px; background-color:#333333; }
+
+prop-panel.Theme > div{
+	background-color:#333333; padding: 8px 4px 6px 4px; letter-spacing: 2px; border-radius:5px 0px 0px 5px;
+	text-transform:uppercase;
+}
+
+/* BUTTONS */
+prop-panel.Theme > main button { cursor:pointer; background-color:#202020; color:#909090;
+	border-top:1px solid #373737;
+	border-width:1px 0px 0px 0px;
+	text-align:left; font-family : "Lucida Console", Monaco, monospace;
+	padding:6px 6px 6px 6px; font-size:13px;
+}
+prop-panel.Theme > main button:hover{ color:white; }
+prop-panel.Theme > main button:before{ content:'[ '; }
+prop-panel.Theme > main button:after{ content:' ]'; }
+
+prop-panel.Theme > main button:active{ background-color:#404040; }
+prop-panel.Theme > main button:focus{ outline:0; }
+
+/* TEXT BOX */
+prop-panel.Theme input[ type="text" ],
+prop-panel.Theme input[ type="number" ]{
+	border:1px solid #555555; background-color:#333333; padding:2px 6px; color:gray;
+	transition: all .3s ease-out; }
+
+prop-panel.Theme input[ type="text" ]:focus,
+prop-panel.Theme input[ type="number" ]:focus
+	{ outline:0; background-color:#404040; border-color:#c0c0c0; color:white; } 
+
+/* RANGE */
+prop-panel.Theme input[type=range] { margin:0px; box-sizing: border-box; -webkit-appearance: none; }
+prop-panel.Theme input[type=range]:focus{ outline:0; background-color:#404040; border-color:#c0c0c0; color:white; }
+prop-panel.Theme input[type=range]::-webkit-slider-thumb{ -webkit-appearance: none; height:100%; width:14px; background: #727272; cursor: pointer; }
+prop-panel.Theme input[type=range]::-webkit-slider-runnable-track{ height: 20px; cursor: ew-resize; background: #303030; border:1px solid #555555; transition: all 0.3s ease-out; }
+prop-panel.Theme input[type=range]:focus::-webkit-slider-runnable-track{ background-color:#404040; border-color:#c0c0c0; }
+
+/* PROP NODE */
+prop-panel.Theme prop-node{ border-top: 1px solid #373737; align-items:center; }
+prop-panel.ThemeX prop-node:last-of-type{ border-bottom: 1px solid #373737; }
+prop-panel.Theme prop-node > label{ padding:4px 8px 4px 8px; flex:0 0 30%; }
+prop-panel.Theme prop-node > main{ padding:4px 6px 4px 0px; }
+
+/* PROP GROUP */
+prop-panel.Theme prop-group > header{ background-color:#333333; color:white; font-size:12px; display:flex; align-items:center; }
+prop-panel.Theme prop-group > header > i{ border:1px solid gray; width:10px; height:10px; margin:4px 5px 4px 8px; background-color:gray; }
+prop-panel.Theme prop-group > header > span{ margin:2px 0px 0px 0px; text-transform:uppercase; }
+prop-panel.Theme prop-group.close > header > i{ background-color:transparent; }
+
+/* PROP RANGE */
+prop-panel.Theme prop-range > label{ border:1px solid #555555; margin-left:5px; text-align:center; padding-top:3px; }
+
+/* PROP CHECK STACK */
+prop-panel.Theme prop-checkstack label{ margin: 3px 0px 0px 3px; padding:3px 2px 3px 2px; background-color: #363636; color:gray; text-align:center; word-wrap: break-word; }
+prop-panel.Theme prop-checkstack input:checked + label{ background-color: #626262; color:white; }

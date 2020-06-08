@@ -86,7 +86,8 @@ class MovePoints{
 	}
 
 	set_index( idx=null ){
-		let pos = null;
+		let pos		= null;
+		let data	= null;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Deselect Previous Item
@@ -103,6 +104,7 @@ class MovePoints{
 			let p	= this.points[ idx ];
 			p.color	= this.sel_color;
 			pos		= p.pos;
+			data	= p.data;
 			this.sel_idx = idx;
 		}
 
@@ -113,16 +115,16 @@ class MovePoints{
 		else if( idx != null && was_selected )	evt = MovePoints.SELECTION;
 		else if( idx != null && !was_selected )	evt = MovePoints.NEW_SELECTION;
 
-		App.events.emit( "movepoint_selection", { state:evt, index:idx, pos:pos } );
+		App.events.emit( "movepoint_selection", { state:evt, index:idx, pos:pos, data:data } );
 
 		return this;
 	}
 
-	add( pos, idx=null ){
+	add( pos, idx=null, data=null ){
 		let o = {
 			pos		: new Vec3( pos ),
 			color 	: 0xff0000,
-			data	: null,
+			data	: data,
 		};
 
 		if( idx != null )	this.points.splice( idx, 0, o );
@@ -138,6 +140,21 @@ class MovePoints{
 		this.points.splice( idx, 1 );
 		this.updated = true;
 		return this;
+	}
+
+	get( idx=null ){
+		idx = idx || this.sel_idx;
+		return ( idx != null )? this.points[ idx ] : null;
+	}
+
+	get_data( idx=null ){
+		idx = idx || this.sel_idx;
+		return ( idx != null )? this.points[ idx ].data : null;
+	}
+
+	set_data( idx=null, data=null ){
+		idx = idx || this.sel_idx;
+		if( idx != null ) this.points[ idx ].data = data;
 	}
 
 	move( pos, idx=null ){

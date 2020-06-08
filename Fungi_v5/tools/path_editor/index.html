@@ -1,8 +1,10 @@
 <!DOCTYPE html><script type="module">
 import App, { THREE, Vec3 } from "../../fungi.3js/App.js";
+import PathEdit 	from "./PathEdit.js";
+
 import NavPanel		from "../../sage.ui/NavPanel.js";
 import Notify		from "../../sage.ui/Notify.js";
-import PathEdit 	from "./PathEdit.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
 
 //#####################################################
 App.builder( true )
@@ -35,6 +37,7 @@ function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// HTML ELEMENTS
 	$ui.label = document.querySelector( "label[name='lbl_sel']" );
+	$ui.props = document.getElementById( "PntProp" );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// HTML EVENTS
@@ -44,9 +47,14 @@ function init(){
 	on_evt( "btn_save","click", ()=>{ PathEdit.save_local(); } );
 	on_evt( "btn_load","click", ()=>{ Notify.confirm( "Are you sure you want to load from local storage?", _=>PathEdit.load_local() ); } );
 
+	on_evt( "btn_loop","click", ()=>{ PathEdit.toggle_loop(); } );
+	
 	on_evt( "btn_top",	"click", ()=>{ App.cam_ctrl.set_target( 0, 0, 0 ).set_orbit( 0, 90, 5 ); App.request_frame(); } );
 	on_evt( "btn_left",	"click", ()=>{ App.cam_ctrl.set_target( 0, 0, 0 ).set_orbit( 90, 0, 5 ); App.request_frame(); } );
 	on_evt( "btn_front","click", ()=>{ App.cam_ctrl.set_target( 0, 0, 0 ).set_orbit( 0, 0, 5 ); App.request_frame(); } );
+
+	on_evt( "txt_tension",	"change", on_pnt_data_change );
+	on_evt( "txt_bias",		"change", on_pnt_data_change );
 
 	return true;
 }
@@ -60,7 +68,38 @@ function on_evt( id, evt, fn ){
 // #endregion /////////////////////////////////////////////////////////////////
 
 // #region EVENTS
-function on_movepoint_selection( info ){ set_selection( info.index ); }
+function on_movepoint_selection( info ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Property Panel
+	let vpop = $ui.props.vars;
+	if( !info.data ){
+		vpop.tension.value	= 0;
+		vpop.bias.value		= 0;
+	}else{
+		vpop.tension.value	= info.data.tension;
+		vpop.bias.value		= info.data.bias;
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// MISC
+	set_selection( info.index );
+	//console.log( "SEL", info );
+}
+
+function on_pnt_data_change( e ){
+	let pnt = PathEdit.get_point();
+	if( !pnt ) return;
+
+	let o = e.srcElement;
+	if( !pnt.data ) pnt.data = { tension:0, bias:0 };
+
+	switch( o.name ){
+		case "tension"	: pnt.data.tension	= o.value; break;
+		case "bias"		: pnt.data.bias		= o.value; break;
+	}
+
+	PathEdit.update();
+}
 // #endregion /////////////////////////////////////////////////////////////////
 
 // #region UI CONTROLLERS
@@ -75,6 +114,7 @@ function set_selection( i ){ $ui.label.innerHTML = ( i != null )? "Selected Inde
 <nav-panel class="Btns top">
 	<button slot="left" title="Add Node" id="btn_add">&#10010;</button>
 	<button slot="left" title="Remove node" id="btn_rm">&#9866;</button>
+	<button slot="left" title="Loop" id="btn_loop">Loop</button>
 
 	<button slot="center" id="btn_top">TOP</button>
 	<button slot="center" id="btn_left">LEFT</button>
@@ -86,6 +126,32 @@ function set_selection( i ){ $ui.label.innerHTML = ( i != null )? "Selected Inde
 
 	<!--<button slot="right" title="Save">&#10004;</button>-->
 </nav-panel>
+
 <nav-panel class="Footer">
 	<label slot="left" name="lbl_sel">No Selection</label>
 </nav-panel>
+
+<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="50px">
+	<input type="text" id="txt_tension" name="tension" label="Tension"/>
+	<input type="text" id="txt_bias" name="bias" label="Bias"/>
+	<!--
+	<input type="text" name="var_1" label="Text"/>
+	<input type="number" name="var_2" value="50" label="Number">
+	<input type="range" name="range" value="30" min="10" max="50" step="10" onChange="console.log('done',this.value);" onInput="console.log('imp',this.value);">
+	<input type="color" name="color" value="#e66465" >
+	<input type="date" name="date" value="2018-07-22" min="2018-01-01" max="2018-12-31">
+	<button>Btn</button>
+	
+	<prop-range title="prop range" name="prange"></prop-range>
+	<prop-group label="Prop Group" open="true">
+		<input type="text" name="var_3" title="Text"/>
+		<button>Button Two</button>
+		<prop-checkstack class="space45" name="ChkStack" label="Check Stack">
+			<input type="checkbox" id="opt_a" title="A">
+			<input type="checkbox" id="opt_b" title="B">
+			<input type="checkbox" id="opt_c" title="C">
+			<input type="checkbox" id="opt_d" title="D">
+		</prop-checkstack>
+	</prop-group>
+	-->
+</prop-panel>

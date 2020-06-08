@@ -42,10 +42,7 @@ function init(){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Setup Starting Point
-
-
-	//$PntMove.serialize();
-
+	// $PntMove.serialize();
 	// Visualize the Spline
 	reset();
 }
@@ -58,7 +55,7 @@ function on_mouse_ray( info ){ $PntMove.ray_hit( info ); }
 
 // Event when a Point is selected or when all have been deselected.
 function on_movepoint_selection( info ){
-	console.log( "onsel", info );
+	//console.log( "onsel", info );
 	if( info.state == null || info.state == MovePoints.DESELECTED ) $Gizmo.hide();
 	else $Gizmo.show( info.pos );
 }
@@ -80,9 +77,9 @@ function on_gizmo_drag_move( pos ){
 function spline_load(){
 	// Reset the spline and feed it new point positions.
 	$Spline.clear();
-	for( let i=0; i < $PntMove.points.length; i++ ){
-		$Spline.add( $PntMove.points[ i ].pos );
-	}
+	//$Spline.is_loop = false;
+	let p;
+	for( p of $PntMove.points ) $Spline.add( p.pos, p.data );
 }
 
 // Splines are a set of curves, so we are going to loop
@@ -134,7 +131,7 @@ function reset(){
 
 
 export default {
-	init, reset,
+	init, reset, update,
 
 	add_point : ()=>{
 		// $Spline.is_loop;
@@ -142,11 +139,39 @@ export default {
 		if( $PntMove.sel_idx != null ){
 			// Create a point between selected and the next one.
 			// If its the last point, then between last and prev one.
-			let i = $PntMove.sel_idx;
-			if( i == $PntMove.last_index ) i--;
+			let pos,
+				sel_idx		= $PntMove.sel_idx,
+				last_idx	= $PntMove.last_index;
 
-			let pos = $Spline.at_curve( i, 0.5 );
-			$PntMove.set_index( null ).add( pos, i+1 );
+			if( $Spline.is_loop ){
+				pos = $Spline.at_curve( sel_idx, 0.5 );
+				$PntMove.set_index( null ).add( pos, sel_idx + 1 );
+			}else{
+				//-------------------------------------
+				// First point, Just lerp between that and the next point
+				if( sel_idx == 0 ){
+					let a = $Spline.points[ 0 ].pos,
+						b = $Spline.points[ 1 ].pos;
+
+					pos = Vec3.lerp( a, b, 0.5 );
+					$PntMove.set_index( null ).add( pos, 1 );
+
+				//-------------------------------------
+				// If last point, lerp between last and previous point
+				}else if( sel_idx == last_idx ){
+					let a = $Spline.points[ last_idx ].pos,
+						b = $Spline.points[ last_idx-1 ].pos;
+
+					pos = Vec3.lerp( a, b, 0.5 );
+					$PntMove.set_index( null ).add( pos, last_idx );
+				
+				//-------------------------------------
+				// Actual Curve
+				}else{
+					pos	= $Spline.at_curve( sel_idx-1, 0.5 );
+					$PntMove.set_index( null ).add( pos, sel_idx + 1 );
+				}
+			}
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		}else{
 			// Nothing selected, Grab the last two points to determine
@@ -172,6 +197,15 @@ export default {
 		$PntMove.remove( $PntMove.sel_idx );
 		update( "Point Deleted Added" );
 		App.request_frame();
+	},
+
+	get_point : ( idx=null )=>{ return $PntMove.get( idx ); },
+
+	toggle_loop : ()=>{
+		$Spline.is_loop = !$Spline.is_loop;
+		spline_draw();
+		App.request_frame();
+		return this;
 	},
 
 	save_local : ()=>{

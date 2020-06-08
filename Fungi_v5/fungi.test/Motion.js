@@ -23,6 +23,29 @@ class Motion{
 		}
 	}
 
+	static circle_noise( e, speed, radius_min=1, radius_max=2, r_scale=0.1, y_min=0, y_max=1, y_scale=0.1 ){
+		let t		= 0;
+		let r_step	= 0;
+		let y_step 	= 0;
+		let r_noise = SimpleNoise1D( 1, r_scale );
+		let y_noise = SimpleNoise1D( 1, y_scale );
+
+		return ( dt )=>{
+			t 		+= speed * dt;
+			r_step	+= dt;
+			y_step	+= dt;
+
+			let c	= Math.cos( t ),
+				s	= Math.sin( t ),
+				rt	= r_noise( r_step ),
+				yt 	= y_noise( y_step ),
+				r	= radius_min * (1-rt) + radius_max * rt,
+				y 	= y_min * (1-yt) + y_max * yt;
+
+			e.Node.set_pos( r * c, y, r * s );
+		}
+	}
+
 	static rnd_radius( e, speed, radius ){
 		let v = new Vec3();
 		return ( dt )=>{

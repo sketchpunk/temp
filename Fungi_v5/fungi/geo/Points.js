@@ -4,8 +4,7 @@ import Quad		from "./Quad.js";
 import InterleavedFloatArray from "../data/InterleavedFloatArray.js";
 
 const	INITAL_CNT	= 10;
-let		SHADER		= null, 
-		MATERIAL	= null;
+let		SHADER		= null;
 
 //###################################################################################
 class Points{
@@ -22,7 +21,7 @@ class Points{
 		let c = e.add_com( "Points" ),
 			m = make_mesh( c.buf );
 
-		e.Draw.add( m, MATERIAL );
+		e.Draw.add( m, SHADER.new_material() );
 		c.mesh = m;
 		return e;
 	}
@@ -91,8 +90,6 @@ function init_shader(){
 	SHADER.options.cullFace	= false;
 	SHADER.options.blend	= true;
 	SHADER.options.sampleAlphaCoverage = true;
-
-	MATERIAL = SHADER.new_material();
 }
 
 function make_mesh( i_buf ){
