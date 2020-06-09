@@ -16,14 +16,14 @@ App.builder( true, false )
 
 //#####################################################
 async function init( x ){
-	let dl = await XhrQueue.add( "../../_tmp/matcap_003.jpg" ).then();
+	let img = await XhrQueue.add( "../../_tmp/matcap_003.jpg" ).then();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Shader and Meshes
 	let e, mat, tex;
 	init_shader();
 
-	tex		= App.gl.load_texture( "tex", dl[0], false );
+	tex		= App.gl.load_texture( "tex", img, false );
 	mat		= gShader.new_material( "mat_shape", { "matcap_tex":tex } );
 	e		= Torus.knot( "shape", mat );
 	e.Node.set_pos( 0, 1.8, 0 );

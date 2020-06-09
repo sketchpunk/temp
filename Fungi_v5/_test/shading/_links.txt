@@ -40,6 +40,9 @@ https://2pha.com/demos/threejs/shaders/cel2.html
 
 https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-lights/
 
+
+https://blog.demofox.org/2017/01/09/raytracing-reflection-refraction-fresnel-total-internal-reflection-and-beers-law/ Lots of Shader stuff, has GLSL
+
 //--------------------------------------
 https://www.youtube.com/watch?v=TpWI2rU8iF0  TOON SHADER, multi parts. Even has shiny TOON
 https://www.youtube.com/watch?v=kxWWBmIUxbc  AWESOME TOON HAIR SHADER

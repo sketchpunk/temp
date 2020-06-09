@@ -695,6 +695,27 @@ class Quat extends Float32Array{
 			return this;
 		}
 
+		mul_axis_angle( axis, angle ){
+			let half	= angle * .5,
+				s		= Math.sin( half ),
+				bx		= axis[0] * s,	// B Quat based on Axis Angle
+				by		= axis[1] * s, 
+				bz		= axis[2] * s,
+				bw		= Math.cos( half ),
+
+				ax		= this[0],		// A of mul
+				ay		= this[1],
+				az		= this[2],
+				aw		= this[3];
+
+			// Quat.mul( a, b );
+			this[0]	= ax * bw + aw * bx + ay * bz - az * by;
+			this[1]	= ay * bw + aw * by + az * bx - ax * bz;
+			this[2]	= az * bw + aw * bz + ax * by - ay * bx;
+			this[3]	= aw * bw - ax * bx - ay * by - az * bz;
+			return this;
+		}
+
 		pmul_invert( q ){
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// q.invert()

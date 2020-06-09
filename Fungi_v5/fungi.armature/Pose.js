@@ -58,6 +58,35 @@ class Pose{
 		//get_bone( bname ){ return this.bones[ this.arm.name_map[ bname ] ]; }
 		get_local_rot( idx ){ return this.bones[ idx ].local.rot; }
 
+		/*
+		rot_local_by( bname, angle, axis="y" ){
+			let b	= this.get_bone( bname );
+			let rad	= angle * Math.PI / 180;
+
+			switch( axis ){
+				case "x" : b.local.rot.rot_x( rad ); break;
+				case "y" : b.local.rot.rot_y( rad ); break;
+				case "z" : b.local.rot.rot_z( rad ); break;
+			}
+
+			this.set_state( b.idx, true );
+			return this;
+		}
+		*/
+
+		rot_world_axis_angle( bname, axis, angle ){
+			//Move bone to WS, do rot, then back to LS
+			let b	= this.get_bone( bname ),
+				qp	= this.get_parent_rot( b.idx ),
+				qc	= Quat
+					.mul( qp, b.local.rot )
+					.pmul_axis_angle( axis, angle )
+					.pmul_invert( qp );
+
+			this.set_bone( b.idx, qc );						
+			return this;
+		}
+
 	/////////////////////////////////////////////////////////////////
 	// Methods
 	/////////////////////////////////////////////////////////////////
