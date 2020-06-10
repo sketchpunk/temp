@@ -139,11 +139,15 @@ async function init(){
 	$animate.tracks.push( track );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//$animate.next( 0.1, $pose );
-	//$pose.apply();
+	$animate.next( 0.1, $pose );
+	$pose.apply();
 	return true;
 }
-
+// Modulus that treats negative by looping in reverse
+function mod( a, b ){
+	let v = a % b;
+	return ( v < 0 )? b+v : v;
+}
 
 // Each Bone gets its own Track of Frames.
 class Track{
@@ -169,30 +173,54 @@ class Animator{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.time	= (this.time + dt) % this.time_len;
 		let t		= this.time / this.time_len;
-		let fa, fb, ft;
+		let fa, fb, fc, fd, ft;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Figure out which two frames that the current time lives at.
-		if( t >=1 ){
-			fa = this.frame_cnt - 1;
-			fb = 0;
+
+		if( t >= 1 ){
+			fa = this.frame_cnt - 2;
+			fb = this.frame_cnt - 1;
+			fc = 0;
+			fd = 1;
 			ft = 1;
 		}else{
 			t	= t * this.frame_cnt;			// Frame Index and Fraction between
-			fa	= Math.floor( t );				// Starting Frame Index
-			fb	= ( fa + 1 ) % this.frame_cnt;	// Ending Frame Index
-			ft	= ( t - fa ); 					// Just get the fraction part FRACT(x)
+			fb	= Math.floor( t );				// Starting Frame Index
+			fc	= ( fb + 1 ) % this.frame_cnt;	// Ending Frame Index
+			fd 	= ( fc + 1 ) % this.frame_cnt;	// End Tangent
+			fa 	= mod( fb-1, this.frame_cnt );	// Start Tangent
+			ft	= ( t - fb ); 					// Just get the fraction part FRACT(x)
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Loop over all the tracks, compute lerp between the two frames
-		let track, qa, qb, q = new Quat();
+		let track, qa, qb, qc, qd, q = new Quat();
 		for( track of this.tracks ){
 			qa = track.frames[ fa ].rot;		// Get Frame Rotations
 			qb = track.frames[ fb ].rot;
-			Quat.nblend( qa, qb, ft, q );		// Lerp, Quadrant Fix, Norm
+			qc = track.frames[ fc ].rot;
+			qd = track.frames[ fd ].rot;
+
+			cubic_spline_quat( ft, qa, qb, qc, qd, q );
 			pose.set_bone( track.bone_idx, q );	// Save it back to the pose.
 		}
 	}
 }
+
+function cubic_spline_quat( t, a, b, c, d, out ){
+	let t2 = t * t,
+		t3 = t * t2,
+		a0 = d[0] - c[0] - a[0] + b[0],
+		a1 = d[1] - c[1] - a[1] + b[1],
+		a2 = d[2] - c[2] - a[2] + b[2],
+		a3 = d[3] - c[3] - a[3] + b[3];
+
+	out[0] = a0*t3 + ( a[0] - b[0] - a0 )*t2 + ( c[0] - a[0] )*t + b[0];
+	out[1] = a1*t3 + ( a[1] - b[1] - a1 )*t2 + ( c[1] - a[1] )*t + b[1];
+	out[2] = a2*t3 + ( a[2] - b[2] - a2 )*t2 + ( c[2] - a[2] )*t + b[2];
+	out[3] = a3*t3 + ( a[3] - b[3] - a3 )*t2 + ( c[3] - a[3] )*t + b[3];
+	return out.norm();
+}
+
 </script><page-layout></page-layout>

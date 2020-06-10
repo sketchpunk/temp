@@ -7,17 +7,19 @@ import GltfUtil,{Gltf}				from "../../fungi/lib/GltfUtil.js";
 App.builder()
 	.load_shaders( "../fungi.armature/LowPolySkin.js" )
 	.use_armature()
-	.set_camera( 40, 10, 4.5, 0, 0.75, 0 )
+	.set_camera( 30, 10, 4.5, 0, 0.75, 0 )
 	.add( init )
 	.render_loop( on_draw )
 	//.render_on_mouse()
 	.build();
 
 //#####################################################
-let $animate, $pose;
+let $move_lerp, $move_cubic, $pose_a, $pose_b, $A, $B;
 function on_draw( dt, ss ){
-	$animate.next( dt, $pose );
-	$pose.apply();
+	$move_lerp.next( dt, $pose_a );
+	$move_cubic.next( dt, $pose_b );
+	$pose_a.apply();
+	$pose_b.apply();
 }
 
 async function init(){
@@ -25,15 +27,19 @@ async function init(){
 	// LOAD MESH
 	let [ json, bin ]	= await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
 	let mat				= App.new_mat( "LowPolySkin" ); // { color:"white" }
-	let e 				= GltfUtil.get_skin_mesh( "test", json, bin, mat );
-	//let e 				= GltfUtil.get_debug_view( "test", json, bin, mat );
+	$A 					= GltfUtil.get_skin_mesh( "test", json, bin, mat );
+	$B 					= GltfUtil.get_skin_mesh( "test", json, bin, mat );
+
+	$A.Node.set_pos( -0.5, 0, 0 );
+	$B.Node.set_pos( 0.5, 0, 0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// DEFINE OUR WORKING POSES
-	let arm		= e.Armature;
-	let pose_a	= arm.new_pose();	// Define First Pose
-	let pose_b	= arm.new_pose();	// Define Second Pose
-	$pose = arm.new_pose();			// Working Pose
+	let pose_a	= $A.Armature.new_pose();		// Define First Pose
+	let pose_b	= $A.Armature.new_pose();		// Define Second Pose
+
+	$pose_a = $A.Armature.new_pose();	// Working Pose
+	$pose_b = $B.Armature.new_pose();	// Working Pose
 
 	// Wide Pose
 	pose_a
@@ -66,7 +72,10 @@ async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// BUILD Animation Frames from the Two Pose
 	let r_idx, l_idx, track;
-	$animate = new Animator();
+	let arm = $A.Armature;
+
+	$move_lerp	= new AnimatorLerp();
+	$move_cubic	= new AnimatorCubic();
 
 	//------------------------------
 	// LEGS
@@ -77,16 +86,16 @@ async function init(){
 		.add( pose_a.get_local_rot( l_idx ), false )
 		.add( pose_b.get_local_rot( r_idx ), true )
 		.add( pose_a.get_local_rot( r_idx ), true );
-
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	track = new Track( r_idx )
 		.add( pose_b.get_local_rot( r_idx ), false )
 		.add( pose_a.get_local_rot( r_idx ), false )
 		.add( pose_b.get_local_rot( l_idx ), true )
 		.add( pose_a.get_local_rot( l_idx ), true );
-
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	l_idx = arm.name_map[ "LeftLeg" ];
 	r_idx = arm.name_map[ "RightLeg" ];
@@ -95,14 +104,16 @@ async function init(){
 		.add( pose_a.get_local_rot( l_idx ), false )
 		.add( pose_b.get_local_rot( r_idx ), true )
 		.add( pose_a.get_local_rot( r_idx ), true );
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	track = new Track( r_idx )
 		.add( pose_b.get_local_rot( r_idx ), false )
 		.add( pose_a.get_local_rot( r_idx ), false )
 		.add( pose_b.get_local_rot( l_idx ), true )
 		.add( pose_a.get_local_rot( l_idx ), true );
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	//------------------------------
 	// ARMS
@@ -113,14 +124,16 @@ async function init(){
 		.add( pose_a.get_local_rot( l_idx ), false )
 		.add( pose_b.get_local_rot( r_idx ), true )
 		.add( pose_a.get_local_rot( r_idx ), true );
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	track = new Track( r_idx )
 		.add( pose_b.get_local_rot( r_idx ), false )
 		.add( pose_a.get_local_rot( r_idx ), false )
 		.add( pose_b.get_local_rot( l_idx ), true )
 		.add( pose_a.get_local_rot( l_idx ), true );
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	l_idx = arm.name_map[ "LeftForeArm" ];
 	r_idx = arm.name_map[ "RightForeArm" ];
@@ -129,21 +142,30 @@ async function init(){
 		.add( pose_a.get_local_rot( l_idx ), false )
 		.add( pose_b.get_local_rot( r_idx ), true )
 		.add( pose_a.get_local_rot( r_idx ), true );
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	track = new Track( r_idx )
 		.add( pose_b.get_local_rot( r_idx ), false )
 		.add( pose_a.get_local_rot( r_idx ), false )
 		.add( pose_b.get_local_rot( l_idx ), true )
 		.add( pose_a.get_local_rot( l_idx ), true );
-	$animate.tracks.push( track );
+	$move_lerp.tracks.push( track );
+	$move_cubic.tracks.push( track );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//$animate.next( 0.1, $pose );
-	//$pose.apply();
+	//$move_lerp.next( 0.1, $pose_a );
+	//$pose_a.apply();
 	return true;
 }
 
+//#########################################################################
+
+// Modulus that treats negative by looping in reverse
+function mod( a, b ){
+	let v = a % b;
+	return ( v < 0 )? b+v : v;
+}
 
 // Each Bone gets its own Track of Frames.
 class Track{
@@ -158,8 +180,8 @@ class Track{
 	}
 }
 
-// Super Bare Bones Animator
-class Animator{
+// Super Bare Bones Animator for Linear Interpolation
+class AnimatorLerp{
 	time		= 0;			// Current Time of the Animation
 	time_len	= 2;			// Total Length of Animation
 	frame_cnt 	= 4;			// How many Frames in Animation
@@ -195,4 +217,66 @@ class Animator{
 		}
 	}
 }
+
+// Super Bare Bones Animator for Cubic Interpolation
+class AnimatorCubic{
+	time		= 0;			// Current Time of the Animation
+	time_len	= 2;			// Total Length of Animation
+	frame_cnt 	= 4;			// How many Frames in Animation
+	tracks		= new Array();	// List of tracks
+
+	next( dt, pose ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.time	= (this.time + dt) % this.time_len;
+		let t		= this.time / this.time_len;
+		let fa, fb, fc, fd, ft;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Figure out which two frames that the current time lives at.
+
+		if( t >= 1 ){
+			fa = this.frame_cnt - 2;
+			fb = this.frame_cnt - 1;
+			fc = 0;
+			fd = 1;
+			ft = 1;
+		}else{
+			t	= t * this.frame_cnt;			// Frame Index and Fraction between
+			fb	= Math.floor( t );				// Starting Frame Index
+			fc	= ( fb + 1 ) % this.frame_cnt;	// Ending Frame Index
+			fd 	= ( fc + 1 ) % this.frame_cnt;	// End Tangent
+			fa 	= mod( fb-1, this.frame_cnt );	// Start Tangent
+			ft	= ( t - fb ); 					// Just get the fraction part FRACT(x)
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Loop over all the tracks, compute lerp between the two frames
+		let track, qa, qb, qc, qd, q = new Quat();
+		for( track of this.tracks ){
+			qa = track.frames[ fa ].rot;		// Get Frame Rotations
+			qb = track.frames[ fb ].rot;
+			qc = track.frames[ fc ].rot;
+			qd = track.frames[ fd ].rot;
+
+			cubic_spline_quat( ft, qa, qb, qc, qd, q );
+			pose.set_bone( track.bone_idx, q );	// Save it back to the pose.
+		}
+	}
+}
+
+function cubic_spline_quat( t, a, b, c, d, out ){
+	let t2 = t * t,
+		t3 = t * t2,
+		a0 = d[0] - c[0] - a[0] + b[0],
+		a1 = d[1] - c[1] - a[1] + b[1],
+		a2 = d[2] - c[2] - a[2] + b[2],
+		a3 = d[3] - c[3] - a[3] + b[3];
+
+	out[0] = a0*t3 + ( a[0] - b[0] - a0 )*t2 + ( c[0] - a[0] )*t + b[0];
+	out[1] = a1*t3 + ( a[1] - b[1] - a1 )*t2 + ( c[1] - a[1] )*t + b[1];
+	out[2] = a2*t3 + ( a[2] - b[2] - a2 )*t2 + ( c[2] - a[2] )*t + b[2];
+	out[3] = a3*t3 + ( a[3] - b[3] - a3 )*t2 + ( c[3] - a[3] )*t + b[3];
+	return out.norm();
+}
+
 </script><page-layout></page-layout>
