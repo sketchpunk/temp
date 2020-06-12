@@ -37,7 +37,6 @@ class Bitset{
         	return cnt;
 		}
 
-
 		reset(){
 			for( let i=0; i < this.bits.length; i++ ) this.bits[ i ] = 0;
 			return this;

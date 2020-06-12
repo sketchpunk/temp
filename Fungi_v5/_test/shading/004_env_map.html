@@ -2,6 +2,12 @@
 import App				from "../../fungi/App.js";
 import XhrQueue			from "../../fungi/lib/XhrQueue.js";
 import Cube				from "../../fungi/geo/Cube.js";
+import GltfUtil 		from "../../fungi/lib/GltfUtil.js";
+
+// Need to learn about Rim Light, Fresnel 
+// https://danielilett.com/2019-06-12-tut2-3-fresnel/
+// http://kylehalladay.com/blog/tutorial/2014/02/18/Fresnel-Shaders-From-The-Ground-Up.html
+// https://learnopengl.com/PBR/Theory
 
 //#####################################################
 App.builder( false, false )
@@ -24,6 +30,12 @@ async function init(){
 
 	load_shader();
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+	let [json,bin] = await XhrQueue.url( "../../files/models/", "suzanne_hpoly.gltf", "suzanne_hpoly.bin" ).then();
+
+
+
+
 	let tex = App.gl.load_cube_texture( "cube_map", dl, true );
 	//let mat 	= App.new_mat( "LowPoly" );
 	let mat 	= SHADER.new_material( "cube_map", { cube_tex:tex } );
@@ -34,7 +46,11 @@ async function init(){
 	// RENDERER ALREADY HAS Something to use cullDir					: { state : gl.ctx.BACK },
 	
 	let gCubeB 	= Cube( "CubeB", mat );
+	gCubeB.Node.set_pos( 1.5, 0.0, 0 );
 
+
+	let e = GltfUtil.get_mesh( "suzanne", json, bin, mat );
+    //e.Node.set_pos( 0, 0.6, 0 );
 	
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -151,20 +167,22 @@ const vert_src = `#version 300 es
 		mat4 view_matrix;
 	} model;
 
+	out vec3 cam_pos;
 	out vec2 frag_uv;
 	out vec3 frag_norm;
-	out vec3 frag_cam_pos;
 	out vec3 frag_pos;
+	out vec3 frag_dir;
 
 	void main(void){
 		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		cam_pos			= global.camera_pos;
 		frag_uv			= a_uv;
 		frag_pos		= wpos.xyz;
-		frag_cam_pos	= global.camera_pos;
-		//frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
-		frag_norm 		= normalize( frag_pos );
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		frag_dir 		= normalize( frag_pos );
+		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		gl_Position = global.proj_view * wpos;
 
@@ -172,22 +190,36 @@ const vert_src = `#version 300 es
 
 const frag_src = `#version 300 es
 	precision mediump float;
-	
 	out vec4 out_color;
 
 	//-------------------------
-	
 	uniform samplerCube cube_tex;
 
+	in vec3 cam_pos;
 	in vec2 frag_uv;
-	in vec3 frag_norm;
-	in vec3 frag_cam_pos;
+	in vec3 frag_dir;
 	in vec3 frag_pos;
+	in vec3 frag_norm;
 
 	//-------------------------
+	vec3 light_pos = vec3( 6.0, 10.0, 5.0 );
 
 	void main( void ){
-		out_color = texture( cube_tex, frag_norm );
+		vec3 cam_to_frag	= normalize( frag_pos - cam_pos );
+		vec3 f_norm			= normalize( frag_norm );
+		//vec3 reflect_dir	= reflect( cam_to_frag, f_norm );
+		vec3 reflect_dir	= cam_to_frag - 2.0 * dot( f_norm, cam_to_frag ) * f_norm;
+
+		out_color = texture( cube_tex, reflect_dir );
+
+		//~~~~~~~~~~~~~~~~~~~~~
+		// Testing to mix diffuse color with the enviroment map
+		// To make a chrome like
+		vec3 frag_to_light	= normalize( light_pos - frag_pos );
+		float diffuse_rng	= max( dot( f_norm, frag_to_light ) , 0.3 ) * 0.8;
+		vec3 base_color		= vec3( 1.0, 0.0, 1.0 ) * diffuse_rng;
+
+		out_color.rgb = mix( base_color, out_color.rgb, 0.2 );
 	}
 `;
 

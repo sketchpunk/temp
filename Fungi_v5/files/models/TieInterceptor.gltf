@@ -1,0 +1,93 @@
+{
+    "asset" : {
+        "generator" : "Khronos glTF Blender I/O v1.1.45",
+        "version" : "2.0"
+    },
+    "scene" : 0,
+    "scenes" : [
+        {
+            "name" : "Scene",
+            "nodes" : [
+                0
+            ]
+        }
+    ],
+    "nodes" : [
+        {
+            "mesh" : 0,
+            "name" : "Base",
+            "translation" : [
+                0,
+                0.0666196346282959,
+                -0.10986295342445374
+            ]
+        }
+    ],
+    "meshes" : [
+        {
+            "name" : "Base",
+            "primitives" : [
+                {
+                    "attributes" : {
+                        "POSITION" : 0,
+                        "NORMAL" : 1
+                    },
+                    "indices" : 2
+                }
+            ]
+        }
+    ],
+    "accessors" : [
+        {
+            "bufferView" : 0,
+            "componentType" : 5126,
+            "count" : 26940,
+            "max" : [
+                0.3865657150745392,
+                0.23192664980888367,
+                0.6858330965042114
+            ],
+            "min" : [
+                -0.38656577467918396,
+                -0.36516591906547546,
+                -0.14207521080970764
+            ],
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 1,
+            "componentType" : 5126,
+            "count" : 26940,
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 2,
+            "componentType" : 5123,
+            "count" : 59892,
+            "type" : "SCALAR"
+        }
+    ],
+    "bufferViews" : [
+        {
+            "buffer" : 0,
+            "byteLength" : 323280,
+            "byteOffset" : 0
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 323280,
+            "byteOffset" : 323280
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 119784,
+            "byteOffset" : 646560
+        }
+    ],
+    "buffers" : [
+        {
+            "byteLength" : 766344,
+            "uri" : "TieInterceptor.bin"
+        }
+    ]
+}

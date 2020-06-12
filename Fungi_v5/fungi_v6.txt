@@ -1,0 +1,38 @@
+[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+[ AREAS ]
+- Support WebGL and WebGPU
+-- Need an API that can use both.
+- Buffers
+- Shaders
+- Uniform Buffers
+- ECS
+-- Think of a way to create Components then pass them in. If it doesn't exist, it automaticly registers it.
+- Being able to run multiple Canvas Per Page
+-- Maybe have an App Object that loads up Factory Objects, like Shaders.
+
+
+
+[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+[ API IDEAS ]
+
+class Context{
+	api	= null; // WebGL2 Context or WebGPU Device.
+}
+
+class ShaderFactory( ctx ){}
+class BufferFactory( ctx ){}
+
+class App(){
+	ctx		= new Context();
+	shaders	= new ShaderFactory( this.ctx );
+	buffers = new BufferFactory( this.ctx );
+}
+
+
+class Component{
+	x = 0;
+	y = 0;
+}
+
+let com = new Component();
+entity.add( com );

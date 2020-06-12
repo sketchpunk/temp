@@ -1,0 +1,195 @@
+<html>
+<body>
+<script>
+
+window.addEventListener( "load", ()=>{
+	let ecs = new Ecs();
+	ecs.components.reg( Com );
+
+	let c = ecs.components.new( "Com" );
+
+	console.log( c );
+	console.log( ecs.components.items[0] );
+
+	ecs.components.retire( c );
+	console.log( ecs.components.items[0] );
+
+	c = ecs.components.new( "Com" );
+	console.log( c );
+	console.log( ecs.components.items[0] );
+	//let c = new Com();
+
+	//let cc = c.constructor;
+	//let x = new cc();
+	//console.log( x );
+
+	//console.log( "COM.c", Com.constructor, "c.c", c.constructor, "c.c.name",c.constructor.name );
+	//console.log( Com.toString(), c.toString(), (Com instanceof Function), (c instanceof Function)  );
+});
+
+
+class Components{
+	items	= new Array();	// Collection of Components
+	names	= new Map();	// Map Component Name to Component Type ID ( Items Index )
+	
+	// Register Component
+	reg( com ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Validate that component does not exists
+		if( this.names.has( com.name ) ){
+			console.error( "Component Name Already Exists : %s", com.name);
+			return this;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Modify Component Prototype with some meta data
+		let ct_id							= this.items.length;
+		com.prototype._active				= false;
+		com.prototype._entity_id			= null;
+		com.prototype._component_id 		= null;
+		com.prototype._component_type_id	= ct_id;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.names.set( com.name, ct_id );
+		this.items.push( {
+			object		: com,
+			instances	: new Array(),
+			recycle		: new Array(),
+		});
+
+		return this;
+	}
+
+	// deactivate one to be recycled later
+	retire( com ){
+		com._entity_id	= null;
+		com._active		= false;
+		this.items[ com._component_type_id ]
+			.recycle
+			.push( com._component_id );
+
+		return this;
+	}
+
+	// Recycle Component or Create a new One.
+	new( name ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let idx = this.names.get( name );
+		if( idx == undefined ){ console.error( "Component name unknown : %s", name ); return null; }
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let c, com = this.items[ idx ];
+
+		if( com.recycle.length > 0 ){
+			c			= com.instances[ com.recycle.pop() ];
+			c._active	= true;
+		}else{
+			c = new com.object();
+			c._component_id = com.instances.length;
+			com.instances.push( c );
+		}
+
+		return c;
+	}
+
+	// Get a Component
+	get( com_type_id, com_id ){
+		return this.items[ com_type_id ].instances[ com_id ];
+	}
+}
+
+class Entity{
+	id				= null;
+	name 			= null;
+	active			= null;
+	component_ids	= new Map(); // Key Component Type ID, Value Component ID
+	component_mask	= null;
+	tag_mask		= null;
+}
+
+class Entities{
+	instances	= new Array();
+	recycle		= new Array();
+
+	new( name="NewEntity" ){
+		if( this.recycle.length > 0 ){
+			let id		= this.recycle.pop(),
+				e 		= this.instances[ id ];
+			e.name		= name;
+			e.active	= true;
+			return id;
+		}
+		
+		let e	= new Entity();
+		e.id	= this.instances.length;
+		e.name	= name;
+
+		this.instances.push( e );
+		return e.id;
+	}
+
+	retire( id ){
+		let e = this.instances[ id ];
+		e.name		= "unknown";
+		e.active	= false
+
+		e.component_ids.clear();
+		e.component_mask.clear();
+		e.tag_mask.clear();
+
+		this.recycle.push( id );
+		return this;
+	}
+}
+
+class Systems{
+	items = new Array();
+}
+
+class Queries{	
+}
+
+class Ecs{
+	components	= new Components();
+	entities	= new Entities();
+	systems		= new Systems();
+
+	new_entity( name ){
+	}
+
+	get_entity( id ){ return this.entities.instances[ id ]; }
+
+	rm_entity( id ){
+		// clear query cache
+	}
+
+	add_com( e_id, com ){
+		// clear query cache
+	}
+
+	get_com( e_id, com ){
+
+	}
+
+	get_all_com( e_id ){
+		let rtn = {};
+	}
+
+	rm_com( e_id, com ){
+		// clear query cache
+	}
+}
+
+class Com{
+	x = 0;
+}
+
+let eid = ecs.new_entity();
+ecs.add_com( eid, new Com() );
+ecs.add_com( eid, "Com" );
+
+ecs.query( ["Transform", "Node"] );
+
+</script>
+</body>
+</html>
