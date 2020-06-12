@@ -1,0 +1,33 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat }	from "../../fungi/App.js";
+import XhrQueue 					from "../../fungi/lib/XhrQueue.js";
+import GltfUtil,{Gltf}				from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder()
+	.load_shaders( "../fungi/shaders/LowPoly.js" )
+	.use_armature()
+	.set_camera( 180, 35, 1.5, 0, 0.5, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){
+}
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOAD MESH
+	let [ json, bin ]	= await XhrQueue.url( "../../files/models/", "TieInterceptor.gltf", "TieInterceptor.bin" );
+	let mat				= App.new_mat( "LowPoly" ); // { color:"white" }
+	let $ship 				= GltfUtil.get_mesh( "test", json, bin, mat );
+
+	$ship.Node.set_pos( 0.0, 0.5, 0.0 );
+
+	return true;
+}
+
+//#########################################################################
+</script><page-layout></page-layout>
