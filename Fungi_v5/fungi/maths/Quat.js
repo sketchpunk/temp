@@ -448,7 +448,7 @@ class Quat extends Float32Array{
 			this[3] = c1 * c2;
 			return this.norm();
 		}
-		
+
 		from_euler_order( x, y, z, order="YXZ" ){
 			// https://github.com/mrdoob/three.js/blob/dev/src/math/Quat.js
 			let c1 = Math.cos(x*0.5), //Math.cos(x/2)

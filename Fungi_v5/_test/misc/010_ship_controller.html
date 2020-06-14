@@ -1,0 +1,358 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat }	from "../../fungi/App.js";
+import XhrQueue 					from "../../fungi/lib/XhrQueue.js";
+import GltfUtil,{Gltf}				from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder( true )
+	.load_shaders( "../fungi/shaders/LowPoly.js" )
+	.use_armature()
+	.set_camera( 180, 30, 1.5, 0, 0.5, 0 )
+	.add( init )
+	.render_loop( on_draw )
+	//.render_on_mouse()
+	.build();
+
+//#####################################################
+let $ship;
+function on_draw( dt, ss ){
+	$ship.update( dt );
+}
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOAD MESH
+	let [ json, bin ]	= await XhrQueue.url( "../../files/models/", "TieInterceptor.gltf", "TieInterceptor.bin" );
+	let mat				= App.new_mat( "LowPoly" ); // { color:"white" }
+	let e 				= GltfUtil.get_mesh( "test", json, bin, mat );
+	e.Node.set_pos( 0, 0.5, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$ship = new ShipController( e );
+	return true;
+}
+
+class ShipController{
+	constructor( e ){
+		this.entity 		= e;
+		this.node 			= e.Node;
+
+		this.velocity		= new SpringFloat( 1, 1 );
+		//this.acell 			= 0.3;
+
+		this.orientation 	= new Quat();
+
+		this.roll_speed		= Maths.to_rad( 5 );
+		this.roll_state 	= 0;
+		this.roll_vel		= new SpringFloat( 1.3, 0.7 );
+
+		this.yaw_speed		= Maths.to_rad( 3 );
+		this.yaw_state 		= 0;
+		this.yaw_vel		= new SpringFloat( 1.0, 0.65 );
+
+		this.pitch_speed 	= Maths.to_rad( 3 );
+		this.pitch_state 	= 0;
+		this.pitch_vel		= new SpringFloat( 1.3, 0.6 );
+	}
+
+	update( dt ){
+		this.handle_turning( dt );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let ip = App.input;
+
+		if( ip.arrowUp )	this.velocity.set_target( 2 );
+		if( ip.arrowDown )	this.velocity.set_target( -3 );
+		if( !ip.arrowDown && !ip.arrowUp )	this.velocity.set_target( 0 );
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let fwd	= Vec3.transform_quat( Vec3.FORWARD, this.orientation );
+		let up	= Vec3.transform_quat( Vec3.UP, this.orientation );
+		//let lft	= Vec3.transform_quat( Vec3.LEFT, this.orientation );
+		App.Debug.reset()
+			.ln( this.node.local.pos, Vec3.add( fwd, this.node.local.pos ), "white" )
+			.ln( this.node.local.pos, Vec3.add( up, this.node.local.pos ), "white" );
+
+		this.velocity.update( dt );
+		this.node.add_pos( fwd.scale( this.velocity.value * dt ) );
+	}
+
+	handle_turning( dt ){
+		let ip = App.input;
+		let yaw		= 0;
+		let pitch	= 0;
+		let roll 	= 0;
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check Input
+		if( ip.key_a ) yaw		= 1;
+		if( ip.key_d ) yaw		= -1;
+		if( ip.key_w ) pitch	= 1;
+		if( ip.key_s ) pitch	= -1;
+		if( ip.key_q ) roll		= -1;
+		if( ip.key_e ) roll		= 1;
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//let yaw_rad		= 0;
+		//let pitch_rad	= 0;
+		//let roll_rad	= 0;
+		let axis		= new Vec3();
+
+		if( this.roll_state != roll ){
+			this.roll_vel.set_target( roll );
+			this.roll_state = roll;
+		}
+
+		if( roll != 0 || this.roll_vel.is_running ){
+			this.roll_vel.update( dt );
+			axis.from_quat( this.orientation, Vec3.FORWARD );
+			this.orientation.pmul_axis_angle( axis, this.roll_speed * this.roll_vel.value );
+		}
+
+
+		if( this.pitch_state != pitch ){
+			this.pitch_vel.set_target( pitch );
+			this.pitch_state = pitch;
+		}
+
+		if( pitch != 0 || this.pitch_vel.is_running ){
+			this.pitch_vel.update( dt );
+			axis.from_quat( this.orientation, Vec3.LEFT );
+			this.orientation.pmul_axis_angle( axis, this.pitch_speed * this.pitch_vel.value );
+		}
+
+
+		if( this.yaw_state != yaw ){
+			this.yaw_vel.set_target( yaw );
+			this.yaw_state = yaw;
+		}
+
+		if( yaw != 0 || this.yaw_vel.is_running ){
+			this.yaw_vel.update( dt );
+			axis.from_quat( this.orientation, Vec3.UP );
+			this.orientation.pmul_axis_angle( axis, this.yaw_speed * this.yaw_vel.value );
+		}
+		
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+		if( this.yaw_vel.is_running ){
+			this.yaw_vel.update( dt );
+			//if( !this.yaw_spr.is_running ) this.yaw_spr.value = this.yaw_state; // if done, let position to exact
+			//do_roll = true;
+
+			//console.log( this.yaw_spr.value, this.yaw_spr.vel, this.yaw_spr.target, this.yaw_spr.is_running );
+		}
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//this.orientation.from_axis_angle( Vec3.LEFT, this.pitch_rad );
+		//let up = Vec3.transform_quat( Vec3.UP, this.orientation );
+
+		//this.orientation.pmul_axis_angle( up, this.yaw_rad );
+
+		//console.log( this.yaw_rad, this.pitch_rad  );
+		//this.orientation.from_euler_xy_rad( this.pitch_rad, this.yaw_rad );
+		
+		let q = new Quat( this.orientation );
+
+		// Over Twist
+		axis.from_quat( this.orientation, Vec3.FORWARD );
+		q.pmul_axis_angle( axis, Maths.to_rad( 30 ) * -this.yaw_vel.value );
+
+		// Over Twist
+		axis.from_quat( this.orientation, Vec3.UP );
+		q.pmul_axis_angle( axis, Maths.to_rad( 20 ) * this.yaw_vel.value );
+
+		this.node.set_rot( this.orientation );
+		this.node.set_rot( q );
+	}
+}
+
+class ShipControllerX{
+
+	constructor( e ){
+		this.entity 		= e;
+		this.node 			= e.Node;
+
+		this.velocity		= 0;
+		this.acell 			= 0.3;
+
+		this.yaw_max		= Math.PI * 0.1;
+
+		this.roll_state 	= 0;
+		this.roll_max		= Math.PI * 0.2;
+		this.roll_spr		= new SpringFloat( 1.3, 0.65 );
+		this.roll_vel_dir 	= Maths.to_rad( 20 );
+
+		this.pitch_state 	= 0;
+		this.pitch_max		= Math.PI * 0.10;
+		this.pitch_spr		= new SpringFloat( 1.3, 0.65 );
+		this.pitch_vel_dir 	= Maths.to_rad( 10 );
+	}
+	
+	update( dt ){
+		this.handle_turning( dt );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let ip = App.input;
+		if( ip.arrowUp )	this.velocity += this.acell * dt;
+		if( ip.arrowDown )	this.velocity -= this.acell * dt;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//if( this.velocity == 0 ) return;
+
+		let fwd	= Vec3.transform_quat( Vec3.FORWARD, this.node.local.rot );
+
+		if( this.roll_spr.value ){
+			let up	= Vec3.transform_quat( Vec3.UP, this.node.local.rot );
+			//let up 	= Vec3.UP;
+			fwd.rot_axis_angle( up, this.roll_vel_dir * -this.roll_spr.value );
+		}
+
+		if( this.pitch_spr.value ){
+			let lft	= Vec3.transform_quat( Vec3.LEFT, this.orientation );
+			fwd.rot_axis_angle( lft, this.pitch_vel_dir * this.pitch_spr.value );
+		}
+
+		App.Debug.reset().ln(this.node.local.pos, Vec3.add( fwd, this.node.local.pos ), "white" );
+		
+		this.node.add_pos( fwd.scale( this.velocity * dt ) );
+	}
+
+	handle_turning( dt ){
+		let ip			= App.input;
+		let roll		= 0;
+		let pitch		= 0;
+		let do_roll		= false;
+		let do_pitch	= false;
+		let q 			= new Quat();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check Input
+		if( ip.key_a ) roll		= -1;
+		if( ip.key_d ) roll		= 1;
+		if( ip.key_w ) pitch	= 1;
+		if( ip.key_s ) pitch	= -1;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Handle Turning Left-Right
+		if( this.roll_state != roll ){
+			if( roll == 0 ) this.roll_spr.set_damping( 0.55 );
+			else			this.roll_spr.set_damping( 0.7 );
+			this.roll_spr.set_target( roll );
+			this.roll_state = roll;
+		}
+
+		if( this.roll_spr.is_running ){
+			this.roll_spr.update( dt );
+			if( !this.roll_spr.is_running ) this.roll_spr.pos = this.roll_state; // if done, let position to exact
+			do_roll = true;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Handle Turning Up-Down
+		if( this.pitch_state != pitch ){
+			if( roll == 0 ) this.pitch_spr.set_damping( 0.55 );
+			else			this.pitch_spr.set_damping( 0.7 );
+			this.pitch_spr.set_target( pitch );
+			this.pitch_state = pitch;
+		}
+
+		if( this.pitch_spr.is_running ){
+			this.pitch_spr.update( dt );
+			if( !this.pitch_spr.is_running ) this.pitch_spr.pos = this.pitch_state; //if done, let position to exact
+			do_pitch = true;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Update model's rotation
+		if( do_pitch || do_roll ){
+			
+			q	.rot_y( this.yaw_max * -this.roll_spr.value )
+				.rot_x( this.pitch_max * this.pitch_spr.value );
+
+			q.rot_z( this.roll_max * this.roll_spr.value );
+
+			this.node.set_rot( q );
+		}
+		
+	}
+}
+
+class SpringFloat{
+	vel					= 0;	// Velocity
+	value				= 0;	// Current Value
+	target				= 0;	// Target Value
+	osc_ps				= 0;	// Oscillation Per Second ( Math.PI * 2 * i ) : 0 < i < 10
+	damping				= 0;	// Damping Ratio ( 0 to 1 )
+	cache_osc_ps_sqr	= 0;	// Cached Values for : osc_ps * osc_ps
+	cache_damp			= 0;	// Cached Values for : -2.0 * damp_ratio * osc_ps
+
+	constructor( osc=1, damp=1, damp_time=0 ){		
+		// http://allenchou.net/2015/04/game-math-more-on-numeric-springing/
+		// Damp_ratio = Log(damp) / ( -osc_ps * damp_time ) 
+		// Damp Time, in seconds to damp. So damp 0.5 for every 2 seconds.
+		// Damp needs to be a value between 0 and 1, if 1, creates critical damping.
+		// Oscillation per second, can do fractions of pi to slow down the speed of spring
+		// OSC no higher then 10 
+		this.set_osc( osc );
+		this.set_damping( damp, damp_time );
+	}
+
+	set_target( v ){ this.target = v; return this; }
+	set_value( v ){ this.value = v; return this; }
+	set_osc( v ){
+		this.osc_ps				= Math.PI * 2 * v;
+		this.cache_osc_ps_sqr	= this.osc_ps * this.osc_ps;
+		this.cache_damp			= this.damping * this.osc_ps * -2.0;
+		return this;
+	}
+	set_damping( damp=1, damp_time=0 ){
+		this.damping 	= ( !damp_time )? damp : Math.log( damp ) / ( -this.osc_ps * damp_time );
+		this.cache_damp	= this.damping * this.osc_ps * -2.0;
+		return this;
+	}
+
+	update( dt ){
+		let damp	= dt * this.cache_damp,			// -2.0 * dt * damp_ratio * osc_ps
+			osc		= dt * this.cache_osc_ps_sqr;	// dt * osc_ps * osc_ps
+
+		this.vel	+= damp * this.vel + osc * ( this.target - this.value );
+		this.value	+= dt * this.vel;
+
+		return this.value
+	}
+
+	get is_running(){ return !( Math.abs( this.vel ) < 0.01 && Math.abs( this.value-this.target ) < 0.01 ); }
+}
+
+/*
+	// http://box2d.org/files/GDC2011/GDC2011_Catto_Erin_Soft_Constraints.pdf
+	// http://allenchou.net/2015/04/game-math-more-on-numeric-springing/
+	// Ocs_ps = PI * 2 * i (I should not be over 10)
+	// Damp_ratio = -Log(0.5) / ( osc_ps * damp_time ) :: Damp Time, in seconds to damp. So damp 0.5 for every 2 seconds.
+	// Damp_ratio is using half life, but can replace log(0.5) with any log value between 0 and 1.
+	static semi_implicit_euler_vec3( dt, osc_ps, damp_ratio, pos_tar, pos_cur_o, vel_o ){
+		//vel += -2.0 * dt * damp_ratio * osc_ps * vel + dt * osc_ps * osc_ps * (to - pos);
+		//pos += dt * vel;
+
+		let a = -2.0 * dt * damp_ratio * osc_ps,
+			b = dt * osc_ps * osc_ps;
+
+		vel_o[0] += a * vel_o[0] + b * ( pos_tar[0] - pos_cur_o[0] );
+		vel_o[1] += a * vel_o[1] + b * ( pos_tar[1] - pos_cur_o[1] );
+		vel_o[2] += a * vel_o[2] + b * ( pos_tar[2] - pos_cur_o[2] );
+
+		pos_cur_o[0] += dt * vel_o[0];
+		pos_cur_o[1] += dt * vel_o[1];
+		pos_cur_o[2] += dt * vel_o[2];
+
+		return pos_cur_o;
+	}
+*/
+</script><page-layout></page-layout>

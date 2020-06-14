@@ -139,6 +139,8 @@ class SemiImplicitEuler{
 		// Damp_ratio = Log(damp) / ( -osc_ps * damp_time ) 
 		// Damp Time, in seconds to damp. So damp 0.5 for every 2 seconds.
 		// Damp needs to be a value between 0 and 1, if 1, creates critical damping.
+		// Oscillation per second, can do fractions of pi to slow down the speed of spring
+		// OSC no higher then 10 
 		this.osc_ps 	= Math.PI * 2 * osc;
 		if( damp_time )	this.damping = Math.log( damp ) / ( -this.osc_ps * damp_time );
 		else 			this.damping = damp;
