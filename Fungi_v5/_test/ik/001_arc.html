@@ -1,0 +1,217 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat }	from "../../fungi/App.js";
+//import XhrQueue 					from "../../fungi/lib/XhrQueue.js";
+import GltfUtil,{Gltf}				from "../../fungi/lib/GltfUtil.js";
+import ProtoRig						from "../../fungi.armature/ProtoRig.js";
+
+//#####################################################
+App.builder()
+	.use_armature()
+	.set_camera( 0, 20, 2.5, 0, 0.5, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+function on_draw( dt, ss ){}
+
+async function init(){
+	//let [ json, bin ]	= await XhrQueue.url( "../../files/models/", "TieInterceptor.gltf", "TieInterceptor.bin" );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let e 	= App.$Draw( "Test" ),
+		arm	= e.add_com( "Armature" );
+	
+	let b0 = arm.add_bone( "b0", 0.3, null );
+	let b1 = arm.add_bone( "b1", 0.3, b0.Bone.index );
+	let b2 = arm.add_bone( "b2", 0.3, b1.Bone.index );
+	arm.finalize();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Add Bone Preview
+	e.add_com( "BoneView" ).init();
+	e.Draw.items[ 0 ].material.opt_depth_test( true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//ProtoRig.init();
+
+
+	return true;
+}
+
+//#########################################################################
+
+const PR_BONES = [
+	{ "name":"b0", "len":0.2, "idx":0, "p_idx":null, "pos":[0,0,0], },
+	{ "name":"b1", "len":0.2, "idx":1, "p_idx":0, "pos":[0,0.2,0], },
+	{ "name":"b2", "len":0.2, "idx":2, "p_idx":1, "pos":[0,0.2,0], },
+];
+
+/*
+const PR_BONES = [
+	{ "name":"Hips", "len":0.105, "idx":0,"p_idx":null,"pos":[0,1.039,0.020], "rot":[2.4268916831715615e-7,0,0,1]  },
+	{ "name":"Spine", "len":0.097, "idx":1,"p_idx":0,"pos":[0,0.105,0], "rot":[-0.044645827263593674,-8.692448299794618e-27,-4.453656740259141e-20,0.9990028738975525]},
+
+
+const PR_CONFIG = 
+[
+	{ "name":"Hips", "len":0.105, "idx":0,"p_idx":null,	"top":[0.15,0.05], "bot":[0.15,-0.05], "rot":ROTX90, "bone_pos":[0,1.039,0.020], "bone_rot":[2.4268916831715615e-7,0,0,1]  },
+]
+*/
+
+		/*
+		// Serialize the Bone Data
+		deserialize_bones( ary ){
+			let itm, b;
+			for( itm of ary ){
+				b = this.add_bone( itm.name, itm.len, itm.p_idx );
+				b.position.fromArray( itm.pos );
+				b.quaternion.fromArray( itm.rot );
+				if( b.scl ) b.scale.fromArray( itm.scl );
+			}
+			return this;
+		}
+		*/
+
+function ProtoRigSysXX( ecs ){
+	let ary = ecs.query_comp( "ProtoRig" );
+	if( !ary ) return; // No Componets, skip.
+
+	let b, a, e, rig;
+	let pos = [0,0,0],
+		rot = [0,0,0,1],
+		vpos = new THREE.Vector3(),
+		vrot = new THREE.Quaternion();
+
+	for( a of ary ){
+		e = ecs.entities[ a.entity_id ];
+		if( !e.Armature.updated ) continue;
+
+		rig = e.ProtoRig;
+		for( b of e.Armature.bones ){
+			// 3JS data types are needed to get World Space
+			// plus the data is Structs, Fungi uses Arrays for Vec/Quats
+			b.ref.getWorldPosition( vpos ).toArray( pos );
+			b.ref.getWorldQuaternion( vrot ).toArray( rot );
+			rig.bone_pos.set( b.idx, pos );
+			rig.bone_rot.set( b.idx, rot );
+		}
+
+		rig.update_bone_buffer();
+	}
+}
+
+class ProtoRigXX{
+	static init( priority = 810 ){
+		App.Components.reg( ProtoRig );
+		App.ecs.sys_add( ProtoRigSys, priority );
+	}
+
+    static $( name, bones, config, use_preview=false ){
+		let grp = new THREE.Group();
+		grp.name = name;
+
+		let e = App.$( grp, [ "Obj", "ProtoRig", "Armature" ] ),
+			p = e.ProtoRig;
+
+		e.Armature.deserialize_bones( bones ).finalize();
+		p.build( config );
+		
+		if( use_preview ){
+			let b = e.Armature.get_root();
+			grp.add( b );
+			App.scene.add( new THREE.SkeletonHelper( b ) );
+		}
+
+		return e;
+	}
+
+	constructor(){
+		this.bone_rot		= null;
+		this.bone_rot_buf	= null;
+		this.bone_pos		= null;
+		this.bone_pos_buf	= null;
+		this.mesh			= null;
+	}
+
+	build( config ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let e 		= App.get_e( this.entity_id ),
+			cnt		= config.length,
+			cfg_top	= new VecBuffer( cnt, 4, true ),
+			cfg_bot	= new VecBuffer( cnt, 4, true ),
+			cfg_rot	= new VecBuffer( cnt, 4, true ),
+			cfg_pos	= new VecBuffer( cnt, 3, true ),
+			arm 	= e.Armature,
+			idx, itm;
+
+		for( itm of config ){
+			//--------------------------------
+			if( (idx = arm.name_map[ itm.name ]) == undefined ){
+				console.log( "ProtoRig Build - Can Not Find Bone Index of ", itm.name );
+				continue;
+			}
+
+			//--------------------------------
+			if( itm.top.length == 2 )	cfg_top.set_raw( idx, itm.top[ 0 ],itm.top[ 0 ], itm.top[ 0 ], itm.top[ 1 ] );
+			else						cfg_top.set( idx, itm.top );
+
+			if( itm.bot.length == 2 )	cfg_bot.set_raw( idx, itm.bot[ 0 ], itm.bot[ 0 ], itm.bot[ 0 ], itm.bot[ 1 ] );
+			else						cfg_bot.set( idx, itm.bot );
+
+			cfg_rot.set( idx, ( itm.rot || [0,0,0,1] ) );
+			cfg_pos.set( idx, ( itm.pos || [0,0,0] ) );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup Buffer to hold the Flat World Space Transform of the Bones
+		this.bone_rot 		= new VecBuffer( cnt, 4, true );
+		this.bone_pos 		= new VecBuffer( cnt, 3, true );
+		this.bone_rot_buf 	= new THREE.InstancedBufferAttribute( this.bone_rot.buffer, this.bone_rot.comp_len );
+		this.bone_pos_buf 	= new THREE.InstancedBufferAttribute( this.bone_pos.buffer, this.bone_pos.comp_len );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let g	= Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+		let geo	= new THREE.InstancedBufferGeometry();
+		geo.maxInstancedCount = cnt;
+
+		geo.setIndex( new THREE.BufferAttribute( g.ind, 1 ) );
+		geo.addAttribute( "position",	new THREE.BufferAttribute( g.vert, 3 ) );
+		geo.addAttribute( "normal",		new THREE.BufferAttribute( g.norm, 3 ) );
+		geo.addAttribute( "a_cfg_top",	new THREE.InstancedBufferAttribute( cfg_top.buffer, cfg_top.comp_len ) );  
+		geo.addAttribute( "a_cfg_bot",	new THREE.InstancedBufferAttribute( cfg_bot.buffer, cfg_bot.comp_len ) );
+		geo.addAttribute( "a_cfg_rot",	new THREE.InstancedBufferAttribute( cfg_rot.buffer, cfg_rot.comp_len ) );
+		geo.addAttribute( "a_cfg_pos",	new THREE.InstancedBufferAttribute( cfg_pos.buffer, cfg_pos.comp_len ) );
+		geo.addAttribute( "a_ins_rot",	this.bone_rot_buf );
+		geo.addAttribute( "a_ins_pos",	this.bone_pos_buf );
+
+		this.mesh 		= new THREE.Mesh( geo, get_material() );
+		this.mesh.name 	= "ProtoRig";
+		App.scene.add( this.mesh ); //e.Obj.ref.add( this.mesh );
+	}
+
+	update_bone_buffer(){ 
+		this.bone_rot_buf.needsUpdate = true;
+		this.bone_pos_buf.needsUpdate = true;
+	}
+}
+
+
+/*
+class Bone{
+	name	= "";
+	idx		= 0;
+	p_idx	= null;
+	len		= 0
+	local	= new Transform();
+	world	= new Transform();
+	bind	= new Matrix();
+}
+
+class Armature{
+	bones = new Array();
+}
+*/
+
+</script><page-layout></page-layout>

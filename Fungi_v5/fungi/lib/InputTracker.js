@@ -15,6 +15,13 @@ class InputTracker{
 		this.ctrl 			= false;
 		this.alt			= false;
 		this.spaceBar		= false;
+		this.key_w 			= false;
+		this.key_a 			= false;
+		this.key_s 			= false;
+		this.key_d 			= false;
+		this.key_q 			= false;
+		this.key_e 			= false;
+
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		//Mouse State Data
@@ -225,6 +232,13 @@ class InputTracker{
 				case 16: this.shift 		= true; break;
 				case 17: this.ctrl 			= true; break;
 				case 18: this.alt 			= true; break;
+
+				case 87: this.key_w 		= true; break;
+				case 65: this.key_a 		= true; break;
+				case 83: this.key_s 		= true; break;
+				case 68: this.key_d 		= true; break;
+				case 81: this.key_q 		= true; break;
+				case 69: this.key_e 		= true; break;
 			}
 
 			// Shift, Ctrl and Alt isn't to be counted as part of active keyboard activity.
@@ -240,6 +254,7 @@ class InputTracker{
 		}
 
 		onKeyUp( e ){
+			//console.log( e.keyCode );
 			switch(e.keyCode){
 				case 32: this.spaceBar		= false; break;
 				case 37: this.arrowLeft		= false; break;
@@ -249,6 +264,13 @@ class InputTracker{
 				case 16: this.shift 		= false; break;
 				case 17: this.ctrl 			= false; break;
 				case 18: this.alt 			= false; break;
+
+				case 87: this.key_w 		= false; break;
+				case 65: this.key_a 		= false; break;
+				case 83: this.key_s 		= false; break;
+				case 68: this.key_d 		= false; break;
+				case 81: this.key_q 		= false; break;
+				case 69: this.key_e 		= false; break;
 			}
 
 			// Shift, Ctrl and Alt isn't to be counted as part of active keyboard activity.
