@@ -1,21 +1,54 @@
 import Colour from "./Colour.js";
 
+//#######################################################################################################
+
 class Uniform{
 	constructor( n, type, loc, data=null ){
 		this.name	= n;
 		this.type	= type;
 		this.loc	= loc;
-		this.data	= ( !data )? null : parse_data( data, type );
+		this.data	= ( !data )? null : this.parse( data );
+	}
+
+	set( data ){ this.data = this.parse( data ); return this; }
+
+	clone(){ 
+		let u = new Uniform( this.name, this.type, this.loc );
+
+		if( Array.isArray( this.data ) )	u.data = this.data.slice( 0 );
+		else 								u.data = this.data;
+
+		return u;
+	}
+
+	parse( value ){
+		switch( this.type ){
+			case "rgb"	: 
+			case "rgba"	:
+				value = new Colour( value );
+			break;
+
+			case "sampler2D"	: 
+			case "samplerCube"	:
+				let tmp = ( value instanceof WebGLTexture )? value : Cache.get_tex( value ); 
+				if( tmp == null ){
+					console.error( "Uniform.parse: Texture not found", value );
+					return this;
+				}else value = tmp;
+			break;
+		}
+	
+		return ( Array.isArray( value ) && value.length == 0 )? null : value;
 	}
 }
+
+//#######################################################################################################
 
 class Shader{
     name		= name;
     program		= null;
     uniforms	= new Map();
-	
-	//tex_slot	= 0;
-	
+
     options		= {
         depthTest			: true,
         blend				: false,
@@ -28,26 +61,28 @@ class Shader{
 		this.program	= prog;
 	}
 
-    set_depth_test( v ){ this.options.depthTest = v; return this; }
-    set_blend( v ){ this.options.blend = v; return this; }
-    set_alpha_coverage( v ){ this.options.sampleAlphaCoverage = v; return this; }
+	set_depth_test( v ){ this.options.depthTest = v; return this; }
+	set_blend( v ){ this.options.blend = v; return this; }
+	set_alpha_coverage( v ){ this.options.sampleAlphaCoverage = v; return this; }
 	set_cullface( v ){ this.options.cullFace = v; return this; }
 }
 
+//#######################################################################################################
 
 class ShaderFactory{
-	static POS_LOC		= 0;
-	static NORM_LOC		= 1;
-	static UV_LOC		= 2;
-	static COL_LOC		= 3;
-	static BONE_IDX_LOC	= 8;
-	static BONE_WGT_LOC	= 9;
+	POS_LOC			= 0;
+	NORM_LOC		= 1;
+	UV_LOC			= 2;
+	COLOR_LOC		= 3;
+	SKIN_IDX_LOC	= 8;
+	SKIN_WGT_LOC	= 9;
 
     constructor( gl ){
 		this.gl		= gl;
 		this.cache	= new Map();
     }
 
+	// #region METHODS
     new( name, src_vert, src_frag, uniforms=null, ubos=null ){
 		// TODO Check if shader exists in cache
 
@@ -67,7 +102,7 @@ class ShaderFactory{
 					itm = uniforms[ i ];
 					loc = this.gl.ctx.getUniformLocation( sh.program, itm.name );
 					
-					if( loc )	sh.uniforms.set( new Uniform( itm.name, itm.type, loc, itm.value ) );
+					if( loc )	sh.uniforms.set( itm.name, new Uniform( itm.name, itm.type, loc, itm.value ) );
 					else		console.error( "add_uniform : Uniform not found %s ", itm.name );
 				}
 			}
@@ -77,8 +112,10 @@ class ShaderFactory{
 				let idx, u;
 				for( u of ubos ){
 					idx = this.gl.ctx.getUniformBlockIndex( sh.program, u.name );
-					if( idx > 1000 ){ console.log("Ubo not found in shader %s : %s ", name, u.name ); return this; }
+					if( idx > 1000 ){ console.log( "Ubo not found in shader %s : %s ", name, u.name ); continue; }
 					this.gl.ctx.uniformBlockBinding( sh.program, idx, u.bind_point );
+
+					//console.log( "BIND UBO %s to SHADER %s on Index %s to Bind Point %s ", u.name, sh.name, idx, u.bind_point );
 				}
 			}
 		}
@@ -90,35 +127,88 @@ class ShaderFactory{
 
 	get( name ){ return this.cache.get( name ); }
 
-	load_uniforms( sh ){
+	load_uniforms( o ){
+		let name, itm,
+			map			= o.uniforms,
+			gl			= this.gl,
+			tex_slot	= 0;
+			
+		for( [ name, itm ] of map ){
+			//console.log( itm );
+			switch( itm.type ){
+				case "float":	gl.ctx.uniform1f(	itm.loc, itm.data ); break;
+				case "afloat":	gl.ctx.uniform1fv(	itm.loc, itm.data ); break;
+				case "vec2":	gl.ctx.uniform2fv(	itm.loc, itm.data ); break;
+				
+				case "rgb":		gl.ctx.uniform3fv(	itm.loc, itm.data.rgb ); break;
+				case "vec3":	gl.ctx.uniform3fv(	itm.loc, itm.data ); break;
+				
+				case "rgba":	gl.ctx.uniform4fv(	itm.loc, itm.data.rgba ); break;
+				case "vec4":	gl.ctx.uniform4fv(	itm.loc, itm.data ); break;
+				
+				case "int":		gl.ctx.uniform1i(	itm.loc, itm.data ); break;
 		
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				case "mat4":	gl.ctx.uniformMatrix4fv(	itm.loc, false, itm.data ); break;
+				case "mat3":	gl.ctx.uniformMatrix3fv(	itm.loc, false, itm.data ); break;
+				case "mat2x4": 	gl.ctx.uniformMatrix2x4fv(	itm.loc, false, itm.data ); break;
+				case "mat3x4": 	gl.ctx.uniformMatrix3x4fv(	itm.loc, false, itm.data ); break;
+		
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				case "sampler2D":
+					//console.log( this.tex_slot, u_value._name_ );
+					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + tex_slot );
+					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D, itm.data );
+					gl.ctx.uniform1i(		itm.loc, tex_slot );
+					tex_slot++;
+					break;
+		
+				case "sampler2DArray":
+					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + tex_slot );
+					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D_ARRAY, itm.data );
+					gl.ctx.uniform1i(		itm.loc, tex_slot );
+					tex_slot++;
+					break;
+		
+				case "samplerCube":
+					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + tex_slot );
+					gl.ctx.bindTexture(		gl.ctx.TEXTURE_CUBE_MAP, itm.data );
+					gl.ctx.uniform1i(		itm.loc, tex_slot );
+					tex_slot++;
+					break;
+		
+				default: console.error("unknown uniform type %s for %s in %s", itm.type, name, o.name ); break;
+			}
+
+		}
+		return this;
 	}
 	
-	new_material( name=null, u_struct=null ){
-		/*
-		let k, v, mat = new Material( name, this );
+	new_material( name=null, uniforms=null ){
+		let sh = this.cache.get( name );
+		if( !sh ){ console.error( "No Shader by the name %s.", name ); return null; }
+
+		let k, v, mat = new Material( sh );
 
 		// Copy Uniforms
-		for( [ k, v ] of this.uniforms ) mat.uniforms.set( k, v.value );
+		for( [ k, v ] of sh.uniforms ) mat.uniforms.set( k, v.clone() );
 
 		// Copy Options
 		for( k in this.options ) mat.options[ k ] = this.options[ k ];
 
 		// Load in custom Uniform Data if exists
-		if( u_struct ){
+		if( uniforms ){
 			let n;
-			for( n in u_struct ) mat.set_uniform( n, u_struct[ n ] );
-		}		
+			for( n in uniforms ) mat.set( n, uniforms[ n ] );
+		}	
 
 		return mat;
-		*/
 	}
+	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 
-
-	
 	// #region BINDING
 	unbind(){ this.gl.ctx.useProgram( null ); return this; }
-	bind( sh ){ this.gl.ctx.useProgram( sh.prog ); return this; }
+	bind( sh ){ this.gl.ctx.useProgram( sh.program ); return this; }
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 
     // #region COMPILE SHADER
@@ -202,152 +292,32 @@ class ShaderFactory{
     // #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 }
 
-function parse_data( value, type ){
-	switch( type ){
-		case "rgb"	: value = new Colour( value ); break;
-		case "rgba"	: value = new Colour( value ); break;
-		case "sampler2D" : 
-		case "samplerCube" :
-			let tmp = ( value instanceof WebGLTexture )? value : Cache.get_tex( value ); 
-			if(tmp == null){
-				console.error( "Shader.parse_data: Texture not found", value );
-				return this;
-			}else value = tmp;
-		break;
-	}
-
-	return ( Array.isArray( value ) && value.length == 0 )? null : value;
-}
-
-function set_uniform( u_name, u_value ){
-	let itm	= this.uniforms.get( u_name );
-	if( !itm ){ console.error( "set uniform not found %s in %s", u_name, this.name ); return this; }
-
-	switch( itm.type ){
-		case "float":	gl.ctx.uniform1f(	itm.loc, u_value ); break;
-		case "afloat":	gl.ctx.uniform1fv(	itm.loc, u_value ); break;
-		case "vec2":	gl.ctx.uniform2fv(	itm.loc, u_value ); break;
-		
-		case "rgb":
-		case "vec3":	gl.ctx.uniform3fv(	itm.loc, u_value ); break;
-		
-		case "rgba":
-		case "vec4":	gl.ctx.uniform4fv(	itm.loc, u_value ); break;
-		
-		case "int":		gl.ctx.uniform1i(	itm.loc, u_value ); break;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		case "mat4":	gl.ctx.uniformMatrix4fv(	itm.loc, false, u_value ); break;
-		case "mat3":	gl.ctx.uniformMatrix3fv(	itm.loc, false, u_value ); break;
-		case "mat2x4": 	gl.ctx.uniformMatrix2x4fv(	itm.loc, false, u_value ); break;
-		case "mat3x4": 	gl.ctx.uniformMatrix3x4fv(	itm.loc, false, u_value ); break;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		case "sampler2D":
-			//console.log( this.tex_slot, u_value._name_ );
-			gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
-			gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D, u_value );
-			gl.ctx.uniform1i(		itm.loc, this.tex_slot );
-			this.tex_slot++;
-			break;
-
-		case "sampler2DArray":
-			gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
-			gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D_ARRAY, u_value );
-			gl.ctx.uniform1i(		itm.loc, this.tex_slot );
-			this.tex_slot++;
-			break;
-
-		case "samplerCube":
-			gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + this.tex_slot );
-			gl.ctx.bindTexture(		gl.ctx.TEXTURE_CUBE_MAP, u_value );
-			gl.ctx.uniform1i(		itm.loc, this.tex_slot );
-			this.tex_slot++;
-			break;
-
-		default: console.error("unknown uniform type %s for %s in %s", itm.type, u_name, this.name ); break;
-	}
-	return this;
-}
-
-function add_uniform_block( ubo_name ){
-	// Check if UBO exists in the shader
-	let bIdx = gl.ctx.getUniformBlockIndex( this.program, ubo_name );
-	if( bIdx > 1000 ){ console.log("Ubo not found in shader %s : %s ", this.name, ubo_name ); return this; }
-
-	let ubo = Cache.get_ubo( ubo_name );
-	if( !ubo ){ console.log( "Can not find UBO in fungi cache : %s for %s", ubo_name, this.name ); return this; }
-
-	//console.log( "prepare UBO", uboName, ubo.bindPoint, bIdx );
-	gl.ctx.uniformBlockBinding( this.program, bIdx, ubo.bind_pnt );
-	return this;
-}
+//#######################################################################################################
 
 class Material{
 	constructor( shader ){
 		this.shader		= shader;
 		this.uniforms	= new Map();
-
 		this.options 	= {
 			depthTest			: true,
 			blend				: false,
 			sampleAlphaCoverage : false,
 			cullFace			: true,
-		}
+		};
 	}
 
-	///////////////////////////////////////////////////////
-	// METHODS
-	///////////////////////////////////////////////////////
-		// bind assigned shader
-		bind(){ gl.ctx.useProgram( this.shader.program ); return this; }
-		unbind(){ gl.ctx.useProgram( null ); }
+	set( u_name, data ){
+		let u = this.uniforms.get( u_name );
+		if( !u ){ console.log("Uniform: %s not found in material %s", u_name, this.shader.name ); return this; }
 
-		// push uniform data to the shader
-		apply(){
-			if( this.shader && this.uniforms.size > 0 ){
-				this.shader.reset_tex_slot();
+		u.set( data );
+		return this;
+	}
 
-				let k, v;
-				for( [ k, v ] of this.uniforms ){
-					if( v != null ) this.shader.set_uniform( k, v );
-				}
-			}
-			return this;
-		}
-
-		// modify stored uniform data
-		set_uniform( u_name, u_value ){
-			if( !this.uniforms.has( u_name ) ){
-				console.error("Material.set_uniform: not found %s for material %s", u_name, this.name);
-				return this;
-			}
-
-			let u_type = this.shader.uniforms.get( u_name ).type;
-			this.uniforms.set( u_name, parse_data( u_value, u_type ) );
-
-			return this;
-		}
-
-		opt_depth_test( b ){ this.options.depthTest = b; return this; }
-		opt_blend( b ){ this.options.blend = b; return this; }
-		opt_cullface( b ){ this.options.cullFace = b; return this; }
-
-		/*
-		static clone( mat, name ){
-			if( typeof mat == "string" ) mat = Cache.getMaterial( mat );
-
-			let key, itm, m = new Material( name, mat.shader );
-			Cache.materials.set( name, m );
-			
-			for( [ key, itm ] of mat.uniforms ){
-				if( Array.isArray( itm ) )	m.uniforms.set( key, itm.slice(0) );
-				else 						m.uniforms.set( key, itm );
-			}		
-
-			return m;
-		}
-		*/
+	set_depth_test( v ){ this.options.depthTest = v; return this; }
+	set_blend( v ){ this.options.blend = v; return this; }
+	set_alpha_coverage( v ){ this.options.sampleAlphaCoverage = v; return this; }
+	set_cullface( v ){ this.options.cullFace = v; return this; }
 }
 
 export default ShaderFactory;

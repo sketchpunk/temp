@@ -14,19 +14,21 @@ const COLORS		= {
 };
 
 class Colour{
-	data = new Float32Array( [0,0,0,0] );
+	constructor( c ){
+		this.rgba	= new Float32Array( [0,0,0,0] );
+		this.rgb	= new Float32Array( this.rgba.buffer, 0, 3 );
+		this.set( c );
+	}
 
-	constructor( c ){ this.set( c ); }
-
-	alpha( v ){ this.data[3] = v; return this; }
+	alpha( v ){ this.rgba[ 3 ] = v; return this; }
 	set( c ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Handle Numeric Form
 		if( ! isNaN( c ) ){
 			c = parseInt( c );
-			this.data[ 0 ] = ( c >> 16 & 255 )	* NORMALIZE_RGB;
-			this.data[ 1 ] = ( c >> 8 & 255 )	* NORMALIZE_RGB;
-			this.data[ 2 ] = ( c & 255 )		* NORMALIZE_RGB;
+			this.rgba[ 0 ] = ( c >> 16 & 255 )	* NORMALIZE_RGB;
+			this.rgba[ 1 ] = ( c >> 8 & 255 )	* NORMALIZE_RGB;
+			this.rgba[ 2 ] = ( c & 255 )		* NORMALIZE_RGB;
 			return this;
 		}
 
@@ -37,13 +39,29 @@ class Colour{
 			if( cc.charAt(0) != "#" ) cc = COLORS[ c ];
 			if( !cc || cc.charAt(0) != "#" ){ console.error( "Color Unknown: ", c ); return; }
 
-			this.data[ 0 ] = parseInt( cc[1] + cc[2], 16 ) * NORMALIZE_RGB;
-			this.data[ 1 ] = parseInt( cc[3] + cc[4], 16 ) * NORMALIZE_RGB;
-			this.data[ 2 ] = parseInt( cc[5] + cc[6], 16 ) * NORMALIZE_RGB;
-			if( cc.length == 9 ) this.data[ 3 ] = parseInt( cc[7] + cc[8], 16 ) * NORMALIZE_RGB;
+			this.rgba[ 0 ] = parseInt( cc[1] + cc[2], 16 ) * NORMALIZE_RGB;
+			this.rgba[ 1 ] = parseInt( cc[3] + cc[4], 16 ) * NORMALIZE_RGB;
+			this.rgba[ 2 ] = parseInt( cc[5] + cc[6], 16 ) * NORMALIZE_RGB;
+			if( cc.length == 9 ) this.rgba[ 3 ] = parseInt( cc[7] + cc[8], 16 ) * NORMALIZE_RGB;
 		}
 
 		return this;
+	}
+
+	static rgb_array(){
+		if( arguments.length == 0 ) return null;
+
+		let ary	= ( Array.isArray( arguments[0] ) )? arguments[ 0 ] : arguments,
+			rtn	= new Float32Array( ary.length * 3 )
+			ii	= 0;
+	
+		for( let i=0, c, p; i < ary.length; i++ ){
+			rtn[ ii++ ] = parseInt( c[1] + c[2], 16 ) * NORMALIZE_RGB;
+			rtn[ ii++ ] = parseInt( c[3] + c[4], 16 ) * NORMALIZE_RGB;
+			rtn[ ii++ ] = parseInt( c[5] + c[6], 16 ) * NORMALIZE_RGB;
+		}
+
+		return rtn;
 	}
 }
 

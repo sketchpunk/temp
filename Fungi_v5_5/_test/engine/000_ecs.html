@@ -1,0 +1,116 @@
+<html>
+<body>
+<script type="module">
+import Ecs from "../../fungi/lib/Ecs.js";
+
+window.addEventListener( "load", ()=>{
+	//test_com();
+	//test_entity();
+	test_systems();
+});
+
+function test_com(){
+	let ecs = new Ecs();
+	ecs.components.reg( Com );
+
+	let c = ecs.components.new( "Com" );
+
+	console.log( c );
+	console.log( ecs.components.items[0] );
+
+	ecs.components.retire( c );
+	console.log( ecs.components.items[0] );
+
+	c = ecs.components.new( "Com" );
+	console.log( c );
+	console.log( ecs.components.items[0] );
+	//let c = new Com();
+
+	//let cc = c.constructor;
+	//let x = new cc();
+	//console.log( x );
+
+	//console.log( "COM.c", Com.constructor, "c.c", c.constructor, "c.c.name",c.constructor.name );
+	//console.log( Com.toString(), c.toString(), (Com instanceof Function), (c instanceof Function)  );
+}
+
+function test_entity(){
+	let ecs = new Ecs();
+	//ecs.components.reg( Com );
+	ecs.components.reg( Dooo );
+	//let c = ecs.components.new( "Com" );
+
+	let eid = ecs.new_entity( "Woot" );
+	ecs.add_com( eid, new Com( 10 ) );
+	ecs.add_com( eid, new Other() );
+	ecs.add_com( eid, "Dooo" );
+
+	//console.log("eep", ecs.get_com( eid, "Com" ) );
+	ecs.debug_entity( eid );
+	ecs.rm_entity( eid );
+	ecs.debug_entity( eid );
+
+	//ecs.rm_com( eid, "Dooo" ).debug_entity( eid );
+	//ecs.add_com( eid, "Dooo" );
+	//ecs.debug_entity( eid );
+
+	
+	//console.log( ecs.components.get_reg( "Dooo" ) );
+	//ecs.add_com( eid, "Com" );
+	//ecs.query( ["Transform", "Node"] );
+}
+
+function test_systems(){
+	let ecs = new Ecs();
+	ecs.components.reg( Other )
+	ecs.components.reg( Dooo )
+
+	ecs.new_entity( "A", new Com( 10 ), "Dooo" );
+	ecs.new_entity( "B", new Com( 20 ), "Other" );
+
+	ecs.systems.add( sys_fn, 1 );
+	//ecs.systems.add( new Sys_cls(), 2 );
+
+	ecs.run();
+}
+
+class Com{
+	constructor( x=0 ){ this.x=x; }
+}
+
+class Other{}
+
+class Dooo{}
+
+function sys_fn( ecs ){
+	console.log( "Fn" );
+	let ary = ecs.query_entities( ["Com"] );
+	/*
+	if( ary == null ) return;
+
+	let c;
+	for( c of ary ){
+		if( !c._active ) continue;
+		console.log( c );
+		c.x *= 5;
+	}
+	*/
+}
+
+class Sys_cls{
+	run( ecs ){
+		console.log( "Cls" );
+		let ary = ecs.query_comp( "Com" );
+		if( ary == null ) return;
+
+		let c;
+		for( c of ary ){
+			if( !c._active ) continue;
+			console.log( c );
+		}
+	}
+}
+
+</script>
+</body>
+</html>

@@ -43,9 +43,13 @@ class BufferFactory{
 		return buf;
 	}
 	
-	new_array( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( ARRAY, t_ary, is_static, unbind ); }
 	new_element( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( ELEMENT, t_ary, is_static, unbind ); }
 	new_uniform( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( UNIFORM, t_ary, is_static, unbind ); }
+	new_array( t_ary=null, comp_len=3, is_static=true, unbind=true ){
+		let buf = this.new_buffer( ARRAY, t_ary, is_static, unbind );
+		buf.component_len = comp_len;
+		return buf;
+	}
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 	
 	// #region UPDATE

@@ -1,119 +1,79 @@
 <!DOCTYPE html>
-<html>
-	<head>
-		<style>
-			html,body{margin:0px; padding:0px; width:100%; height:100%;}
-			body{background-color:#404040;}
-			canvas{border:1px solid green; box-sizing: border-box;}
-		</style>
+<html><head><style>
+	html,body{margin:0px; padding:0px; width:100%; height:100%;}
+	body{background-color:#404040;}
+	canvas{border:1px solid green; box-sizing: border-box;}
+</style>
+<script type="module">
+import Context		from "../../fungi/core/Context.js";
+import Buffer		from "../../fungi/core/Buffer.js";
+import Ubo  		from "../../fungi/core/Ubo.js";
+import Shader 		from "../../fungi/core/Shader.js";
+import Vao			from "../../fungi/core/Vao.js";
+import Mesh			from "../../fungi/core/Mesh.js";
 
-		<script type="module">
-			import Context		from "../../fungi/core/Context.js";
-			import Buffer		from "../../fungi/core/Buffer.js";
-			import Ubo  		from "../../fungi/core/Ubo.js";
-			import Shader 		from "../../fungi/core/Shader.js";
+let $Ubo, $Mesh,
+	$Pos	= new Float32Array( [0,0,0] ),
+	App		= {};
 
-			//import Ubo		from "../../fungi/core/Ubo.js";
-			//import Shader	from "../../fungi/core/Shader.js";
-			//import Mesh		from "../../fungi/core/Mesh.js";
+window.addEventListener( "load", function(){
+	App.gl = new Context( "FungiCanvas" );
+	if( !App.gl.ctx ) return;
 
-			let uboTransform
-				//gMesh,
-				//gMat,
-				//gPos = new Float32Array( [0,0,0] )
-			;
+	App.gl.fit_screen();
+	window.addEventListener( "resize", (e)=>{ App.gl.fit_screen(); });
 
-			let App = {};
-			window.addEventListener( "load", function(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.Buffer	= new Buffer( App.gl );
+	App.Ubo 	= new Ubo( App.gl );
+	App.Shader	= new Shader( App.gl );
+	App.Vao		= new Vao( App.gl );
+	App.Mesh	= new Mesh( App.gl, App.Vao, App.Buffer, App.Shader );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let ubo 	= App.Ubo.new( "UBOTransform", 0, [
+		{ name:"move_pos", type:"vec3" },
+		{ name:"pnt_size", type:"float" },
+	]);
+
+	ubo.set( "pnt_size", 20 );
+
+	//ubo.set( "pnt_size", 20 ).set( "move_pos", [0,0.5,0] );
+	//App.Ubo.update( ubo );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let mesh	= App.Mesh.from_data( "test", new Float32Array([0,0,0]) );
+	let shader	= App.Shader.new( "test", SRC_VERT, SRC_FRAG, 
+		[ { name:"u_color", type:"rgb", value:"red" } ],	// Uniform
+		[ ubo ], // Ubos
+	);
 	
-				//console.log( u );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//App.Shader.bind( shader );
+	//App.Shader.load_uniforms( shader );
+	//App.Mesh.draw( mesh );
 
-				//let move_pos = u.vars.get( "move_pos" ).type_buffer;
-				//let pnt_size = u.vars.get( "pnt_size" ).type_buffer;
+	let mat = App.Shader.new_material( "test", { u_color: "green" } );
+	App.Shader.bind( mat.shader );
+	App.Shader.load_uniforms( mat );
 
-				//move_pos[ 0 ] = 1.7976931348623157e+308;
-				//move_pos[ 2 ] = 1.7976931348623157e+308;
-				//pnt_size[ 0 ] = 9007199254740991;
+	$Mesh	= mesh;
+	$Ubo	= ubo;
+	on_draw();
+});
 
-				//console.log( move_pos, pnt_size );
-				//console.log( u.array_buffer );
+let time = 0;
+function on_draw(){
+	time		+= 0.02;
+	$Pos[0]		= Math.sin( time );
 
+	App.gl.clear();
 
-				/**/
-				App.gl = new Context( "FungiCanvas" );
-				if( !App.gl.ctx ) return;
+	App.Ubo.update( $Ubo.set( "move_pos", $Pos ) );
+	App.Mesh.draw( $Mesh );
 
-				App.gl.fit_screen();
-				window.addEventListener( "resize", (e)=>{ App.gl.fit_screen(); });
-
-				//App.Buffer	= new Buffer( App.gl );
-				//App.Ubo 	= new Ubo( App.gl );
-				App.Shader	= new Shader( App.gl );
-
-				let sh = App.Shader.new( "test", SRC_VERT, SRC_FRAG, 
-					[ { name:"u_color", type:"rgb", value:"red" } ],	// Uniform
-					{ transform : null }	//ubos
-				);
-				
-				//let buf = App.Buffers.new_array( new Float32Array([0,0,0]) );
-				//console.log( App.gl.ctx.STATIC_DRAW, App.gl.ctx.DYNAMIC_DRAW, )
-				/*
-				let u = App.Ubo.new( "transform", 0,
-					[
-						{ name:"move_pos", type:"vec3" },
-						{ name:"pnt_size", type:"int32" },						
-					]
-				);
-
-				//App.Ubo.update( u );
-				*/
-
-
-
-				/*				
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// START UP GL
-				if( !gl.init("FungiCanvas") ) return false;
-				gl.fit_screen().set_color("#d0d0d0").clear();
-
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// UNIFORM BUFFER OBJECTS
-				uboTransform = Ubo.build( "UBOTransform", 0, [
-					{ name:"move_pos", type:"vec3" },
-					{ name:"pnt_size", type:"float" },
-				]);
-
-				uboTransform.set_var( "pnt_size", 30.0 );
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// SHADER & MATERIALS
-				let shader	= Shader.from_inline( "inline_shader" );
-				if( !shader ) return false;
-
-				gMat = shader.new_material().bind().apply();
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				// CREATE VERTEX DATA
-				gMesh = Mesh.from_data( "pnt", [0,0,0] );			
-
-				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-				on_draw();
-				*/
-			});
-
-			let time = 0;
-			function on_draw(){
-				time += 0.02;
-				gPos[0] = Math.sin( time );
-
-				gl.clear();
-				uboTransform.set_var( "move_pos", gPos ).update();
-
-				Mesh.draw( gMesh );
-
-				requestAnimationFrame( on_draw );
-			}
+	requestAnimationFrame( on_draw );
+}
 
 //##################################################################
 
@@ -121,7 +81,10 @@ const SRC_VERT = `#version 300 es
 	layout(location=0) in vec3 a_pos;
 	uniform UBOTransform{ vec3 move_pos; float pnt_size; } ubo;
 	void main(void){
+		//gl_PointSize 	= 10.0;
 		gl_PointSize 	= ubo.pnt_size;
+		
+		//gl_Position		= vec4( a_pos, 1.0 );
 		gl_Position		= vec4( a_pos + ubo.move_pos, 1.0 );
 	}`;
 
@@ -129,56 +92,9 @@ const SRC_FRAG = `#version 300 es
 	precision mediump float;
 	uniform vec3 u_color;
 	out vec4 out_color;
-	void main(void){ out_color = vec4( u_color, 1.0 ); }
-`;
-
-		</script>
-	</head>
-<body>
-	<canvas id="FungiCanvas"></canvas>
-
-<script id="inline_shader" type="plain/text">
-<shader>{
-	"name"		: "TestShader",
-	"ubo"		: [ "UBOTransform" ],
-	"options"	: { "modelMatrix":false },
-	"uniforms"	: [
-		{ "name":"u_color", "type":"rgb", "value":"#ff0000" }
-	]
-}<\shader>
-
-
-<materialsXXX>[
-	{ "name":"TestShader",	
-		"options"	: { "depthTest":true, "blend":false },
-		"uniforms":[
-		{ "name":"u_colorAry", "value": ["ff0000","00ff00","0000ff","555555","999999","dddddd","000000","ff7f7f","ff8c00","ffff00"] }
-	]}
-]<\materialsXXX>
-	
-<vertex>
-	#version 300 es
-	layout(location=0) in vec3 a_pos;
-
-	uniform UBOTransform{ vec3 move_pos; float pnt_size; } ubo;
-
 	void main(void){
-		gl_PointSize 	= ubo.pnt_size;
-		gl_Position		= vec4( a_pos + ubo.move_pos, 1.0 );
+		out_color = vec4( u_color, 1.0 );
+		//out_color = vec4( 1.0, 0.0, 0.0, 1.0 );
 	}
-<\vertex>
-
-<fragment>
-	#version 300 es
-	precision mediump float;
-
-	uniform vec3 u_color;
-
-	out vec4 out_color;
-
-	void main(void){ out_color = vec4( u_color, 1.0 ); }
-<\fragment>	
-</script>
-
-</body>
-</html>
+`;
+</script></head><body><canvas id="FungiCanvas"></canvas></body></html>

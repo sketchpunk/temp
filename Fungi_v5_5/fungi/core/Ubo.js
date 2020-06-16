@@ -26,6 +26,16 @@ class Ubo{
 		this.bind_point	= pnt;
 	}
 
+	set( name, data ){
+		let v = this.vars.get( name );
+		if( !v ){ console.error( "Ubo variable not found %s for %s.", name, this.name ); return this; }
+
+		if( v.type_buffer.length == 1 ) v.type_buffer[ 0 ] = data;
+		else							v.type_buffer.set( data );
+
+		return this;
+	}
+
 	create_byte_buffer(){
 		this.byte_size 		= calculate_size( this.vars );
 		this.array_buffer	= new ArrayBuffer( this.byte_size );
@@ -55,7 +65,10 @@ class Ubo{
 
 
 class UboFactory{
-	constructor( gl ){ this.gl = gl; }
+	constructor( gl ){
+		this.gl		= gl;
+		this.cache	= new Map();
+	}
 
 	update( ubo ){
 		this.gl.ctx.bindBuffer(		this.gl.ctx.UNIFORM_BUFFER, ubo.buffer_id ); 
@@ -85,6 +98,8 @@ class UboFactory{
 		this.gl.ctx.bindBufferBase( this.gl.ctx.UNIFORM_BUFFER, bind_point, b_id );		// Save Buffer to Uniform Buffer Bind point
 
 		ubo.buffer_id = b_id;
+
+		this.cache.set( name, ubo );
 		return ubo;
 	}
 }

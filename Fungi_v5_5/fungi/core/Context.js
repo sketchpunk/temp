@@ -1,4 +1,6 @@
 
+import Colour from "./Colour.js";
+
 const ARRAY 	= 34962;
 const ELEMENT	= 34963;
 const UNIFORM	= 35345;
@@ -62,7 +64,12 @@ class Context{
 		this.height	= h;
 		return this;
 	}
-	
+
+	set_color( hex ){
+		let c = new Colour( hex ).rgba;
+		this.ctx.clearColor( c[ 0 ], c[ 1 ], c[ 2 ], c[ 3 ] );
+		return this;
+	}	
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 
 	// #region BUFFERS
