@@ -1,6 +1,4 @@
-import App from "../App.js";
-import { Vec3, Quat, Mat4, Transform } from "../maths/Maths.js";
-
+import App, { Vec3, Quat, Mat4, Transform } from "../App.js";
 
 //#########################################################################
 
@@ -12,9 +10,9 @@ class Node{
 	model_matrix	= new Mat4();		// Model matrix used in shaders. Calculated by NodeSystem based on world space transform data
 
 	// Heirachy
-	//level			= 0;	// Cache at what level of the hierachy the node exists. Used for Sorting in NodeSystem.
-	//parent			= null;	// Reference to the Entity Parent. May be null if there is no parent.
-	//children		= [];	// List to references of Entity Children
+	level			= 0;	// Cache at what level of the hierachy the node exists. Used for Sorting in NodeSystem.
+	parent			= null;	// Reference to the Entity Parent. May be null if there is no parent.
+	children		= [];	// List to references of Entity Children
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
 
 	// #region SETTERS / GETTERS
@@ -24,48 +22,100 @@ class Node{
 		this.updated = true;
 		return this;
 	}
+
+	add_pos( x, y, z ){
+		if( arguments.length == 1 ) this.local.pos.add( x );
+		else{
+			this.local.pos.x += x;
+			this.local.pos.y += y;
+			this.local.pos.z += z;
+		}
+		this.updated = true;
+		return this;
+	}
+
+	//----------------------------------
+
+	set_rot_axis( axis, ang ){ this.local.rot.from_axis_angle( axis, ang ); this.updated = true; return this; }
+	set_rot_look( dir, up=null ){ Quat.lookRotation( dir, up || Vec3.UP, this.local.rot ); this.updated = true; return this; }
+	set_rot( q ){ this.local.rot.copy( q ); this.updated = true; return this; }
+	rot_by( deg, axis="y" ){ this.local.rot.rot_deg( deg, axis ); this.updated = true; return this; }
+
+	//----------------------------------
+
+	set_scl( x, y, z ){
+		if( Array.isArray(x) || ArrayBuffer.isView(x) )			this.local.scl.copy( x );
+		else if( arguments.length == 1 && typeof x == "number")	this.local.scl.set( x, x, x );
+		else if( arguments.length == 3 )						this.local.scl.set( x, y, z ); 
+		else { console.log("Unknown Scale Value"); return this; }
+		
+		this.updated = true;
+		return this;
+	}
+
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
 
 	// #region HEIRACHY
+	add_child( cn, update_lvl=true ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// VALIDATION
+		if( this.children.indexOf( cn ) != -1 ){ console.log( "Entity already a child." ); return this; }
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SET DATA
+		if( cn.parent != null ) cn.parent.remove_child( eid );
+
+		cn.parent	= this;				// Set parent on the child
+		cn.level	= this.level + 1;	// Set the level value for the child
+		this.children.push( cn );		// Add child to parent's children list
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// if child has its own children, update their level values
+		if( update_lvl && cn.children.length > 0 ) update_child_level( cn );
+		return this;
+	}
+
+	rm_child( cn ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// VALIDATION
+		let idx = this.children.indexOf( cn );
+		if( idx != -1 ){ console.log( "Entity is not a child." ); return this; }
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SET DATA
+		cn.parent	= null;				// Clear Childs Parent Link
+		cn.level	= 0;				// Reset its level
+		this.children.splice( idx, 1 );	// Remove from parent
+		return this;
+	}
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
 }
 
 
 function NodeSys( ecs ){
-	console.log( "NodeSys" );
-
-	let ary = ecs.query_comp( "Node" );
+	let ary = ecs.query_comp( "Node", node_lvl_sort );
 	if( !ary ) return;
 
 	let n;
 	for( n of ary ){
+		//console.log( ecs.entities.instances[ n._entity_id ].name );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// if parent has been modified, then child should also be concidered modified.
+		if( n.parent !== null && n.parent.updated ) n.updated = true;
 		if( !n.updated || !n._active ) continue;	
 
-		n.world.copy( n.local );
-
-		n.model_matrix.from_quat_tran_scale( n.world.rot, n.world.pos, n.world.scl );
-	}
-
-	/*
-	let cn, ary = ecs.query_comp( "Node", node_lvl_sort );
-
-	for( cn of ary ){
-		// if parent has been modified, then child should also be concidered modified.
-		if( cn.parent !== null && cn.parent.Node.updated ) cn.updated = true;
-		if( !cn.updated ) continue;
-
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// if parent exists, add parent's world transform to the child's local transform
-		if( cn.parent !== null )	cn.world.from_add( cn.parent.Node.world, cn.local ); //Transform.add( cn.parent.Node.world, cn.local, cn.world );
-		else						cn.world.copy( cn.local );
+		if( n.parent !== null )	n.world.from_add( n.parent.world, n.local );
+		else					n.world.copy( n.local );
 
 		// Create Model Matrix for Shaders
-		cn.model_matrix.from_quat_tran_scale( cn.world.rot, cn.world.pos, cn.world.scl );
+		n.model_matrix.from_quat_tran_scale( n.world.rot, n.world.pos, n.world.scl );
 	}
-	*/	
 }
 
 function NodeCleanupSys( ecs ){
-	console.log( "NodeCleanup" );
 	let n, ary = ecs.query_comp( "Node" );
 	for( n of ary ) if( n.updated ) n.updated = false;
 }
@@ -358,32 +408,23 @@ function NodeSysX( ecs ){
 	}	
 }
 
-function NodeCleanupSysx( ecs ){
-	let n, ary = ecs.query_comp( "Node" );
-	for( n of ary ) if( n.updated ) n.updated = false;
-}
-
-
 //#########################################################################
 // HELPER
 
+// Sort by Hierarachy Levels so parents are calculated before children
 function node_lvl_sort( a, b ){
-	//Sort by Hierarachy Levels so parents are calculated before children
-	if(a.level == b.level)		return  0;	// A = B
-	else if(a.level < b.level)	return -1;	// A < B
-	else						return  1;	// A > B
+	return	( a.level == b.level )? 0 :
+			( a.level < b.level )? -1 : 0;
 }
 
 // Update the level of all the child nodes of node
 function update_child_level( n ){
-	let c, cn;
-	for(c of n.children){
-		cn			= c.Node;
-		cn.level	= n.level + 1;
-		if( cn.children.length > 0 ) update_child_level( cn );
+	let c;
+	for( c of n.children ){
+		c.level	= n.level + 1;
+		if( c.children.length > 0 ) update_child_level( c );
 	}
 }
-
 
 //#########################################################################
 export default Node;

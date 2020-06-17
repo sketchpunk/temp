@@ -36,14 +36,14 @@ function test_com(){
 
 function test_entity(){
 	let ecs = new Ecs();
-	//ecs.components.reg( Com );
 	ecs.components.reg( Dooo );
-	//let c = ecs.components.new( "Com" );
 
 	let eid = ecs.new_entity( "Woot" );
 	ecs.add_com( eid, new Com( 10 ) );
 	ecs.add_com( eid, new Other() );
 	ecs.add_com( eid, "Dooo" );
+
+	let eid2 = ecs.new_entity( "woot2", "Com", new Doo(), "Other" );
 
 	//console.log("eep", ecs.get_com( eid, "Com" ) );
 	ecs.debug_entity( eid );

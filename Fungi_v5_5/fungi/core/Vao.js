@@ -4,6 +4,11 @@
 let buf = App.Buffer.new_array( new Float32Array([0,0,0]) );
 let vao = App.Vao.new([
 	{ buffer:buf, attrib_loc:App.Shader.POS_LOC, instanced:false },
+	
+	{ buffer:buf, interleaved: [
+		{ attrib_loc:0, size:3, stride_len:4 * 4, offset:0 * 4, instanced:false },
+		{ attrib_loc:1, size:1, stride_len:4 * 4, offset:3 * 4, instanced:false },
+	]},
 ]);
 */
 
@@ -24,13 +29,25 @@ class VaoFactory{
 		for( itm of config ){
 			buf = itm.buffer;
 			this.gl.ctx.bindBuffer( buf.type, buf.id );
+			console.log( "vao", itm );
 
-			// Only Array Buffers have Attribute Loc.
-			if( itm.attrib_loc !== undefined && itm.attrib_loc !== null ){
-				this.gl.ctx.enableVertexAttribArray( itm.attrib_loc );
-				this.gl.ctx.vertexAttribPointer( itm.attrib_loc, buf.component_len, this.gl.ctx.FLOAT, false, buf.stride_len, buf.offset );
+			//----------------------------------------------
+			if( !itm.interleaved ){
+				// Only Array Buffers have Attribute Loc.
+				if( itm.attrib_loc !== undefined && itm.attrib_loc !== null ){
+					this.gl.ctx.enableVertexAttribArray( itm.attrib_loc );
+					this.gl.ctx.vertexAttribPointer( itm.attrib_loc, buf.component_len, this.gl.ctx.FLOAT, false, buf.stride_len, buf.offset );
 
-				if( itm.instanced ) this.gl.ctx.vertexAttribDivisor( itm.attrib_loc, 1 );
+					if( itm.instanced ) this.gl.ctx.vertexAttribDivisor( itm.attrib_loc, 1 );
+				}
+			//----------------------------------------------
+			}else{
+				let spec;
+				for( spec of itm.interleaved ){
+					this.gl.ctx.enableVertexAttribArray( spec.attrib_loc );
+					this.gl.ctx.vertexAttribPointer( spec.attrib_loc, spec.size, this.gl.ctx.FLOAT, false, spec.stride_len, spec.offset );
+					if( spec.instanced ) this.gl.ctx.vertexAttribDivisor( spec.attrib_loc, 1 );
+				}
 			}
 		}
 

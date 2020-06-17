@@ -30,24 +30,23 @@ class MeshFactory{
 		this.gl		= gl;
 	}
 
+	new( name ){ return new Mesh( name ); }
+
 	draw( m, draw_mode = 0, do_bind=true ){
 		if( do_bind ) this.gl.ctx.bindVertexArray( m.vao.id );
 
 		if( m.element_cnt != 0 ){
 			if( m.element_type !== 0 )	this.gl.ctx.drawElements( draw_mode, m.element_cnt, m.element_type, 0 );
 			else						this.gl.ctx.drawArrays( draw_mode, 0, m.element_cnt );
-
-			//console.log( "draw", draw_mode, m.element_cnt );
-			//this.gl.ctx.drawArrays( draw_mode, 0,  5 );
 		}
 
 		if( do_bind ) this.gl.ctx.bindVertexArray( null );
 		return this;
 	}
 
-	from_data( name, vert, idx=null, norm=null, uv=null, color=null, is_rgba=false, b_idx=null, b_wgt=null, bone_limit=4 ){
+	from_data( name, vert, vert_comp_len=3, idx=null, norm=null, uv=null, color=null, is_rgba=false, b_idx=null, b_wgt=null, bone_limit=4 ){
 		let mesh	= new Mesh( name ),
-			buf 	= this.buffer.new_array( vert, 3, true, true ),
+			buf 	= this.buffer.new_array( vert, vert_comp_len, true, true ),
 			config	= [
 				{ buffer: buf, attrib_loc: this.shader.POS_LOC },
 			];
@@ -59,6 +58,7 @@ class MeshFactory{
 			buf = this.buffer.new_element( idx, true, true );
 			mesh.buffers.set( "indices", buf );
 			config.push({ buffer: buf });
+
 			if( idx instanceof Uint16Array ) 		mesh.element_type = USHORT;
 			else if( idx instanceof Uint32Array ) 	mesh.element_type = UINT;
 		}
@@ -93,7 +93,7 @@ class MeshFactory{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		mesh.vao			= this.vao.new( config );
-		mesh.element_cnt	= ( idx )? idx.length : vert.length / 3;
+		mesh.element_cnt	= ( idx )? idx.length : vert.length / vert_comp_len;
 		return mesh;
 	}
 }

@@ -286,10 +286,38 @@ function sys_idx( ary, itm ){
 }
 // #endregion ////////////////////////////////////////////////////////////////////////////
 
+class QueryCache{
+	cache = new Map();
+
+	get_query_comp( name, sort_fn=null ){
+		let key = "query_comp_" + name;
+		if( sort_fn ) key += "_" + sort_fn.name;
+		return this.cache.get( key );
+	}
+	set_query_comp( data, name, sort_fn=null ){
+		let key = "query_comp_" + name;
+		if( sort_fn ) key += "_" + sort_fn.name;
+		this.cache.set( key, data );
+	}
+
+	get_query_entities( com_list, sort_fn=null ){
+		let key = "qent_" + com_list.join( "_" );
+		if( sort_fn ) key += "_" + sort_fn.name;
+		return this.cache.get( key );
+	}
+
+	set_query_entities( data, com_list, sort_fn=null ){
+		let key = "qent_" + com_list.join( "_" );
+		if( sort_fn ) key += "_" + sort_fn.name;
+		return this.cache.set( key, data );
+	}
+}
+
 class Ecs{
 	components	= new Components();
 	entities	= new Entities();
 	systems		= new Systems();
+	queries		= new QueryCache();
 
 	run(){
 		this.systems.run( this );
@@ -397,6 +425,9 @@ class Ecs{
 
 	// #region QUERY
 	query_entities( com_list, sort_fn=null ){
+		let cache = this.queries.get_query_entities( com_list, sort_fn );
+		if( cache ) return cache;
+
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		let bit_mask = this.components.create_bit_mask( com_list );
 		if( bit_mask == null ) return null;
@@ -422,6 +453,9 @@ class Ecs{
 
 			rtn.push( o );
 		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( rtn.length > 0 ) this.queries.set_query_entities( rtn, com_list, sort_fn );
 
 		return rtn;
 
@@ -451,10 +485,23 @@ class Ecs{
 	}
 
 	query_comp( name, sort_fn=null ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( sort_fn ){
+			let cache = this.queries.get_query_comp( name, sort_fn );
+			if( cache ) return cache;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		let reg = this.components.get_reg( name );
 		if( reg.instances.length == 0 ) return null;
 
-		return reg.instances;
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( sort_fn ){
+			let rtn = [ ...reg.instances ];
+			rtn.sort( sort_fn );
+			this.queries.set_query_comp( rtn, name, sort_fn );
+			return rtn;
+		}else return reg.instances;
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Check Cache for Sorted Components
 		//if( sort_fn ){

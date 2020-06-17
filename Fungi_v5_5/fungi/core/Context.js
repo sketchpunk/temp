@@ -23,7 +23,7 @@ class Context{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// WebGL Context
-		this.ctx = canvas.getContext( "webgl2" ); //getContext( 'webgl2', { antialias: false, xrCompatible:true } );
+		this.ctx = canvas.getContext( "webgl2", { antialias: true } ); //getContext( 'webgl2', { antialias: false, xrCompatible:true } );
 		if( !this.ctx ){ console.error("WebGL context is not available."); return false; }
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

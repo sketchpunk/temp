@@ -12,7 +12,7 @@ class Buffer{
 	usage 			= 0;		// Is it static or dynamic
     capacity		= 0;		// Capacity in bytes of the gpu buffer
 	byte_len		= 0;		// How Many Bytes Currently Posted ot the GPU
-	component_len	= 1;		// How many Elements make one component, Like Vec3 has 3.
+	component_len	= 0;		// How many Elements make one component, Like Vec3 has 3.
 	
 	interleaved     = null;		
     stride_len		= 0;		// Length of Data chunks, interleaved data.
@@ -50,12 +50,23 @@ class BufferFactory{
 		buf.component_len = comp_len;
 		return buf;
 	}
+
+	new_empty_array( byte_size, is_static=true, unbind=true ){
+		let buf = new Buffer( this.gl.ctx.createBuffer(), ARRAY, is_static );
+
+		this.gl.ctx.bindBuffer( buf.type, buf.id );
+		this.gl.ctx.bufferData( buf.type, byte_size, buf.usage );
+
+		buf.capacity = byte_size;
+		if( unbind ) this.gl.ctx.bindBuffer( buf.type, null );
+		return buf;
+	}
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 	
 	// #region UPDATE
 	update_data( buf, type_ary=null ){
 		let b_len = type_ary.byteLength;
-		this.gl.ctx.bindBuffer( this.type, this.ref );
+		this.gl.ctx.bindBuffer( buf.type, buf.id );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// if the data size is of capacity on the gpu, can set it up as sub data.
@@ -69,12 +80,6 @@ class BufferFactory{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.gl.ctx.bindBuffer( buf.type, null ); // unbind buffer
 		buf.byte_len = b_len;
-	}
-
-	set_empty_buffer( buf, byte_size ){ 
-		this.gl.ctx.bufferData( buf.type, byte_size, buf.usage );
-		buf.capacity = byte_size;
-		return this;
 	}
 
 	set_dataview( buf, dv, b_start, b_len ){

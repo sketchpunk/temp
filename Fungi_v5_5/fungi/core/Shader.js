@@ -184,7 +184,7 @@ class ShaderFactory{
 		return this;
 	}
 	
-	new_material( name=null, uniforms=null ){
+	new_material( name=null, uniforms=null, options=null ){
 		let sh = this.cache.get( name );
 		if( !sh ){ console.error( "No Shader by the name %s.", name ); return null; }
 
@@ -200,6 +200,12 @@ class ShaderFactory{
 		if( uniforms ){
 			let n;
 			for( n in uniforms ) mat.set( n, uniforms[ n ] );
+		}
+
+		// Load in custom Option Data if exists
+		if( options ){
+			let o;
+			for( o in options ) mat.options[ o ] = options[ o ];
 		}	
 
 		return mat;

@@ -72,6 +72,14 @@ class UboFactory{
 
 	get( n ){ return this.cache.get( n ); }
 
+	get_array(){
+		let name, rtn = new Array();
+		for( name of arguments ){
+			rtn.push( this.cache.get( name ) );
+		}
+		return rtn;
+	}
+
 	update( ubo ){
 		this.gl.ctx.bindBuffer(		this.gl.ctx.UNIFORM_BUFFER, ubo.buffer_id ); 
 		this.gl.ctx.bufferSubData(	this.gl.ctx.UNIFORM_BUFFER, 0, ubo.data_view, 0, ubo.byte_size );

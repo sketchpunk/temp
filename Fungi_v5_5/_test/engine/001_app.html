@@ -5,41 +5,47 @@
 	canvas{border:1px solid green; box-sizing: border-box;}
 </style>
 <script type="module">
-import App	from "../../fungi/App.js";
-
-import Node,{ NodeSys, NodeCleanupSys } from "../../fungi/ecs/Node.js";
-import Camera,{ CameraSys }	from "../../fungi/ecs/Camera.js";
-import Draw, { DrawSys }	from "../../fungi/ecs/Draw.js";
+import App, { Node, Draw } from "../../fungi/App.js";
+import GridFloor	from "../../fungi/geo/GridFloor.js";
+import FacedCube	from "../../fungi/geo/FacedCube.js";
 
 App
 	.init()
 	.load_shaders( "BaseColor.js" )
+	.set_camera( 0, 20, 5, 0, 0.5, 0 )
 	.then( init );
 
+let CubeANode, CubeBNode;
+
+function on_render( dt, ss ){
+	CubeANode.rot_by( 60 * dt );
+	CubeBNode.rot_by( -80 * dt );
+}
+
 function init(){
-
-	App.ecs.systems
-		.reg( NodeSys, 800 )
-		.reg( CameraSys, 801 )
-		.reg( new DrawSys(), 950 )
-		.reg( NodeCleanupSys, 1000 )
-	;
-		
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//let cam		= new Camera().set_perspective();
-	//let cam_id	= App.ecs.new_entity( "Camera", "Node", cam );
+	let mat		= App.shader.new_material( "BaseColor", { color:"#303030" });
 
-	let mat		= App.shader.new_material( "BaseColor" );
+	/*
 	let mesh	= App.mesh.from_data( "m", new Float32Array( [ 0,0,0 ] ) );
 	let draw 	= new Draw().add( mesh, mat, 0 );
-	let node	= new Node().set_pos( 3, 0, 2 );
+	let node	= new Node().set_pos( 0, 0.2, 0 );
 	let aid		= App.ecs.new_entity( "A", node, draw );
+	*/
+
+	GridFloor( mat );
+	let bi = FacedCube( "CubeB" );
+	let ai = FacedCube( "CubeA" );
+	CubeANode = App.ecs.get_com( ai, "Node" );
+	CubeBNode = App.ecs.get_com( bi, "Node" );
+
+	CubeANode.set_pos( 0, 0.55, 0 ).add_child( CubeBNode );
+	CubeBNode.set_pos( 0, 1.0, 0 ).set_scl( 0.5 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//App.ecs.debug_entity( aid );
-
-	App.ecs.run();
-	console.log( App.ecs.components.get_reg( "Camera" ).instances );
+	//App.ecs.debug_entity( ai );
+	App.on_render = on_render;
+	App.render_mode( 1 );
 }
 
 </script></head><body><canvas id="pg_canvas"></canvas></body></html>

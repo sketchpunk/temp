@@ -52,10 +52,12 @@ class Colour{
 		if( arguments.length == 0 ) return null;
 
 		let ary	= ( Array.isArray( arguments[0] ) )? arguments[ 0 ] : arguments,
-			rtn	= new Float32Array( ary.length * 3 )
-			ii	= 0;
+			rtn	= new Float32Array( ary.length * 3 ),
+			ii	= 0,
+			c;
 	
-		for( let i=0, c, p; i < ary.length; i++ ){
+		for( let i=0; i < ary.length; i++ ){
+			c = ary[ i ];
 			rtn[ ii++ ] = parseInt( c[1] + c[2], 16 ) * NORMALIZE_RGB;
 			rtn[ ii++ ] = parseInt( c[3] + c[4], 16 ) * NORMALIZE_RGB;
 			rtn[ ii++ ] = parseInt( c[5] + c[6], 16 ) * NORMALIZE_RGB;

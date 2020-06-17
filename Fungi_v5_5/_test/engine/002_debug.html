@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html><head><style>
+	html,body{margin:0px; padding:0px; width:100%; height:100%;}
+	body{background-color:#404040;}
+	canvas{border:1px solid green; box-sizing: border-box;}
+</style>
+<script type="module">
+/**/
+import App, { Node, Draw } from "../../fungi/App.js";
+import GridFloor	from "../../fungi/geo/GridFloor.js";
+import InterleavedFloatArray from "../../fungi/lib/InterleavedFloatArray.js";
+
+App
+	.init()
+	.load_shaders( "BaseColor.js" )
+	.set_camera( 0, 20, 5, 0, 0.5, 0 )
+	.then( init );
+
+//################################################################################
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//let mat		= App.shader.new_material( "BaseColor", { color:"#303030" });
+	/*
+	let mesh	= App.mesh.from_data( "m", new Float32Array( [ 0,0,0 ] ) );
+	let draw 	= new Draw().add( mesh, mat, 0 );
+	let node	= new Node().set_pos( 0, 0.2, 0 );
+	let aid		= App.ecs.new_entity( "A", node, draw );
+	*/
+
+	//GridFloor( mat );
+
+	let flat_ary = new InterleavedFloatArray([
+		{ name:"pos",	size:3 },
+		{ name:"size",	size:1 },
+	], 2 );
+
+	flat_ary.push( [0,0,0], 5 );
+	flat_ary.push( [0,0.5,0], 5 );
+
+	let buf		= App.buffer.new_empty_array( flat_ary.byte_capacity, false );
+	let config	= [ { buffer: buf, interleaved: flat_ary.generate_config() } ];
+	/*
+	let config	= [
+		{ buffer: buf, interleaved: [
+			{ attrib_loc:0, size:3, stride_len:4 * 4, offset:0 * 4, instanced:false },
+			{ attrib_loc:1, size:1, stride_len:4 * 4, offset:3 * 4, instanced:false },
+		]}
+	];
+	*/
+	// Test pushing data into empty buffer
+	App.buffer.update_data( buf, flat_ary.buffer );
+	
+	// Generate Mesh Data for rendering
+	let mesh = App.mesh.new( "test" );
+	mesh.vao			= App.vao.new( config );
+	mesh.element_cnt	= flat_ary.len;
+	
+	// Create Entity with Node and Draw Components
+	let mat = App.shader.new_material( "BaseColor", { color:"#303030" });
+	App.ecs.new_entity( "Point", "Node", new Draw( mesh, mat, App.mesh.PNT ) );
+}
+
+
+//################################################################################
+
+</script></head><body><canvas id="pg_canvas"></canvas></body></html>
