@@ -214,7 +214,7 @@ class System{
 class Systems{
 	items = new SortedArray( sys_idx );
 
-	add( sys, priority = 50, active = true ){
+	reg( sys, priority = 50, active = true ){
 		this.items.add( new System( sys, priority, active ) );
 		return this;
 	}
@@ -402,18 +402,28 @@ class Ecs{
 		if( bit_mask == null ) return null;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let e, o, c, rtn = new Array();
+		let i, com_ids = [];
+		for( let i=0; i < com_list.length; i++ ){
+			com_ids.push( this.components.get_type_id( com_list[ i ] ) );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let e, o, c_id, ct_id, rtn = new Array();
 		for( e of this.entities.instances ){
-			if( !e._active || !e.component_mask.test_mask( bit_mask ) ) continue;
+			if( !e.active || !e.component_mask.test_mask( bit_mask ) ) continue;
 
-			o = { id : e.id };
+			o = {};
 
-			//for( c of com_list ){
-			//	o[ c ] = 
-			//}
+			for( i in com_ids ){
+				ct_id	= com_ids[i];
+				c_id	= e.component_ids.get( ct_id );
+				o[ com_list[i] ] = this.components.get( ct_id, c_id ); 
+			}
 
 			rtn.push( o );
 		}
+
+		return rtn;
 
 		/*
 		let bit_mask 	= Components.create_bit_mask( com_list ),

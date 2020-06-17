@@ -70,6 +70,8 @@ class UboFactory{
 		this.cache	= new Map();
 	}
 
+	get( n ){ return this.cache.get( n ); }
+
 	update( ubo ){
 		this.gl.ctx.bindBuffer(		this.gl.ctx.UNIFORM_BUFFER, ubo.buffer_id ); 
 		this.gl.ctx.bufferSubData(	this.gl.ctx.UNIFORM_BUFFER, 0, ubo.data_view, 0, ubo.byte_size );

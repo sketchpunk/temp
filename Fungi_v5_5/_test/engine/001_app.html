@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html><head><style>
+	html,body{margin:0px; padding:0px; width:100%; height:100%;}
+	body{background-color:#404040;}
+	canvas{border:1px solid green; box-sizing: border-box;}
+</style>
+<script type="module">
+import App	from "../../fungi/App.js";
+
+import Node,{ NodeSys, NodeCleanupSys } from "../../fungi/ecs/Node.js";
+import Camera,{ CameraSys }	from "../../fungi/ecs/Camera.js";
+import Draw, { DrawSys }	from "../../fungi/ecs/Draw.js";
+
+App
+	.init()
+	.load_shaders( "BaseColor.js" )
+	.then( init );
+
+function init(){
+
+	App.ecs.systems
+		.reg( NodeSys, 800 )
+		.reg( CameraSys, 801 )
+		.reg( new DrawSys(), 950 )
+		.reg( NodeCleanupSys, 1000 )
+	;
+		
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//let cam		= new Camera().set_perspective();
+	//let cam_id	= App.ecs.new_entity( "Camera", "Node", cam );
+
+	let mat		= App.shader.new_material( "BaseColor" );
+	let mesh	= App.mesh.from_data( "m", new Float32Array( [ 0,0,0 ] ) );
+	let draw 	= new Draw().add( mesh, mat, 0 );
+	let node	= new Node().set_pos( 3, 0, 2 );
+	let aid		= App.ecs.new_entity( "A", node, draw );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//App.ecs.debug_entity( aid );
+
+	App.ecs.run();
+	console.log( App.ecs.components.get_reg( "Camera" ).instances );
+}
+
+</script></head><body><canvas id="pg_canvas"></canvas></body></html>

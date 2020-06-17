@@ -84,7 +84,9 @@ class Dooo{}
 
 function sys_fn( ecs ){
 	console.log( "Fn" );
-	let ary = ecs.query_entities( ["Com"] );
+	let ary = ecs.query_entities( ["Com", "Dooo"] );
+
+	console.log( ary );
 	/*
 	if( ary == null ) return;
 
