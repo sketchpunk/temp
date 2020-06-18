@@ -4,17 +4,21 @@ const ELEMENT	= 34963;
 const UNIFORM	= 35345;
 const STATIC	= 35044;
 const DYNAMIC	= 35048;
+const USHORT	= 5123;
+const UINT		= 5125;
+const FLOAT		= 5126;
 
 class Buffer{
 	// #region MAIN	
     id              = null;		// Buffer GL ID
 	type			= null;		// Buffer Type
+	data_type		= FLOAT;	// Data Type Used
 	usage 			= 0;		// Is it static or dynamic
     capacity		= 0;		// Capacity in bytes of the gpu buffer
-	byte_len		= 0;		// How Many Bytes Currently Posted ot the GPU
+	byte_len		= 0;		// How Many Bytes Currently Posted to the GPU
 	component_len	= 0;		// How many Elements make one component, Like Vec3 has 3.
 	
-	interleaved     = null;		
+	//interleaved     = null;		
     stride_len		= 0;		// Length of Data chunks, interleaved data.
     offset			= 0;		// Offset of Of Data Chunk, Data Leaved
 
@@ -27,6 +31,15 @@ class Buffer{
 }
 
 class BufferFactory{
+	ARRAY 	= 34962;
+	ELEMENT	= 34963;
+	UNIFORM	= 35345;
+	STATIC	= 35044;
+	DYNAMIC	= 35048;
+	USHORT	= 5123;
+	UINT	= 5125;
+	FLOAT	= 5126;
+
 	constructor( gl ){ this.gl = gl; }
 
 	// #region CREATE
@@ -36,15 +49,19 @@ class BufferFactory{
 		if( t_ary ){
 			this.gl.ctx.bindBuffer( buf.type, buf.id );
 			this.gl.ctx.bufferData( buf.type, t_ary, buf.usage );
-			buf.byte_len = buf.capacity = t_ary.byteLength;
 			if( unbind ) this.gl.ctx.bindBuffer( buf.type, null );
+
+			buf.byte_len = buf.capacity = t_ary.byteLength;
+			if( t_ary instanceof Uint16Array ) 			buf.data_type = USHORT;
+			else if( t_ary instanceof Uint32Array ) 	buf.data_type = UINT;
 		}
 
 		return buf;
 	}
-	
-	new_element( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( ELEMENT, t_ary, is_static, unbind ); }
+
 	new_uniform( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( UNIFORM, t_ary, is_static, unbind ); }
+	new_element( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( ELEMENT, t_ary, is_static, unbind ); }
+
 	new_array( t_ary=null, comp_len=3, is_static=true, unbind=true ){
 		let buf = this.new_buffer( ARRAY, t_ary, is_static, unbind );
 		buf.component_len = comp_len;
@@ -64,9 +81,14 @@ class BufferFactory{
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 	
 	// #region UPDATE
-	update_data( buf, type_ary=null ){
+	update_data( buf, type_ary ){
 		let b_len = type_ary.byteLength;
 		this.gl.ctx.bindBuffer( buf.type, buf.id );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( type_ary instanceof Float32Array ) 		buf.data_type = FLOAT;
+		else if( type_ary instanceof Uint16Array ) 	buf.data_type = USHORT;
+		else if( type_ary instanceof Uint32Array )	buf.data_type = UINT;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// if the data size is of capacity on the gpu, can set it up as sub data.

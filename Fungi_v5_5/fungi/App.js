@@ -164,6 +164,16 @@ class Launcher{
 		});
 		return this;
 	}
+
+	use_debug(){
+		this.task( async()=>{ 
+			let mod = await import("./Debug.js");
+			App.Debug = mod.default;
+			App.Debug.init();
+			return true; 
+		});
+		return this;
+	}
 	// #endregion ///////////////////////////////////////////////////////////////
 
 }

@@ -15,6 +15,19 @@ class Mesh{
 	}
 }
 
+/*
+this.mesh 	= App.mesh.from_config([
+	{ name: "indices", buffer: buf_idx },
+	{ name: "vertices", buffer: verts, attrib_loc:0, size:3, stride_len:0, offset:0 },
+	{ name: "quad", buffer: buf_vert, interleaved: [
+		{ attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },
+		{ attrib_loc:1, size:3, stride_len:8 * 4, offset:3 * 4 },
+		{ attrib_loc:2, size:2, stride_len:8 * 4, offset:6 * 4 },
+	]},
+	{ name: "inst", buffer: this.buf, instanced:true, interleaved: this.data.generate_config( 6, true ) },
+], "PointShapes", 6 );
+*/
+
 class MeshFactory{
 	PNT			= 0;
 	LINE		= 1;
@@ -97,8 +110,26 @@ class MeshFactory{
 		return mesh;
 	}
 
-	from_config( config ){
-		
+	from_config( config, name, element_cnt=0, instance_cnt=0 ){
+		let i, m = new Mesh( name );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Basic Configuration
+		for( i of config ){
+			m.buffers.set( i.name, i.buffer );			// Save Buffer to Mesh
+			if( i.instanced ) m.instanced = true;		// Is there instanced Data being used?
+
+			if( i.buffer.type == this.buffer.ELEMENT )	// What Data Type is the Element Buffer
+				m.element_type = i.buffer.data_type;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Final Configuration
+		m.element_cnt	= element_cnt;
+		m.instance_cnt	= instance_cnt;
+		m.vao 			= this.vao.new( config );
+
+		return m;
 	}
 }
 

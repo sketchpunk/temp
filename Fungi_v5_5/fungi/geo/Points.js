@@ -53,20 +53,16 @@ class Points{
 		));
 
 		this.buf	= App.buffer.new_empty_array( this.data.byte_capacity, false );
-		this.mesh	= App.mesh.new( "PointShapes" );
-
-		this.mesh.element_cnt	= 6;	// Index Count
-		this.mesh.element_type	= 5123; // Uint16
-		this.mesh.instanced		= true;
-		this.mesh.vao			= App.vao.new([
+		
+		this.mesh 	= App.mesh.from_config([
 			{ name: "indices", buffer: buf_idx },
 			{ name: "quad", buffer: buf_vert, interleaved: [
-				{ attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4, instanced:false },
-				{ attrib_loc:1, size:3, stride_len:8 * 4, offset:3 * 4, instanced:false },
-				{ attrib_loc:2, size:2, stride_len:8 * 4, offset:6 * 4, instanced:false },
+				{ attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },
+				{ attrib_loc:1, size:3, stride_len:8 * 4, offset:3 * 4 },
+				{ attrib_loc:2, size:2, stride_len:8 * 4, offset:6 * 4 },
 			]},
-			{ name: "inst", buffer: this.buf, interleaved: this.data.generate_config( 6, true ) },
-		]);
+			{ name: "inst", buffer: this.buf, instanced:true, interleaved: this.data.generate_config( 6, true ) },
+		], "PointShapes", 6 );
 	}
 	// #endregion /////////////////////////////////////////////////////////////
 

@@ -6,7 +6,7 @@
 </style>
 <script type="module">
 /**/
-import App, { Node, Draw } from "../../fungi/App.js";
+import App, { Node, Draw, Quat } from "../../fungi/App.js";
 import GridFloor	from "../../fungi/geo/GridFloor.js";
 import InterleavedFloatArray from "../../fungi/lib/InterleavedFloatArray.js";
 
@@ -17,6 +17,7 @@ import Points	from "../../fungi/geo/Points.js";
 App
 	.init()
 	.load_shaders( "BaseColor.js" )
+	.use_debug()
 	.set_camera( 0, 20, 5, 0, 0.5, 0 )
 	.then( init );
 
@@ -27,68 +28,45 @@ function init(){
 	let mat		= App.shader.new_material( "BaseColor", { color:"#303030" });
 	GridFloor( mat );
 
-	/*
-	let mesh	= App.mesh.from_data( "m", new Float32Array( [ 0,0,0 ] ) );
-	let draw 	= new Draw().add( mesh, mat, 0 );
-	let node	= new Node().set_pos( 0, 0.2, 0 );
-	let aid		= App.ecs.new_entity( "A", node, draw );
-	*/
+	let draw;
 
-	/* POINT 2D ----------------------
-	let pnt		= new Point2D( 3, 0 );
-	let draw	= new Draw( pnt.get_draw_item() );
-	let eid		= App.ecs.new_entity( "Point2D", "Node", draw, pnt );
+	/* DEBUG ----------------------*/
+	App.Debug
+		.pnt_raw( -0.5,2,0, "yellow", 0.2, 0 )
+		.pnt_raw( 0,2,0, "green", 0.2, 1 )
+		.pnt_raw( 0.5,2,0, "cyan", 0.2, 2 )
+		.pnt_raw( 1.0,2,0, "orange", 0.2, 3 )
+		.pnt_raw( 1.5,2,0, "white", 0.2, 4 )
+		.pnt_raw( 2.0,2,0, "gray", 0.2, 5 )
+
+		.ln( [0,0,0], [0,1.5,0], "fuchsia" )
+		.box( [ -0.5, 0.2, -0.5 ], [ 0.5, 1.0, 0.5 ], "cyan" );
+
+	let q = new Quat();
+	App.Debug.circle_quat( q, [3,0,0], 1, "orange", 8 );
+	App.Debug.plane_quat( q, [-3,0,0], 0.5 );
+
+	/* POINT 2D ----------------------*/
+	let pnt = new Point2D( 3, 0 );
+	draw = new Draw( pnt.get_draw_item() );
+	App.ecs.new_entity( "Point2D", "Node", draw, pnt );
 	pnt.add( [20,20], "red", 20 );
 	pnt.add( [App.gl.width-20,20], "green", 20 );
 	pnt.add( [App.gl.width-20,App.gl.height-20], "blue", 20 );
-	*/
-
-	/* LINES ---------------------- 
-	let line 	= new Lines();
-	let draw	= new Draw( line.get_draw_item() );
-	let eid		= App.ecs.new_entity( "Lines", "Node", draw, line );
-	line.add( [0,0,0], [0,1,0], "red", "green", true );
-	line.add( [0,1,0], [1,1,0], "green", "red", true );
-	*/
-
+	
+	/* LINES ---------------------- */
+	let line = new Lines();
+	draw = new Draw( line.get_draw_item() );
+	App.ecs.new_entity( "Lines", "Node", draw, line );
+	line.add( [1,0,0], [1,1,0], "red", "green", true );
+	line.add( [1,1,0], [2,1,0], "green", "red", true );
+	
 	/* SHAPE POINTS ---------------------- */
-	let pnts	= new Points();
-	let draw	= new Draw( pnts.get_draw_item() );
-	let eid		= App.ecs.new_entity( "Points", "Node", draw, pnts );
-	pnts.add( [0,0,0], "green" );
-
-	//console.log( draw );
-	/*
-	let flat_ary = new InterleavedFloatArray([
-		{ name:"pos",	size:3 },
-		{ name:"size",	size:1 },
-	], 2 );
-
-	flat_ary.push( [0,0,0], 5 );
-	flat_ary.push( [0,0.5,0], 5 );
-
-	let buf		= App.buffer.new_empty_array( flat_ary.byte_capacity, false );
-	let config	= [ { buffer: buf, interleaved: flat_ary.generate_config() } ];
-	
-	let config	= [
-		{ buffer: buf, interleaved: [
-			{ attrib_loc:0, size:3, stride_len:4 * 4, offset:0 * 4, instanced:false },
-			{ attrib_loc:1, size:1, stride_len:4 * 4, offset:3 * 4, instanced:false },
-		]}
-	];
-	
-	// Test pushing data into empty buffer
-	App.buffer.update_data( buf, flat_ary.buffer );
-	
-	// Generate Mesh Data for rendering
-	let mesh = App.mesh.new( "test" );
-	mesh.vao			= App.vao.new( config );
-	mesh.element_cnt	= flat_ary.len;
-	
-	// Create Entity with Node and Draw Components
-	let mat = App.shader.new_material( "BaseColor", { color:"#303030" });
-	App.ecs.new_entity( "Point", "Node", new Draw( mesh, mat, App.mesh.PNT ) );
-	*/
+	let pnts = new Points();
+	draw = new Draw( pnts.get_draw_item() );
+	App.ecs.new_entity( "Points", "Node", draw, pnts );
+	pnts.add( [-2,0,0], "green" );
+	pnts.add( [-2,1,0], "red", 0.2, 6 );
 }
 
 
