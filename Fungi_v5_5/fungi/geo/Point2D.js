@@ -1,117 +1,90 @@
-import App		from "../App.js";
-import Colour	from "../core/Colour.js";
-import InterleavedFloatArray from "../data/InterleavedFloatArray.js";
+import App, { Draw, Colour }	from "../App.js";
+import InterleavedFloatArray	from "../lib/InterleavedFloatArray.js";
 
-const	INITAL_CNT	= 10;
+const	INITAL_CNT	= 5;
 const	AUTO_EXTEND = 10;
-let 	SHADER		= null, 
-		MATERIAL	= null;
+let 	INITIAL		= true;
 
 //###################################################################################
 
-class Point2D{
-	static $( name, e=null ){
-		if( !SHADER ){
-			init_shader();
-			App.ecs.sys_add( Point2DSys, 801 );
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		if( !e )		e = App.$Draw( name );
-		if( !e.Draw )	e.add_com( "Draw" );
-
-		let c = e.add_com( "Point2D" ),
-			m = make_mesh( c.buf );
-
-		e.Draw.add( m, MATERIAL, App.Mesh.PNT );
-		c.mesh = m;
-		return e;
-	}
-
-	constructor(){
-		this.updated	= true;
-		this.mesh 		= null;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		this.byte_buf	= new InterleavedFloatArray()
-			.add_var( "pos",	2 )
-			.add_var( "color",	3 )
-			.add_var( "size",	1 )
-			.expand_by( INITAL_CNT );
-
-		this.byte_buf.auto_expand = AUTO_EXTEND;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let i_info = this.byte_buf.get_stride_info();
-		this.buf = App.Buf
-			.new_array( this.byte_buf.buffer, i_info.comp_len, false, false )
-			.set_interleaved( i_info );
-	}
-
-	add( pos, col="red", size=10 ){
-		this.updated = true;
-		return this.byte_buf.push( pos, Colour( col ), size ); // Return Point Index for Line
-	}
-
-	update(){
-		if( !this.updated ) return this;
-		this.mesh.elm_cnt	= this.byte_buf.len;
-		this.updated		= false;
-
-		// Update the GPU buffers with the new data.
-		if( this.mesh.elm_cnt > 0 ) this.buf.update( this.byte_buf.buffer );
-		
-		return this;
-	}
-
-	reset(){
-		this.byte_buf.reset();
-		this.updated = false;
-	}
-} App.Components.reg( Point2D );
-
-
 function Point2DSys( ecs ){
-	let c, ary = ecs.query_comp( "Point2D" );
+	let ary = ecs.query_comp( "Point2D" );
 	if( !ary ) return;
+	
+	let c;
 	for( c of ary ) if( c.updated ) c.update();
 }
 
+class Point2D{
+	// #region MAIN
+	constructor( ini_cnt=INITAL_CNT, auto_ext=AUTO_EXTEND ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( INITIAL ){
+			App.ecs.systems.reg( Point2DSys, 801 );
+			App.shader.new( "Point2D", v_src, f_src, null, App.ubo.get_array( "Global" ) );
+			INITIAL = false;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// MAIN DATA
+		this.material		= App.shader.new_material( "Point2D" );
+		this.default_color	= "red";
+		this.default_size	= 10;
+		this.color		= new Colour();
+		this.updated	= true;
+
+		this.data = new InterleavedFloatArray([
+			{ name:"pos",	size:2 },
+			{ name:"color",	size:3 },
+			{ name:"size",	size:1 },
+		], ini_cnt, auto_ext );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// MESH
+		this.buf	= App.buffer.new_empty_array( this.data.byte_capacity, false );
+		this.mesh	= App.mesh.new( "Point2D" );
+		this.mesh.vao = App.vao.new([ 
+			{ buffer: this.buf, interleaved: this.data.generate_config() }
+		]);
+	}
+	// #endregion /////////////////////////////////////////////////////////////
+
+	// #region METHODS
+	get_draw_item(){ return Draw.new_draw_item( this.mesh, this.material, 0 ); }
+
+	reset(){
+		this.data.reset();
+		this.mesh.element_cnt	= 0;
+		this.updated			= true;
+	}
+
+	add( pos, color=this.default_color, size=this.default_size ){
+		this.updated = true;
+		return this.data.push( pos, this.color.set( color ).rgb, size ); // Return Index 
+	}
+	// #endregion /////////////////////////////////////////////////////////////
+
+	// #region HELPERS
+	update(){
+		if( !this.updated ) return this;
+		this.mesh.element_cnt	= this.data.len;
+		this.updated			= false;
+
+		// Update the GPU buffers with the new data.
+		if( this.mesh.element_cnt > 0 ){
+			App.buffer.update_data( this.buf, this.data.buffer );
+		}
+		return this;
+	}
+	// #endregion /////////////////////////////////////////////////////////////
+}
 
 //###################################################################################
-function init_shader(){
-	SHADER = App.Shader.from_src( "Point2D", v_src, f_src )
-		.add_uniform_blocks( ["Global"] );
-	MATERIAL = SHADER.new_material();
-}
 
-
-function make_mesh( i_buf ){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let m 		= new App.Mesh( "Point2D" ),
-		vao		= new App.Vao().bind();
-	
-	m.vao			= vao;
-	m.elm_cnt		= 0;
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Vertex Data
-	vao.add_interleaved( i_buf, [0,1,2], false );
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Clean up
-	App.Vao.unbind();
-	App.Buf.unbind_array();
-
-	return m;
-}
-
-
-//-----------------------------------------------
 let v_src = `#version 300 es
-	layout(location=0) in vec2 a_pos;
-	layout(location=1) in vec3 a_color;
-	layout(location=2) in float a_size;
+	layout(location=0) in vec2	a_pos;
+	layout(location=1) in vec3	a_color;
+	layout(location=2) in float	a_size;
 
 	uniform Global{ 
 		mat4 proj_view; 
@@ -138,7 +111,6 @@ let v_src = `#version 300 es
 		);
 	}`;
 
-//-----------------------------------------------
 let f_src = `#version 300 es
 	precision mediump float;
 	in	vec3 v_color;
@@ -146,7 +118,6 @@ let f_src = `#version 300 es
 	void main(void){
 		out_color = vec4( v_color, 1.0 );
 	}`;
-
 
 //###################################################################################
 export default Point2D;

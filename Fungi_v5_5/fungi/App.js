@@ -103,7 +103,6 @@ class Launcher{
 			{ name:"screen_size",	type:"vec2" },
 			{ name:"clock",			type:"float" },
 		]);
-		//.set_var( "screen_size", [ gl.width, gl.height ] );
 		
 		App.ubo.new( "Model", 1, [
 			{ name:"view_matrix", type:"mat4" },

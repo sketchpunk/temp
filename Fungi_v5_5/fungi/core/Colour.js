@@ -14,10 +14,10 @@ const COLORS		= {
 };
 
 class Colour{
-	constructor( c ){
+	constructor( c=null ){
 		this.rgba	= new Float32Array( [0,0,0,0] );
 		this.rgb	= new Float32Array( this.rgba.buffer, 0, 3 );
-		this.set( c );
+		if( c ) this.set( c );
 	}
 
 	alpha( v ){ this.rgba[ 3 ] = v; return this; }

@@ -3,7 +3,7 @@
 /*
 let buf = App.Buffer.new_array( new Float32Array([0,0,0]) );
 let vao = App.Vao.new([
-	{ buffer:buf, attrib_loc:App.Shader.POS_LOC, instanced:false },
+	{ buffer:buf, attrib_loc:App.shader.POS_LOC, instanced:false },
 	
 	{ buffer:buf, interleaved: [
 		{ attrib_loc:0, size:3, stride_len:4 * 4, offset:0 * 4, instanced:false },
@@ -29,7 +29,7 @@ class VaoFactory{
 		for( itm of config ){
 			buf = itm.buffer;
 			this.gl.ctx.bindBuffer( buf.type, buf.id );
-			console.log( "vao", itm );
+			//console.log( "vao", itm );
 
 			//----------------------------------------------
 			if( !itm.interleaved ){

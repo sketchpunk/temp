@@ -8,13 +8,17 @@ class Draw{
 	priority	= 500;
 
 	constructor( mesh=null, mat=null, mode=4 ){
-		if( mesh && mat ) this.add( mesh, mat, mode );
+		if( mesh instanceof DrawItem) this.items.push( mesh );
+		else if( mesh && mat ) this.add( mesh, mat, mode );
 	}
 
 	add( mesh, mat, mode=0 ){
-		this.items.push( new DrawItem( mesh, mat, mode ) );
+		if( mesh instanceof DrawItem)	this.items.push( mesh );
+		else 							this.items.push( new DrawItem( mesh, mat, mode ) );
 		return this;
 	}
+
+	static new_draw_item( mesh, mat, mode=0 ){ return new DrawItem( mesh, mat, mode ); }
 }
 
 class DrawItem{
@@ -58,6 +62,7 @@ class DrawSys{
 			for( di of d.items ){
 				if( di.mesh.element_cnt == 0 ) continue;
 				r.load_material( di.material ).draw( di );
+				//console.log( "----- DRAWING", di );
 			}
 		}
 

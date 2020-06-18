@@ -194,7 +194,7 @@ class ShaderFactory{
 		for( [ k, v ] of sh.uniforms ) mat.uniforms.set( k, v.clone() );
 
 		// Copy Options
-		for( k in this.options ) mat.options[ k ] = this.options[ k ];
+		for( k in sh.options ) mat.options[ k ] = sh.options[ k ];
 
 		// Load in custom Uniform Data if exists
 		if( uniforms ){

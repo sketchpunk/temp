@@ -96,6 +96,10 @@ class MeshFactory{
 		mesh.element_cnt	= ( idx )? idx.length : vert.length / vert_comp_len;
 		return mesh;
 	}
+
+	from_config( config ){
+		
+	}
 }
 
 export default MeshFactory;

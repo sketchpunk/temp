@@ -37,7 +37,7 @@ class InterleavedFloatArray{
 	get byte_capacity(){ return this.buffer.byteLength; }	// Get the Capacity Length in Bytes
 	get byte_stride_len(){ return this.stride_len * 4; }
 
-	generate_config( is_instanced=false ){
+	generate_config( attrib_loc=0, is_instanced=false ){
 		let i, v, 
 			rtn		= new Array( this.var_config.length ),
 			bstride	= this.byte_stride_len;
@@ -45,7 +45,7 @@ class InterleavedFloatArray{
 		for( i=0; i < this.var_config.length; i++ ){
 			v			= this.var_config[ i ];
 			rtn[ i ]	= {
-				attrib_loc	: i,
+				attrib_loc	: attrib_loc + i,
 				size 		: v.size,
 				stride_len	: bstride,
 				offset		: v.offset * 4,

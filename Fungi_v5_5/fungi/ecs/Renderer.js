@@ -41,7 +41,8 @@ class Renderer{
 			.set( "camera_matrix",	App.cam_com.view )
 			.set( "camera_pos",		App.cam_node.world.pos )
 			.set( "clock",			App.since_start )
-			.set( "delta_time",		App.delta_time );
+			.set( "delta_time",		App.delta_time )
+			.set( "screen_size", [ App.gl.width, App.gl.height ] );
 
 		App.ubo.update( this.ubo_global );
 	}
@@ -123,9 +124,9 @@ class Renderer{
 				App.gl.ctx.drawArrays( di.draw_mode, 0, m.element_cnt );
 		}else{
 			if( m.element_type )
-				App.gl.ctx.drawElementsInstanced( d.draw_mode, m.element_cnt, m.element_type, 0, m.instance_cnt ); 
+				App.gl.ctx.drawElementsInstanced( di.draw_mode, m.element_cnt, m.element_type, 0, m.instance_cnt ); 
 			else
-				App.gl.ctx.drawArraysInstanced( d.draw_mode, 0, m.element_cnt, m.instance_cnt );
+				App.gl.ctx.drawArraysInstanced( di.draw_mode, 0, m.element_cnt, m.instance_cnt );
 		}
 
 		return this;
