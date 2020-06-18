@@ -1,17 +1,14 @@
 <!DOCTYPE html>
 <html><head><style>
 	html,body{margin:0px; padding:0px; width:100%; height:100%;}
-	body{background-color:#404040;}
-	canvas{border:1px solid green; box-sizing: border-box;}
+	canvas{ border:0px solid green; box-sizing: border-box; }
 </style>
 <script type="module">
 import App, { Node, Draw } from "../../fungi/App.js";
-import GridFloor	from "../../fungi/geo/GridFloor.js";
 import FacedCube	from "../../fungi/geo/FacedCube.js";
 
 App
 	.init()
-	.load_shaders( "BaseColor.js" )
 	.set_camera( 0, 20, 5, 0, 0.5, 0 )
 	.then( init );
 
@@ -23,19 +20,9 @@ function on_render( dt, ss ){
 }
 
 function init(){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let mat		= App.shader.new_material( "BaseColor", { color:"#303030" });
-
-	/*
-	let mesh	= App.mesh.from_data( "m", new Float32Array( [ 0,0,0 ] ) );
-	let draw 	= new Draw().add( mesh, mat, 0 );
-	let node	= new Node().set_pos( 0, 0.2, 0 );
-	let aid		= App.ecs.new_entity( "A", node, draw );
-	*/
-
-	GridFloor( mat );
 	let bi = FacedCube( "CubeB" );
 	let ai = FacedCube( "CubeA" );
+
 	CubeANode = App.ecs.get_com( ai, "Node" );
 	CubeBNode = App.ecs.get_com( bi, "Node" );
 

@@ -199,7 +199,7 @@ class OrbitCamera{
 			if( dy ) pos.add( v.from_scale( this.init_cam_up, dy * PAN_SCREEN_SCALE ) );
 
 			this.target_pos.from_add( this.init_tar_pos, pos );
-			App.camera.Node.set_pos( pos.add( this.init_cam_pos ) );			
+			App.cam_node.set_pos( pos.add( this.init_cam_pos ) );			
 		}
 
 		run_wheel(){

@@ -65,23 +65,26 @@ let App = {
 //################################################################################################
 
 class Launcher{
-    constructor(){
+    constructor( use_scene=true ){
         this.tasks = new TaskStack()
             .add( new Promise( (r, e)=>window.addEventListener("load", _=>r(true)) ) )
-            .add( this.init );
+			.add( this.init );
+			
+		if( use_scene ) this.tasks.add( this.init_scene );
     }
 
 	// #region MAIN
     task( fn ){ this.tasks.add( fn ); return this; }
 	then( fn=null ){ this.tasks.then( fn ).then( _=>App.render() ); }
-    init(){
+	
+	init(){
 		console.log("[ Fungi.App 5.5 ]");
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// GL CONTEXT
         App.gl = new Context( "pg_canvas" );
         if( !App.gl.ctx ) return false;
     
-        App.gl.fit_screen();
+        App.gl.set_color( "#363636" ).fit_screen();
         //window.addEventListener( "resize", (e)=>{ App.gl.fit_screen(); });
     
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -124,7 +127,7 @@ class Launcher{
 			.reg( new DrawSys(), 950 )
 			.reg( NodeCleanupSys, 1000 );
 
-		App.cam_com		= new Camera().set_perspective();
+		App.cam_com		= new Camera().set_perspective( 45, 0.01, 1000.0 );
 		App.cam_node	= new Node();
 		App.ecs.new_entity( "Camera", App.cam_node, App.cam_com );
 
@@ -132,6 +135,19 @@ class Launcher{
 		App.render_loop = new RenderLoop( App.render );
 		App.render_mode( 0 );
 
+		return true;
+	}
+
+	async init_scene(){
+		let mods = await Promise.all([
+			import( "./shaders/GridFloor.js" ),
+			import( "./geo/Quad.js" ),
+		]);
+
+		let mat = App.shader.new_material( "GridFloor" );
+		let eid	= mods[1].default( "GridFloor", mat );
+		App.ecs.get_com( eid, "Node" ).rot_by( -90, "x" ).set_scl( 40 );
+		App.ecs.get_com( eid, "Draw" ).priority = 900;
 		return true;
 	}
 	// #endregion ///////////////////////////////////////////////////////////////
@@ -175,7 +191,6 @@ class Launcher{
 		return this;
 	}
 	// #endregion ///////////////////////////////////////////////////////////////
-
 }
 
 //################################################################################################

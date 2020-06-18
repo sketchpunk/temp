@@ -23,7 +23,7 @@ class Context{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// WebGL Context
-		this.ctx = canvas.getContext( "webgl2", { antialias: true } ); //getContext( 'webgl2', { antialias: false, xrCompatible:true } );
+		this.ctx = canvas.getContext( "webgl2", { alpha: false } ); //getContext( 'webgl2', { antialias: false, xrCompatible:true } ); //premultipliedAlpha: true
 		if( !this.ctx ){ console.error("WebGL context is not available."); return false; }
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -41,6 +41,13 @@ class Context{
 		c.depthFunc( 	c.LEQUAL );			// Near things obscure far things
 		c.blendFunc( 	c.SRC_ALPHA,		// Setup default alpha blending
 						c.ONE_MINUS_SRC_ALPHA);
+
+		/*
+		c.blendFunc( c.ONE, c.ONE ); //BLEND_ADDITIVE
+		c.blendFunc( c.SRC_ALPHA, c.ONE ); // BLEND_ALPHA_ADDITIVE
+		c.blendFunc( c.ONE, c.ZERO ); // BLEND_OVERRIDE
+		c.blendFunc( c.SRC_ALPHA, c.ONE_MINUS_SRC_ALPHA ); //BLEND_ALPHA
+		*/
 	}
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 
@@ -71,12 +78,6 @@ class Context{
 		return this;
 	}	
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
-
-	// #region BUFFERS
-	
-	
-
-	// #endregion //////////////////////////////////////////////////////////////////////////////////////
 }
 
 export default Context;

@@ -15,7 +15,7 @@ const COLORS		= {
 
 class Colour{
 	constructor( c=null ){
-		this.rgba	= new Float32Array( [0,0,0,0] );
+		this.rgba	= new Float32Array( [0,0,0,1] );
 		this.rgb	= new Float32Array( this.rgba.buffer, 0, 3 );
 		if( c ) this.set( c );
 	}

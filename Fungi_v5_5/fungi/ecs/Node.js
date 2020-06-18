@@ -89,6 +89,48 @@ class Node{
 		return this;
 	}
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
+
+	// #region MISC
+	// Get direction based on the Node's World Model Matrix
+	get_matrix_dir( dir=0, out=null, scale=1 ){
+		out = out || new Vec3();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let i = 0, mx = this.model_matrix;
+		switch( dir ){
+			case 0: i = 8; break;	// Forward : 8, 9, 10
+			case 1: i = 0; break;	// Left : 0, 1, 2
+			case 2: i = 4; break;	// Up : 4, 5, 6
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let x	= mx[ i ],
+			y	= mx[ i+1 ],
+			z	= mx[ i+2 ],
+			len	= 1 / Math.sqrt( x*x + y*y + z*z );
+
+		out[0] = x * len * scale;
+		out[1] = y * len * scale;
+		out[2] = z * len * scale;
+		return out;
+	}
+
+	get_world_transform( tf=null ){
+		tf = tf || new Transform();
+		tf.copy( this.local );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( this.parent != null ){ 
+			// Parents Exist, loop till reaching the root
+			let n = this;
+			while( n.parent != null ){
+				n = n.parent.Node;
+				tf.add_rev( n.local );
+			}
+		}
+		return tf;
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////////// 
 }
 
 
