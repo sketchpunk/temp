@@ -2,146 +2,113 @@ import Mat4 from "../maths/Mat4.js";
 import Vec3 from "../maths/Vec3.js";
 import Quat from "../maths/Quat.js";
 
-/** 
- * Handle parsing data from GLTF Json and Bin Files
- * @example <caption></caption>
- * let aryPrim = Gltf.getMesh( names[0], json, bin );
- * let p = aryPrim[ 0 ];
- *
- * let vao = Vao.buildStandard( "Drill", p.vertices.compLen, p.vertices.data, 
- *	(p.normal)?		p.normal.data	: null, 
- *	(p.uv)? 		p.uv.data		: null,
- *	(p.indices)?	p.indices.data	: null );
- *
- * let e = App.$Draw( "Drill", vao, "LowPolyPhong", p.mode );
- * if( p.rotation )	e.Node.setRot( p.rotation );
- * if( p.position )	e.Node.setPos( p.position );
- * if( p.scale ) 	e.Node.setScl( p.scale );
- *
- * ---- OR ----
- * let vao = Vao.buildFromBin( "ToBufferTest", p, bin );
- * let e = App.$Draw( "BinBufTestMesh", vao, "LowPolyPhong", gl.ctx.TRIANGLES );
- * if( p.rotation )	e.Node.setRot( p.rotation );
- * if( p.position )	e.Node.setPos( p.position );
- * if( p.scale ) 	e.Node.setScl( p.scale );
- */
 class Gltf{
-	////////////////////////////////////////////////////////
-	// HELPERS
-	////////////////////////////////////////////////////////
-		/**
-		* Parse out a single buffer of data from the bin file based on an accessor index. (Vertices, Normal, etc)
-		* @param {number} idx - Index of an Accessor
-		* @param {object} json - GLTF Json Object
-		* @param {ArrayBuffer} bin - Array buffer of a bin file
-		* @param {bool} specOnly - Returns only Buffer Spec data related to the Bin File
-		* @public @return {data:TypeArray, min, max, elmCount, compLen, byteStart, byteLen, arrayType }
-		*/
-		//https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_005_BuffersBufferViewsAccessors.md
-		static parse_accessor( idx, json, bin, spec_only = false ){
-			let acc			= json.accessors[ idx ],				// Reference to Accessor JSON Element
-				bView 		= json.bufferViews[ acc.bufferView ],	// Buffer Information
-				compLen		= Gltf[ "COMP_" + acc.type ],			// Component Length for Data Element
-				ary			= null,									// Final Type array that will be filled with data
-				byteStart	= 0,
-				byteLen		= 0,
-				TAry, 												// Reference to Type Array to create
-				DFunc; 												// Reference to GET function in Type Array
+	// #region HELPERS
+	//https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_005_BuffersBufferViewsAccessors.md
+	static parse_accessor( idx, json, bin, spec_only = false ){
+		let acc			= json.accessors[ idx ],				// Reference to Accessor JSON Element
+			bView 		= json.bufferViews[ acc.bufferView ],	// Buffer Information
+			compLen		= Gltf[ "COMP_" + acc.type ],			// Component Length for Data Element
+			ary			= null,									// Final Type array that will be filled with data
+			byteStart	= 0,
+			byteLen		= 0,
+			TAry, 												// Reference to Type Array to create
+			DFunc; 												// Reference to GET function in Type Array
 
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Figure out which Type Array we need to save the data in
-			switch( acc.componentType ){
-				case Gltf.TYPE_FLOAT:			TAry = Float32Array;	DFunc = "getFloat32"; break;
-				case Gltf.TYPE_SHORT:			TAry = Int16Array;		DFunc = "getInt16"; break;
-				case Gltf.TYPE_UNSIGNED_SHORT:	TAry = Uint16Array;		DFunc = "getUint16"; break;
-				case Gltf.TYPE_UNSIGNED_INT:	TAry = Uint32Array;		DFunc = "getUint32"; break;
-				case Gltf.TYPE_UNSIGNED_BYTE: 	TAry = Uint8Array; 		DFunc = "getUint8"; break;
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Figure out which Type Array we need to save the data in
+		switch( acc.componentType ){
+			case Gltf.TYPE_FLOAT:			TAry = Float32Array;	DFunc = "getFloat32"; break;
+			case Gltf.TYPE_SHORT:			TAry = Int16Array;		DFunc = "getInt16"; break;
+			case Gltf.TYPE_UNSIGNED_SHORT:	TAry = Uint16Array;		DFunc = "getUint16"; break;
+			case Gltf.TYPE_UNSIGNED_INT:	TAry = Uint32Array;		DFunc = "getUint32"; break;
+			case Gltf.TYPE_UNSIGNED_BYTE: 	TAry = Uint8Array; 		DFunc = "getUint8"; break;
 
-				default: console.log("ERROR processAccessor","componentType unknown",a.componentType); return null; break;
+			default: console.log("ERROR processAccessor","componentType unknown",a.componentType); return null; break;
+		}
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let out = { 
+			min 			: acc.min,
+			max 			: acc.max,
+			element_cnt		: acc.count,
+			component_len	: compLen,
+		};
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Data is Interleaved
+		if( bView.byteStride ){
+			if( spec_only ) console.error( "GLTF STRIDE SPEC ONLY OPTION NEEDS TO BE IMPLEMENTED ");
+			/*
+				The RiggedSimple sample seems to be using stride the wrong way. The data all works out
+				but Weight and Joint indicate stride length BUT the data is not Interleaved in the buffer.
+				They both exists in their own individual block of data just like non-Interleaved data.
+				In the sample, Vertices and Normals ARE actually Interleaved. This make it a bit
+				difficult to parse when dealing with interlanced data with WebGL Buffers.
+
+				TODO: Can prob check if not interlanced by seeing if the Stride Length equals the length 
+				of the data in question.
+				For example related to the RiggedSimple sample.
+				Stride Length == FloatByteLength(4) * Accessor.type's ComponentLength(Vec3||Vec4)
+				-- So if Stride is 16 Bytes
+				-- The data is grouped as Vec4 ( 4 Floats )
+				-- And Each Float = 4 bytes.
+				-- Then Stride 16 Bytes == Vec4 ( 4f loats * 4 Bytes )
+				-- So the stride length equals the data we're looking for, So the BufferView in question
+					IS NOT Interleaved.
+
+				By the looks of things. If the Accessor.bufferView number is shared between BufferViews
+				then there is a good chance its really Interleaved. Its ashame that things can be designed
+				to be more straight forward when it comes to Interleaved and Non-Interleaved data.
+				*/
+
+			// console.log("BView", bView );
+			// console.log("Accessor", acc );
+
+			let stride	= bView.byteStride,					// Stride Length in bytes
+				elmCnt	= acc.count, 						// How many stride elements exist.
+				bOffset	= (bView.byteOffset || 0), 			// Buffer Offset
+				sOffset	= (acc.byteOffset || 0),			// Stride Offset
+				bPer	= TAry.BYTES_PER_ELEMENT,			// How many bytes to make one value of the data type
+				aryLen	= elmCnt * compLen,					// How many "floats/ints" need for this array
+				dView 	= new DataView( bin ),				// Access to Binary Array Buffer
+				p 		= 0, 								// Position Index of Byte Array
+				j 		= 0, 								// Loop Component Length ( Like a Vec3 at a time )
+				k 		= 0;								// Position Index of new Type Array
+
+			ary	= new TAry( aryLen );						//Final Array
+
+			//Loop for each element of by stride
+			for(var i=0; i < elmCnt; i++){
+				// Buffer Offset + (Total Stride * Element Index) + Sub Offset within Stride Component
+				p = bOffset + ( stride * i ) + sOffset;	//Calc Starting position for the stride of data
+
+				//Then loop by compLen to grab stuff out of the DataView and into the Typed Array
+				for(j=0; j < compLen; j++) ary[ k++ ] = dView[ DFunc ]( p + (j * bPer) , true );
 			}
-			
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			let out = { 
-				min 			: acc.min,
-				max 			: acc.max,
-				element_cnt		: acc.count,
-				component_len	: compLen,
-			};
 
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Data is Interleaved
-			if( bView.byteStride ){
-				if( spec_only ) console.error( "GLTF STRIDE SPEC ONLY OPTION NEEDS TO BE IMPLEMENTED ");
-				/*
-					The RiggedSimple sample seems to be using stride the wrong way. The data all works out
-					but Weight and Joint indicate stride length BUT the data is not Interleaved in the buffer.
-					They both exists in their own individual block of data just like non-Interleaved data.
-					In the sample, Vertices and Normals ARE actually Interleaved. This make it a bit
-					difficult to parse when dealing with interlanced data with WebGL Buffers.
+			out.data = ary;
 
-					TODO: Can prob check if not interlanced by seeing if the Stride Length equals the length 
-					of the data in question.
-					For example related to the RiggedSimple sample.
-					Stride Length == FloatByteLength(4) * Accessor.type's ComponentLength(Vec3||Vec4)
-					-- So if Stride is 16 Bytes
-					-- The data is grouped as Vec4 ( 4 Floats )
-					-- And Each Float = 4 bytes.
-					-- Then Stride 16 Bytes == Vec4 ( 4f loats * 4 Bytes )
-					-- So the stride length equals the data we're looking for, So the BufferView in question
-						IS NOT Interleaved.
-
-					By the looks of things. If the Accessor.bufferView number is shared between BufferViews
-					then there is a good chance its really Interleaved. Its ashame that things can be designed
-					to be more straight forward when it comes to Interleaved and Non-Interleaved data.
-				 */
-
-				// console.log("BView", bView );
-				// console.log("Accessor", acc );
-
-				let stride	= bView.byteStride,					// Stride Length in bytes
-					elmCnt	= acc.count, 						// How many stride elements exist.
-					bOffset	= (bView.byteOffset || 0), 			// Buffer Offset
-					sOffset	= (acc.byteOffset || 0),			// Stride Offset
-					bPer	= TAry.BYTES_PER_ELEMENT,			// How many bytes to make one value of the data type
-					aryLen	= elmCnt * compLen,					// How many "floats/ints" need for this array
-					dView 	= new DataView( bin ),				// Access to Binary Array Buffer
-					p 		= 0, 								// Position Index of Byte Array
-					j 		= 0, 								// Loop Component Length ( Like a Vec3 at a time )
-					k 		= 0;								// Position Index of new Type Array
-
-				ary	= new TAry( aryLen );						//Final Array
-
-				//Loop for each element of by stride
-				for(var i=0; i < elmCnt; i++){
-					// Buffer Offset + (Total Stride * Element Index) + Sub Offset within Stride Component
-					p = bOffset + ( stride * i ) + sOffset;	//Calc Starting position for the stride of data
-
-					//Then loop by compLen to grab stuff out of the DataView and into the Typed Array
-					for(j=0; j < compLen; j++) ary[ k++ ] = dView[ DFunc ]( p + (j * bPer) , true );
-				}
-
-				out.data = ary;
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Data is NOT Interleaved
-			// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#data-alignment
-			// TArray example from documentation works pretty well for data that is not interleaved.
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Data is NOT Interleaved
+		// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#data-alignment
+		// TArray example from documentation works pretty well for data that is not interleaved.
+		}else{
+			if( spec_only ){
+				out.array_type 	= TAry.name.substring( 0, TAry.name.length - 5 );
+				out.byte_start 	= ( acc.byteOffset || 0 ) + ( bView.byteOffset || 0 );
+				out.byte_cnt	= acc.count * compLen * TAry.BYTES_PER_ELEMENT;
+				//console.log( bin );
 			}else{
-				if( spec_only ){
-					out.array_type 	= TAry.name.substring( 0, TAry.name.length - 5 );
-					out.byte_start 	= ( acc.byteOffset || 0 ) + ( bView.byteOffset || 0 );
-					out.byte_cnt	= acc.count * compLen * TAry.BYTES_PER_ELEMENT;
-					//console.log( bin );
-				}else{
-					let bOffset	= ( acc.byteOffset || 0 ) + ( bView.byteOffset || 0 );
-					out.data = new TAry( bin, bOffset, acc.count * compLen ); // ElementCount * ComponentLength
-				}
+				let bOffset	= ( acc.byteOffset || 0 ) + ( bView.byteOffset || 0 );
+				out.data = new TAry( bin, bOffset, acc.count * compLen ); // ElementCount * ComponentLength
 			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			return out;
 		}
 
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		return out;
+	}
+	// #endregion ///////////////////////////////////////////////////////////////////////// 
 
 	////////////////////////////////////////////////////////
 	// MESH
