@@ -16,17 +16,16 @@ App
 async function init(){
 	let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
 
-
-	let geo		= get_mesh( "VegetaMesh", json, bin, true );
-	let g		= geo[0];
-	
-	let mat		= App.shader.new_material( "LowPoly" );
-	let mesh	= App.mesh.from_data( "Test", g.vertices.data, g.vertices.component_len, g.indices.data );
-	let draw 	= new Draw( mesh, mat, 4 );
-	let eid 	= App.ecs.new_entity( "Vegeta", "Node", draw );
+	let g		= get_mesh( "VegetaMesh", json, bin, false )[0];
+	//let mesh	= App.mesh.from_data( "Test", g.vertices.data, g.vertices.component_len, g.indices.data );
+	let mesh	= App.mesh.from_bin( "Test", g, bin );
+	App.mesh_entity( "Vegeta", mesh, "LowPoly", g.draw_mode );
 
 	//App.ecs.debug_entity( eid );
 	//console.log( App.ecs.entities );
+
+	// GltfUtil.get_entity( name, json, bin, mat, "VegetaMesh" ); // If no name, grab first one on th list
+	// GltfUtil.get_mesh( name, json, bin, name );
 
 	return true;
 }

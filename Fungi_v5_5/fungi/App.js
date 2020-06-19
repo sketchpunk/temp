@@ -51,6 +51,19 @@ let App = {
 		App.ecs.run();
 	},
 
+	mesh_entity : ( name, mesh, mat, draw_mode=4 )=>{
+		let id		= App.ecs.new_entity( name );
+		let node	= App.ecs.add_com( id, "Node" ); // This way uses recycled objects. 
+		let draw	= App.ecs.add_com( id, "Draw" );
+
+		if( mesh && mat ){
+			if( typeof mat == "string" ) mat = App.shader.new_material( mat );
+			draw.add( mesh, mat, draw_mode );
+		}
+
+		return { id, node, draw };
+	},
+
 	render_mode : ( m )=>{
 		if( m == 0 ){
 			App.render_loop.stop()

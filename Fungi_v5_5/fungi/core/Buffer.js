@@ -43,7 +43,7 @@ class BufferFactory{
 	constructor( gl ){ this.gl = gl; }
 
 	// #region CREATE
-	new_buffer( buf_type, t_ary=null, is_static=true, unbind=true ){
+	from_type_array( buf_type, t_ary=null, is_static=true, unbind=true ){
 		let buf = new Buffer( this.gl.ctx.createBuffer(), buf_type, is_static );
 		
 		if( t_ary ){
@@ -59,14 +59,31 @@ class BufferFactory{
 		return buf;
 	}
 
-	new_uniform( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( UNIFORM, t_ary, is_static, unbind ); }
-	new_element( t_ary=null, is_static=true, unbind=true ){	return this.new_buffer( ELEMENT, t_ary, is_static, unbind ); }
+	from_bin( buf_type, data_view, byte_offset, byte_size, component_len, is_static=true, unbind=true ){
+		let buf = new Buffer( this.gl.ctx.createBuffer(), buf_type, is_static );
+		buf.component_len = component_len;
+		
+		this.gl.ctx.bindBuffer( buf_type, buf.id );
+		this.gl.ctx.bufferData( buf_type, data_view, buf.usage, byte_offset, byte_size );
+		if( unbind ) this.gl.ctx.bindBuffer( buf_type, null );
 
+		buf.byte_len = buf.capacity = byte_size;
+		return buf;
+	}
+
+	new_uniform( t_ary=null, is_static=true, unbind=true ){	return this.from_type_array( UNIFORM, t_ary, is_static, unbind ); }
+	new_element( t_ary=null, is_static=true, unbind=true ){	return this.from_type_array( ELEMENT, t_ary, is_static, unbind ); }
 	new_array( t_ary=null, comp_len=3, is_static=true, unbind=true ){
-		let buf = this.new_buffer( ARRAY, t_ary, is_static, unbind );
+		let buf = this.from_type_array( ARRAY, t_ary, is_static, unbind );
 		buf.component_len = comp_len;
 		return buf;
 	}
+
+	bin_element( data_view, byte_offset, byte_size, component_len, is_static=true, unbind=true ){
+		return this.from_bin( ELEMENT, data_view, byte_offset, byte_size, component_len, is_static, unbind ); }
+	
+	bin_array( data_view, byte_offset, byte_size, component_len, is_static=true, unbind=true ){
+		return this.from_bin( ARRAY, data_view, byte_offset, byte_size, component_len, is_static, unbind ); }
 
 	new_empty_array( byte_size, is_static=true, unbind=true ){
 		let buf = new Buffer( this.gl.ctx.createBuffer(), ARRAY, is_static );
@@ -104,11 +121,13 @@ class BufferFactory{
 		buf.byte_len = b_len;
 	}
 
+	/*
 	set_dataview( buf, dv, b_start, b_len ){
 		this.gl.ctx.bufferData( buf.type, dv, buf.usage, b_start, b_len );
 		buf.byte_len = buf.capacity = b_len;
 		return this;
 	}
+	*/
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 	
 	// #region UNBIND

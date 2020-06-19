@@ -26,6 +26,10 @@ this.mesh 	= App.mesh.from_config([
 	]},
 	{ name: "inst", buffer: this.buf, instanced:true, interleaved: this.data.generate_config( 6, true ) },
 ], "PointShapes", 6 );
+
+Maybe setup a new structure that will can load Bin or Type Array
+{ name:verts, data_type:int32, attrib_loc:0, component_len:3, is_static:true
+	data OR byte_offset, byte_size, element_cnt:100 }
 */
 
 class MeshFactory{
@@ -130,6 +134,62 @@ class MeshFactory{
 		m.vao 			= this.vao.new( config );
 
 		return m;
+	}
+
+	from_bin( name, json, bin, load_skin=false ){
+		let mesh	= new Mesh( name ),
+			dv		= ( bin instanceof ArrayBuffer )? new DataView( bin ) : bin,
+			config	= [],
+			buf, o;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( json.indices ){
+			o = json.indices;
+			switch( o.data_type ){ // Indices can be imported as different Int types.
+				case "uint16": mesh.element_type = USHORT; break;
+				case "uint32": mesh.element_type = INT; break;
+				default: console.error("Unknown Array Type when Adding Indices", o.data_type ); return null;
+			}
+
+			buf	= this.buffer.bin_element( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
+			buf.data_type = mesh.element_type;
+			mesh.buffers.set( "indices", buf );
+			config.push( { buffer: buf, } );
+		}
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		o	= json.vertices;
+		buf	= this.buffer.bin_array( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
+		mesh.buffers.set( "vertices", buf );
+		config.push( { buffer: buf, attrib_loc: this.shader.POS_LOC } );
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BONE INDICES AND WEIGHTS
+		if( load_skin && json.joints && json.weights ){
+			// JOINT INDICES
+			// Can make this work BUT need to parse joints out of BIN as a Uint16 array, then pass
+			// that to Buffer.array instead of fromBin. Javascript knows well enough how to convert
+			// Uint16Array to Float32Array before saving it to the GPU. This is an issue because
+			// there does not seem to be a way to use Uint16 Buffers other then Index. Only option is
+			// to use float buffers, so this conversion is needed.
+
+			// elmCount * compLen = Total Uints ( not total bytes )
+			/*
+			o = json.joints;
+			let ui16 = new Uint16Array( bin, o.byte_start, o.elm_cnt * o.comp_len );
+			m.buf.bone_idx = Buf.new_array( ui16, o.comp_len, true, false );
+			vao.add_buf( m.buf.bone_idx, Shader.BONE_IDX_LOC );
+
+			o = json.weights;
+			m.buf.bone_wgt = Buf.new_array_bin( dv, o.byte_start, o.byte_cnt, o.comp_len, true, false );
+			vao.add_buf( m.buf.bone_wgt, Shader.BONE_WGT_LOC );
+			*/
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		mesh.vao			= this.vao.new( config );
+		mesh.element_cnt	= ( json.indices )? json.indices.element_cnt : json.vertices.element_cnt;
+		return mesh;
 	}
 }
 
