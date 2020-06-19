@@ -51,7 +51,7 @@ let App = {
 		App.ecs.run();
 	},
 
-	mesh_entity : ( name, mesh, mat, draw_mode=4 )=>{
+	mesh_entity : ( name, mesh=null, mat=null, draw_mode=4 )=>{
 		let id		= App.ecs.new_entity( name );
 		let node	= App.ecs.add_com( id, "Node" ); // This way uses recycled objects. 
 		let draw	= App.ecs.add_com( id, "Draw" );

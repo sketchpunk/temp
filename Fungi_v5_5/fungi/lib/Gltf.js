@@ -5,186 +5,114 @@ import Quat from "../maths/Quat.js";
 class Gltf{
 	// #region HELPERS
 	//https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_005_BuffersBufferViewsAccessors.md
-	static parse_accessor( idx, json, bin, spec_only = false ){
-		let acc			= json.accessors[ idx ],				// Reference to Accessor JSON Element
-			bView 		= json.bufferViews[ acc.bufferView ],	// Buffer Information
-			compLen		= Gltf[ "COMP_" + acc.type ],			// Component Length for Data Element
-			ary			= null,									// Final Type array that will be filled with data
-			byteStart	= 0,
-			byteLen		= 0,
-			TAry, 												// Reference to Type Array to create
-			DFunc; 												// Reference to GET function in Type Array
-
+	static parse_accessor( idx, json, bin, inc_data=true ){
+		let access		= json.accessors[ idx ],					// Reference to Accessor JSON Element
+			buf_view 	= json.bufferViews[ access.bufferView ],	// Buffer Information
+			comp_len	= Gltf[ "COMP_" + access.type ],			// Component Length for Data Element
+			data_type, tsize;
+	
+		if( buf_view.byteStride ){
+			console.error( "UNSUPPORTED - Parsing Stride Buffer " );
+			return null;
+		}
+	
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Figure out which Type Array we need to save the data in
-		switch( acc.componentType ){
-			case Gltf.TYPE_FLOAT:			TAry = Float32Array;	DFunc = "getFloat32"; break;
-			case Gltf.TYPE_SHORT:			TAry = Int16Array;		DFunc = "getInt16"; break;
-			case Gltf.TYPE_UNSIGNED_SHORT:	TAry = Uint16Array;		DFunc = "getUint16"; break;
-			case Gltf.TYPE_UNSIGNED_INT:	TAry = Uint32Array;		DFunc = "getUint32"; break;
-			case Gltf.TYPE_UNSIGNED_BYTE: 	TAry = Uint8Array; 		DFunc = "getUint8"; break;
-
-			default: console.log("ERROR processAccessor","componentType unknown",a.componentType); return null; break;
+		switch( access.componentType ){
+			case Gltf.TYPE_FLOAT:			data_type = "float";	tsize = 4; break;
+			case Gltf.TYPE_SHORT:			data_type = "int16";	tsize = 2; break;
+			case Gltf.TYPE_UNSIGNED_SHORT:	data_type = "uint16";	tsize = 2; break;
+			case Gltf.TYPE_UNSIGNED_INT:	data_type = "uint32";	tsize = 4; break;
+			case Gltf.TYPE_UNSIGNED_BYTE: 	data_type = "uint8";	tsize = 1; break;
+			default: console.error( "ERROR processAccessor - componentType unknown : %s", access.componentType ); return null; break;
+		}
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let out = { 
+			min 			: access.min,
+			max 			: access.max,
+			element_cnt		: access.count,
+			component_len	: comp_len,
+			data_type		: data_type,
+			byte_offset		: ( access.byteOffset || 0 ) + ( buf_view.byteOffset || 0 ),
+			byte_size		: access.count * comp_len * tsize,
+		};
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( inc_data ){
+			let size = access.count * comp_len; ; // ElementCount * ComponentLength
+			switch( access.componentType ){
+				case Gltf.TYPE_FLOAT:			out.data = new Float32Array( bin, out.byte_offset, size ); break;
+				case Gltf.TYPE_SHORT:			out.data = new Int16Array( bin, out.byte_offset, size ); break;
+				case Gltf.TYPE_UNSIGNED_SHORT:	out.data = new Uint16Array( bin, out.byte_offset, size ); break;
+				case Gltf.TYPE_UNSIGNED_INT:	out.data = new Uint32Array( bin, out.byte_offset, size ); break;
+				case Gltf.TYPE_UNSIGNED_BYTE: 	out.data = new Uint8Array( bin, out.byte_offset, size ); break;
+			}				
 		}
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let out = { 
-			min 			: acc.min,
-			max 			: acc.max,
-			element_cnt		: acc.count,
-			component_len	: compLen,
-		};
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Data is Interleaved
-		if( bView.byteStride ){
-			if( spec_only ) console.error( "GLTF STRIDE SPEC ONLY OPTION NEEDS TO BE IMPLEMENTED ");
-			/*
-				The RiggedSimple sample seems to be using stride the wrong way. The data all works out
-				but Weight and Joint indicate stride length BUT the data is not Interleaved in the buffer.
-				They both exists in their own individual block of data just like non-Interleaved data.
-				In the sample, Vertices and Normals ARE actually Interleaved. This make it a bit
-				difficult to parse when dealing with interlanced data with WebGL Buffers.
-
-				TODO: Can prob check if not interlanced by seeing if the Stride Length equals the length 
-				of the data in question.
-				For example related to the RiggedSimple sample.
-				Stride Length == FloatByteLength(4) * Accessor.type's ComponentLength(Vec3||Vec4)
-				-- So if Stride is 16 Bytes
-				-- The data is grouped as Vec4 ( 4 Floats )
-				-- And Each Float = 4 bytes.
-				-- Then Stride 16 Bytes == Vec4 ( 4f loats * 4 Bytes )
-				-- So the stride length equals the data we're looking for, So the BufferView in question
-					IS NOT Interleaved.
-
-				By the looks of things. If the Accessor.bufferView number is shared between BufferViews
-				then there is a good chance its really Interleaved. Its ashame that things can be designed
-				to be more straight forward when it comes to Interleaved and Non-Interleaved data.
-				*/
-
-			// console.log("BView", bView );
-			// console.log("Accessor", acc );
-
-			let stride	= bView.byteStride,					// Stride Length in bytes
-				elmCnt	= acc.count, 						// How many stride elements exist.
-				bOffset	= (bView.byteOffset || 0), 			// Buffer Offset
-				sOffset	= (acc.byteOffset || 0),			// Stride Offset
-				bPer	= TAry.BYTES_PER_ELEMENT,			// How many bytes to make one value of the data type
-				aryLen	= elmCnt * compLen,					// How many "floats/ints" need for this array
-				dView 	= new DataView( bin ),				// Access to Binary Array Buffer
-				p 		= 0, 								// Position Index of Byte Array
-				j 		= 0, 								// Loop Component Length ( Like a Vec3 at a time )
-				k 		= 0;								// Position Index of new Type Array
-
-			ary	= new TAry( aryLen );						//Final Array
-
-			//Loop for each element of by stride
-			for(var i=0; i < elmCnt; i++){
-				// Buffer Offset + (Total Stride * Element Index) + Sub Offset within Stride Component
-				p = bOffset + ( stride * i ) + sOffset;	//Calc Starting position for the stride of data
-
-				//Then loop by compLen to grab stuff out of the DataView and into the Typed Array
-				for(j=0; j < compLen; j++) ary[ k++ ] = dView[ DFunc ]( p + (j * bPer) , true );
-			}
-
-			out.data = ary;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Data is NOT Interleaved
-		// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#data-alignment
-		// TArray example from documentation works pretty well for data that is not interleaved.
-		}else{
-			if( spec_only ){
-				out.array_type 	= TAry.name.substring( 0, TAry.name.length - 5 );
-				out.byte_start 	= ( acc.byteOffset || 0 ) + ( bView.byteOffset || 0 );
-				out.byte_cnt	= acc.count * compLen * TAry.BYTES_PER_ELEMENT;
-				//console.log( bin );
-			}else{
-				let bOffset	= ( acc.byteOffset || 0 ) + ( bView.byteOffset || 0 );
-				out.data = new TAry( bin, bOffset, acc.count * compLen ); // ElementCount * ComponentLength
-			}
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		return out;
+		return out
 	}
-	// #endregion ///////////////////////////////////////////////////////////////////////// 
+	// #endregion /////////////////////////////////////////////////////////////////////////
 
-	////////////////////////////////////////////////////////
-	// MESH
-	////////////////////////////////////////////////////////
-		/**
-		* Returns the geometry data for all the primatives that make up a Mesh based on the name
-		* that the mesh appears in the nodes list.
-		* @param {string} name - Name of a node in the GLTF Json file
-		* @param {object} json - GLTF Json Object
-		* @param {ArrayBuffer} bin - Array buffer of a bin file
-		* @param {bool} specOnly - Returns only Buffer Spec data related to the Bin File
-		* @public @return {Array.{name,mode,position,vertices,normal,uv,weights,joints}}
-		*/
-		static get_mesh( name, json, bin, spec_only = false ){
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Find Mesh to parse out.
-			let i, n = null, mesh_idx = null;
-			//for( i of json.nodes ){
-			//	if( i.name === name && i.mesh != undefined ){ n = i; mesh_idx = n.mesh; break; }
-			//}
-
-			//No node Found, Try looking in mesh array for the name.
-			//if( !n ){
-				for( i=0; i < json.meshes.length; i++ ) if( json.meshes[i].name == name ){ mesh_idx = i; break; }
-			//}
-
-			if( mesh_idx == null ){
-				console.error( "Node or Mesh by the name", name, "not found in GLTF" );
-				return null;
+	// #region MESHES
+	static get_mesh( name, json, bin, inc_data=false ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Search for Mesh Name
+		let i, mesh = null, mesh_idx=0;
+		for( i=0; i < json.meshes.length; i++ ){
+			if( json.meshes[i].name == name ){
+				mesh		= json.meshes[ i ];
+				mesh_idx	= i;
+				break;
 			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Loop through all the primatives that make up a single mesh
-			let m 		= json.meshes[ mesh_idx ],
-				pLen 	= m.primitives.length,
-				ary		= new Array( pLen ),
-				itm,
-				prim,
-				attr;
-
-			for( let i=0; i < pLen; i++ ){
-				//.......................................
-				// Setup some vars
-				prim	= m.primitives[ i ];
-				attr	= prim.attributes; // console.log( attr );
-				itm		= { 
-					name	: name + (( pLen != 1 )? "_p" + i : ""),
-					mode 	: ( prim.mode != undefined )? prim.mode : Gltf.MODE_TRIANGLES
-				};
-
-				//.......................................
-				// Save Position, Rotation and Scale if Available.
-				if( n ){
-					if( n.translation ) itm.position	= n.translation.slice( 0 );
-					if( n.rotation )	itm.rotation	= n.rotation.slice( 0 );
-					if( n.scale )		itm.scale		= n.scale.slice( 0 );
-				}
-
-				//.......................................
-				// Parse out all the raw Geometry Data from the Bin file
-				itm.vertices = Gltf.parse_accessor( attr.POSITION, json, bin, spec_only );
-				if( prim.indices != undefined ) 		itm.indices	= Gltf.parse_accessor( prim.indices,	json, bin, spec_only );
-				if( attr.NORMAL != undefined )			itm.normal	= Gltf.parse_accessor( attr.NORMAL,		json, bin, spec_only );
-				if( attr.TEXCOORD_0 != undefined )		itm.uv		= Gltf.parse_accessor( attr.TEXCOORD_0,	json, bin, spec_only );
-				if( attr.WEIGHTS_0 != undefined )		itm.weights	= Gltf.parse_accessor( attr.WEIGHTS_0,	json, bin, spec_only ); 
-				if( attr.JOINTS_0 != undefined )		itm.joints	= Gltf.parse_accessor( attr.JOINTS_0,	json, bin, spec_only );
-				if( attr.COLOR_0 != undefined )			itm.color	= Gltf.parse_accessor( attr.COLOR_0,	json, bin, spec_only );
-
-				//.......................................
-				// Save to return array
-				ary[ i ] = itm;
-			}
-
-			return ary;
 		}
-
+		if( !mesh ){ console.log( "Unable to find mesh by the nane : %s", name ); return null; }
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Find if there is any nodes using the mesh.
+		let n, node = null;
+		for( n of json.nodes ){
+			if( n.mesh == mesh_idx ){ node = n; break; }
+		}
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let prim, attr, itm,
+			prim_len	= mesh.primitives.length,
+			ary			= new Array();
+	
+		//console.log( mesh );
+		for( prim of mesh.primitives ){
+			//-------------------------------------------
+			attr	= prim.attributes;
+			itm		= {
+				name		: name + (( prim_len != 1 )? "_p" + i : ""),
+				draw_mode 	: ( prim.mode != undefined )? prim.mode : Gltf.MODE_TRIANGLES,
+			};
+	
+			//-------------------------------------------
+			// Save Position, Rotation and Scale if Available.
+			if( node ){
+				if( node.translation )	itm.position	= node.translation.slice( 0 );
+				if( node.rotation )		itm.rotation	= node.rotation.slice( 0 );
+				if( node.scale )		itm.scale		= node.scale.slice( 0 );
+			}
+	
+			//-------------------------------------------
+			// Get Primitive
+			itm.vertices = this.parse_accessor( attr.POSITION, json, bin, inc_data );
+			if( prim.indices ) 		itm.indices	= this.parse_accessor( prim.indices,	json, bin, inc_data );
+			if( attr.NORMAL )		itm.normal	= this.parse_accessor( attr.NORMAL,		json, bin, inc_data );
+			if( attr.TEXCOORD_0 )	itm.uv		= this.parse_accessor( attr.TEXCOORD_0,	json, bin, inc_data );
+			if( attr.WEIGHTS_0 )	itm.weights	= this.parse_accessor( attr.WEIGHTS_0,	json, bin, inc_data ); 
+			if( attr.JOINTS_0 )		itm.joints	= this.parse_accessor( attr.JOINTS_0,	json, bin, inc_data );
+			if( attr.COLOR_0 )		itm.color	= this.parse_accessor( attr.COLOR_0,	json, bin, inc_data );
+	
+			ary.push( itm )
+		}
+	
+		return ary;
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////////
 
 	////////////////////////////////////////////////////////
 	// SKIN

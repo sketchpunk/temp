@@ -1,7 +1,7 @@
 <!DOCTYPE html><script type="module">
-import App, { Draw }	from "../../fungi/App.js";
-import XhrQueue 		from "../../fungi/lib/XhrQueue.js";
-import GltfUtil, { Gltf } from "../../fungi/lib/GltfUtil.js";
+import App, { Draw }		from "../../fungi/App.js";
+import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
 	
 //#####################################################
 App
@@ -16,126 +16,10 @@ App
 async function init(){
 	let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
 
-	let g		= get_mesh( "VegetaMesh", json, bin, false )[0];
-	//let mesh	= App.mesh.from_data( "Test", g.vertices.data, g.vertices.component_len, g.indices.data );
-	let mesh	= App.mesh.from_bin( "Test", g, bin );
-	App.mesh_entity( "Vegeta", mesh, "LowPoly", g.draw_mode );
-
-	//App.ecs.debug_entity( eid );
-	//console.log( App.ecs.entities );
-
-	// GltfUtil.get_entity( name, json, bin, mat, "VegetaMesh" ); // If no name, grab first one on th list
-	// GltfUtil.get_mesh( name, json, bin, name );
+	GltfUtil.get_entity( "Vegeta", json, bin, "LowPoly" ); // If no name, grab first one on th list
 
 	return true;
 }
-
-function get_mesh( name, json, bin, inc_data=false ){
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Search for Mesh Name
-	let i, mesh = null, mesh_idx=0;
-	for( i=0; i < json.meshes.length; i++ ){
-		if( json.meshes[i].name == name ){
-			mesh		= json.meshes[ i ];
-			mesh_idx	= i;
-			break;
-		}
-	}
-	if( !mesh ){ console.log( "Unable to find mesh by the nane : %s", name ); return null; }
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Find if there is any nodes using the mesh.
-	let n, node = null;
-	for( n of json.nodes ){
-		if( n.mesh == mesh_idx ){ node = n; break; }
-	}
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let prim, attr, itm,
-		prim_len	= mesh.primitives.length,
-		ary			= new Array();
-
-	//console.log( mesh );
-	for( prim of mesh.primitives ){
-		//-------------------------------------------
-		attr	= prim.attributes;
-		itm		= {
-			name		: name + (( prim_len != 1 )? "_p" + i : ""),
-			draw_mode 	: ( prim.mode != undefined )? prim.mode : Gltf.MODE_TRIANGLES,
-		};
-
-		//-------------------------------------------
-		// Save Position, Rotation and Scale if Available.
-		if( node ){
-			if( node.translation )	itm.position	= node.translation.slice( 0 );
-			if( node.rotation )		itm.rotation	= node.rotation.slice( 0 );
-			if( node.scale )		itm.scale		= node.scale.slice( 0 );
-		}
-
-		//-------------------------------------------
-		// Get Primitive
-		itm.vertices = parse_accessor( attr.POSITION, json, bin, inc_data );
-		if( prim.indices ) 		itm.indices	= parse_accessor( prim.indices,		json, bin, inc_data );
-		if( attr.NORMAL )		itm.normal	= parse_accessor( attr.NORMAL,		json, bin, inc_data );
-		if( attr.TEXCOORD_0 )	itm.uv		= parse_accessor( attr.TEXCOORD_0,	json, bin, inc_data );
-		if( attr.WEIGHTS_0 )	itm.weights	= parse_accessor( attr.WEIGHTS_0,	json, bin, inc_data ); 
-		if( attr.JOINTS_0 )		itm.joints	= parse_accessor( attr.JOINTS_0,	json, bin, inc_data );
-		if( attr.COLOR_0 )		itm.color	= parse_accessor( attr.COLOR_0,		json, bin, inc_data );
-
-		ary.push( itm )
-	}
-
-	return ary;
-}
-
-function parse_accessor( idx, json, bin, inc_data=true ){
-	let access		= json.accessors[ idx ],					// Reference to Accessor JSON Element
-		buf_view 	= json.bufferViews[ access.bufferView ],	// Buffer Information
-		comp_len	= Gltf[ "COMP_" + access.type ],			// Component Length for Data Element
-		data_type, tsize;
-
-	if( buf_view.byteStride ){
-		console.error( "UNSUPPORTED - Parsing Stride Buffer " );
-		return null;
-	}
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	switch( access.componentType ){
-		case Gltf.TYPE_FLOAT:			data_type = "float";	tsize = 4; break;
-		case Gltf.TYPE_SHORT:			data_type = "int16";	tsize = 2; break;
-		case Gltf.TYPE_UNSIGNED_SHORT:	data_type = "uint16";	tsize = 2; break;
-		case Gltf.TYPE_UNSIGNED_INT:	data_type = "uint32";	tsize = 4; break;
-		case Gltf.TYPE_UNSIGNED_BYTE: 	data_type = "uint8";	tsize = 1; break;
-		default: console.log( "ERROR processAccessor", "componentType unknown", access.componentType ); return null; break;
-	}
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let out = { 
-		min 			: access.min,
-		max 			: access.max,
-		element_cnt		: access.count,
-		component_len	: comp_len,
-		data_type		: data_type,
-		byte_offset		: ( access.byteOffset || 0 ) + ( buf_view.byteOffset || 0 ),
-		byte_size		: access.count * comp_len * tsize,
-	};
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	if( inc_data ){
-		let size = access.count * comp_len; ; // ElementCount * ComponentLength
-		switch( access.componentType ){
-			case Gltf.TYPE_FLOAT:			out.data = new Float32Array( bin, out.byte_offset, size ); break;
-			case Gltf.TYPE_SHORT:			out.data = new Int16Array( bin, out.byte_offset, size ); break;
-			case Gltf.TYPE_UNSIGNED_SHORT:	out.data = new Uint16Array( bin, out.byte_offset, size ); break;
-			case Gltf.TYPE_UNSIGNED_INT:	out.data = new Uint32Array( bin, out.byte_offset, size ); break;
-			case Gltf.TYPE_UNSIGNED_BYTE: 	out.data = new Uint8Array( bin, out.byte_offset, size ); break;
-		}				
-	}
-	
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	return out
-}
-
 
 //#####################################################
 </script>

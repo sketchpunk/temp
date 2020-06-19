@@ -4,14 +4,65 @@ import Gltf from "./Gltf.js";
 
 class GltfUtil{
 	// #region MESH & ARMATURE
+
+	static get_mesh( json, bin, m_name=null ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Grab first mesh name if none is passed to the function
+		if( !m_name ){
+			if( json.meshes.length == 0 ){ console.error( "No meshes found in gltf" ); return null; }
+			m_name = json.meshes[ 0 ].name;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get all the primatives of a mesh
+		let i,
+			ary = Gltf.get_mesh( m_name, json, bin, false ),
+			rtn = new Array();
+		for( i of ary ){
+			rtn.push( App.mesh.from_bin( i.name, i, bin ) );
+		}
+		
+		return rtn;
+	}
+
+	static get_entity( name, json, bin, mat, m_name ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Grab first mesh name if none is passed to the function
+		if( !m_name ){
+			if( json.meshes.length == 0 ){ console.error( "No meshes found in gltf" ); return null; }
+			m_name = json.meshes[ 0 ].name;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get all the primatives of a mesh
+		let ary = Gltf.get_mesh( m_name, json, bin, false );
+		if( ary.length == 0 ){ console.error( "No mesh found in gltf: %s", m_name ); return null; }
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let i, mesh, e = App.mesh_entity( name );
+		if( typeof mat == "string" ) mat = App.shader.new_material( mat );
+
+		for( i of ary ){			
+			mesh = App.mesh.from_bin( i.name, i, bin );
+			e.draw.add( mesh, mat, i.draw_mode );
+
+			if( i.rotation )	e.node.set_rot( g.rotation );
+			if( i.position )	e.node.set_pos( g.position );
+			if( i.scale )		e.node.set_scl( g.scale );
+		}
+		
+		return e;
+	}
+
+
 	// Loads in Mesh Only
-	static get_mesh( e_name, json, bin, mat, m_names=null ){
+	static get_meshxxx( e_name, json, bin, mat, m_names=null ){
 		let e = App.$Draw( e_name );
 		this.load_mesh_into( e, json, bin, mat, m_names, false );
 		return e;
 	}
 
-	static mesh( json, bin, mesh_name ){
+	static meshxxx( json, bin, mesh_name ){
 		let geo_ary = Gltf.get_mesh( mesh_name, json, bin, true ); // Spec Only, Doing a BIN Loading
 		if( geo_ary.length == 0 ){	console.error("Mesh not found", mesh_name ); return null; }
 		if( geo_ary.length > 1 ){	console.log( "Mesh has sub geometry, only returning first one" ); }
@@ -20,7 +71,7 @@ class GltfUtil{
 	}
 
 	// Load Skinned Mesh with Bone View
-	static get_debug_view( e_name, json, bin, mat, m_names=null, arm_name=null ){
+	static get_debug_viewxxx( e_name, json, bin, mat, m_names=null, arm_name=null ){
 		let e = App.ecs.entity( e_name, ["Node", "Draw", "Armature", "BoneView"] );
 		this.load_mesh_into( e, json, bin, mat, m_names, true );	// Mesh
 		this.load_bones_into( e, json, bin, arm_name );				// Armature
@@ -29,7 +80,7 @@ class GltfUtil{
 	}
 
 	// Load Armature and BoneView Only
-	static get_bone_view( e_name, json, bin, arm_name=null ){
+	static get_bone_viewxxx( e_name, json, bin, arm_name=null ){
 		let e = App.ecs.entity( e_name, [ "Node", "Draw", "Armature", "BoneView" ] );
 		this.load_bones_into( e, json, bin, arm_name );				// Armature
 		e.BoneView.init();											// Render Bones
@@ -37,7 +88,7 @@ class GltfUtil{
 	}
 
 	// Load Skinned Mesh
-	static get_skin_mesh( e_name, json, bin, mat, m_names=null, arm_name=null ){
+	static get_skin_meshxxx( e_name, json, bin, mat, m_names=null, arm_name=null ){
 		let e = App.ecs.entity( e_name, ["Node", "Draw", "Armature"] );
 		this.load_mesh_into( e, json, bin, mat, m_names, true );	// Mesh
 		this.load_bones_into( e, json, bin, arm_name );				// Armature
@@ -47,7 +98,7 @@ class GltfUtil{
 
 	// #region LOADERS
 	// Bin loading of Mesh Data into a Drawing Entity
-	static load_mesh_into( e, json, bin, mat=null, mesh_names=null, is_skinned=false ){
+	static load_mesh_intoxxx( e, json, bin, mat=null, mesh_names=null, is_skinned=false ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Load all meshes in file
 		if( !mesh_names ){
