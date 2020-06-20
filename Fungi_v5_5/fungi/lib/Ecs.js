@@ -221,7 +221,9 @@ class Systems{
 
 	run( ecs ){
 		let s;
-		for( s of this.items ) if( s.active ) s.fn( ecs );
+		for( s of this.items ){
+			if( s.active ) s.fn( ecs );
+		}
 		return this;
 	}
 
@@ -242,6 +244,12 @@ class Systems{
 		let i;
 		for( i of this.items ) if( i.name == sName ){ i.active = state; break; }
 		return this;	
+	}
+
+	debug(){
+		let s;
+		for( s of this.items ) console.log( "- SYSTEM %s - %s", s.name, s.priority );
+		return this;
 	}
 }
 
@@ -493,6 +501,7 @@ class Ecs{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		let reg = this.components.get_reg( name );
+		if( !reg ){ console.log( "ECS.query_comp - Component has no registration : %s", name );  return null; }
 		if( reg.instances.length == 0 ) return null;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

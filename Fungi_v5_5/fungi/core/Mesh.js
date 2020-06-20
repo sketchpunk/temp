@@ -16,7 +16,7 @@ class Mesh{
 }
 
 /*
-this.mesh 	= App.mesh.from_config([
+this.mesh 	= App.mesh.from_buffer_config([
 	{ name: "indices", buffer: buf_idx },
 	{ name: "vertices", buffer: verts, attrib_loc:0, size:3, stride_len:0, offset:0 },
 	{ name: "quad", buffer: buf_vert, interleaved: [
@@ -114,7 +114,7 @@ class MeshFactory{
 		return mesh;
 	}
 
-	from_config( config, name, element_cnt=0, instance_cnt=0 ){
+	from_buffer_config( config, name, element_cnt=0, instance_cnt=0 ){
 		let i, m = new Mesh( name );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -189,6 +189,37 @@ class MeshFactory{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		mesh.vao			= this.vao.new( config );
 		mesh.element_cnt	= ( json.indices )? json.indices.element_cnt : json.vertices.element_cnt;
+		return mesh;
+	}
+
+	from_data_config( config, name, element_cnt, instance_cnt=0 ){
+		let i, buf, mesh = new Mesh( name );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Generate Buffers
+		for( i of config ){
+			if( i.is_index ){
+				buf = this.buffer.new_element( i.data, i.is_static ?? true );
+
+				if( i.data instanceof Uint16Array ) 		mesh.element_type = USHORT;
+				else if( i.data instanceof Uint32Array ) 	mesh.element_type = UINT;
+			}else{
+				console.log( "BUFFER ", i.name, i.size, i.data );
+				buf = this.buffer.new_array( i.data, i.size, i.is_static ?? true );
+			}
+
+			if( i.instanced )	mesh.instanced = true;
+
+			mesh.buffers.set( i.name, buf );	// Save Buffer to Mesh
+			i.buffer = buf;						// Save Buffer to Config for VAO Generator
+		}
+		console.log( config );
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Final Configurations
+		mesh.vao			= this.vao.new( config );
+		mesh.element_cnt	= element_cnt;
+		mesh.instance_cnt	= instance_cnt;
+
 		return mesh;
 	}
 }

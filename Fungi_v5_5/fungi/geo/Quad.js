@@ -11,7 +11,7 @@ function Quad( name, mat ){
 			   0.5,  0.5, 0.0,	0,0,1,	1,0 ]
 		));
 
-		MESH = App.mesh.from_config([
+		MESH = App.mesh.from_buffer_config([
 			{ name: "indices", buffer: buf_idx },
 			{ name: "quad", buffer: buf_vert, interleaved: [
 				{ attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },

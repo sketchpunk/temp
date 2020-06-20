@@ -42,7 +42,7 @@ let App = {
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// METHODS
-	init	: ()=>{ return new Launcher(); },
+	init	: ( use_scene=true )=>{ return new Launcher( use_scene ); },
 	render	: ( dt=null, ss=null )=>{
 		if( dt != null ) App.delta_time		= dt;
 		if( ss != null ) App.since_start	= ss;

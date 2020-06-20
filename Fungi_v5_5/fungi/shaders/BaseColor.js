@@ -36,7 +36,7 @@ const FRAG_SRC = `#version 300 es
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 let sh	= App.shader.new( "BaseColor", VERT_SRC, FRAG_SRC, [
-	{ name:"color", type:"rgb", value:"black" }
+	{ name:"color", type:"rgb", value:"green" }
 	], App.ubo.get_array( "Global","Model" )
 );
 

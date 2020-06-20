@@ -54,7 +54,7 @@ class Points{
 
 		this.buf	= App.buffer.new_empty_array( this.data.byte_capacity, false );
 		
-		this.mesh 	= App.mesh.from_config([
+		this.mesh 	= App.mesh.from_buffer_config([
 			{ name: "indices", buffer: buf_idx },
 			{ name: "quad", buffer: buf_vert, interleaved: [
 				{ attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },
