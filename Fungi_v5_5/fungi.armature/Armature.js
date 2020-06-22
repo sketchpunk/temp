@@ -1,11 +1,9 @@
 import App, { Mat4, Transform } from "../fungi/App.js";
 
-let INITIAL = false;
-
 //###################################################################################
 
 class Bone{
-	constructor( name, idx, len=1, rot=null, pos=null ){
+	constructor( name, idx, len=1, pos=null, rot=null ){
 		this.name		= name;
 		this.idx		= idx;				// Index in Hierachy
 		this.p_idx		= null;				// Parent index
@@ -30,20 +28,13 @@ class Armature{
 	bind_pose		= null;	// Array<Mat4>
 	offset_buffer	= null;	// Flat Array of Offset Mat4
 
-	constructor(){
-		if( !INITIAL ){
-			INITIAL = true;
-			App.ecs.systems
-				.reg( ArmatureSys, 801 )
-				.reg( ArmatureCleanupSys, 1000 );
-		}		
-	}
+	constructor(){}
     // #endregion /////////////////////////////////////////////////////////////
 
     // #region METHODS
 	add_bone( name, len=1, p_idx=null, pos=null, rot=null ){
 		let idx		= this.bones.length,
-			bone	= new Bone( name, idx, len, rot, pos ),
+			bone	= new Bone( name, idx, len, pos, rot ),
 			e_id	= App.ecs.new_entity( name ),
 			node	= App.ecs.add_com( e_id, "Node" );
 
@@ -78,6 +69,14 @@ class Armature{
 		this.compute_bind_pose();
     }
     // #endregion /////////////////////////////////////////////////////////////
+
+	// #region GETTERS/SETTERS
+	get_node( bname ){
+		let idx = this.names[ bname ];
+		if( idx == null ){ console.error( "Armature.get_node - Bone name not found : %s", bname ); return null; }
+		return this.nodes[ idx ];
+	}
+	// #endregion /////////////////////////////////////////////////////////////
 
     // #region COMPUTE
 	compute_bind_pose(){
@@ -131,10 +130,11 @@ function ArmatureSys( ecs ){
     let arm, i, n, mat = new Mat4();
 	for( arm of ary ){
 		if( !arm.updated ) continue;
-        
-        //arm.update_offsets();
+
+		//arm.update_offsets();
 		for( i=0; i < arm.bones.length; i++ ){
 			n = arm.nodes[ i ];
+
 			if( n.updated ){
 				mat.from_mul( n.model_matrix, arm.bind_pose[ i ] );
 				arm.offset_buffer.set( mat, i*16 );
@@ -150,3 +150,4 @@ function ArmatureCleanupSys( ecs ){
 }
 
 export default Armature;
+export { ArmatureSys, ArmatureCleanupSys };

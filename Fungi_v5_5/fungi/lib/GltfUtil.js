@@ -4,7 +4,6 @@ import Gltf from "./Gltf.js";
 
 class GltfUtil{
 	// #region MESH & ARMATURE
-
 	static get_mesh( json, bin, m_name=null ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Grab first mesh name if none is passed to the function
@@ -25,7 +24,7 @@ class GltfUtil{
 		return rtn;
 	}
 
-	static get_entity( name, json, bin, mat, m_name ){
+	static get_entity( e_name, json, bin, mat, m_name=null, load_skin=false ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Grab first mesh name if none is passed to the function
 		if( !m_name ){
@@ -39,11 +38,14 @@ class GltfUtil{
 		if( ary.length == 0 ){ console.error( "No mesh found in gltf: %s", m_name ); return null; }
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let i, mesh, e = App.mesh_entity( name );
+		// Create Drawable Entity
+		let i, mesh, e = App.mesh_entity( e_name );
+		
+		// If passing a shader name, generate new material from it.
 		if( typeof mat == "string" ) mat = App.shader.new_material( mat );
 
 		for( i of ary ){			
-			mesh = App.mesh.from_bin( i.name, i, bin );
+			mesh = App.mesh.from_bin( i.name, i, bin, load_skin );
 			e.draw.add( mesh, mat, i.draw_mode );
 
 			if( i.rotation )	e.node.set_rot( g.rotation );
@@ -54,6 +56,43 @@ class GltfUtil{
 		return e;
 	}
 
+	static get_skin_entity( e_name, json, bin, mat, m_name=null, arm_name=null ){
+		let e			= this.get_entity( e_name, json, bin, mat, m_name );
+		let arm			= App.ecs.add_com( e.id, "Armature" );
+		let node_info	= this.load_bones_into( arm, json, bin, arm_name );
+
+		return e;
+	}
+
+	static get_skin_view_entity( e_name, json, bin, mat, m_name=null, arm_name=null ){
+		let e			= this.get_entity( e_name, json, bin, mat, m_name, true );
+		
+		let arm			= App.ecs.add_com( e.id, "Armature" );
+		let node_info	= this.load_bones_into( arm, json, bin, arm_name );
+
+		let bview		= App.ecs.add_com( e.id, "BoneView" );
+		bview.use_armature( arm );
+		e.draw.add( bview.mesh, App.shader.new_material( "BoneView" ), App.mesh.LINE );
+
+		e.arm = arm;
+		return e;
+	}
+
+	static get_bone_only_entity( e_name, json, bin, arm_name=null ){
+		let e 			= App.mesh_entity( e_name );
+		let arm			= App.ecs.add_com( e.id, "Armature" );
+		let node_info	= this.load_bones_into( arm, json, bin, arm_name );
+		let bview		= App.ecs.add_com( e.id, "BoneView" );
+		bview.use_armature( arm );
+
+		if( node_info.rot ) e.node.set_rot( node_info.rot );
+		if( node_info.pos ) e.node.set_pos( node_info.pos );
+		if( node_info.scl ) e.node.set_scl( node_info.scl );
+
+		e.draw.add( bview.mesh, App.shader.new_material( "BoneView" ), App.mesh.LINE );
+		e.arm = arm;
+		return e;
+	}
 
 	// Loads in Mesh Only
 	static get_meshxxx( e_name, json, bin, mat, m_names=null ){
@@ -97,81 +136,44 @@ class GltfUtil{
 	// #endregion //////////////////////////////////////////////////////////////
 
 	// #region LOADERS
-	// Bin loading of Mesh Data into a Drawing Entity
-	static load_mesh_intoxxx( e, json, bin, mat=null, mesh_names=null, is_skinned=false ){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Load all meshes in file
-		if( !mesh_names ){
-			mesh_names = new Array();
-			for( let i=0; i < json.nodes.length; i++ ){
-				if( json.nodes[i].mesh != undefined ) mesh_names.push( json.nodes[i].name );
-			}
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Mesh can be made up of sub-meshes, So need to loop through em.
-		let n, g, m, geo_ary;
-		for( n of mesh_names ){
-			geo_ary = Gltf.get_mesh( n, json, bin, true ); // Spec Only, Doing a BIN Loading
-
-			for( g of geo_ary ){
-				m = App.Mesh.from_bin( n, g, bin, is_skinned );
-				e.Draw.add( m, mat, g.mode );
-				if( g.rotation )	e.Node.set_rot( g.rotation );
-				if( g.position )	e.Node.set_pos( g.position );
-				if( g.scale ) 		e.Node.set_scl( g.scale );
-			}
-		}
-	}
-
-	static load_bones_into( e, json, bin, arm_name=null, def_len=0.1 ){
-		let n_info	= {}, // Node Info
-			arm 	= e.Armature,
+	static load_bones_into( arm, json, bin, arm_name=null, default_len=0.1 ){
+		let n_info	= {}, // Armature Node Info Container
 			bones 	= Gltf.get_skin_by_nodes( json, arm_name, n_info );
 			//bones 	= Gltf.get_skin( json, bin, arm_name, n_info );
-
+	
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Create Bones
+		// Create Bones on Armature
 		let len	= bones.length,
-			map = {},			// Create a Map of the First Child of Every Parent
+			map = {}, // Create a Map of the First Child of Every Parent
 			i, b, be;
-
+	
 		for( i=0; i < len; i++ ){
 			b	= bones[ i ];
-			be	= arm.add_bone( b.name, 1, b.p_idx );
-			//console.log( b.name, b.rot, b.scl );
-			if( b.rot ) be.Node.set_rot( b.rot );
-			if( b.pos ) be.Node.set_pos( b.pos );
-			if( b.scl ) be.Node.set_scl( b.scl );
-
+			be	= arm.add_bone( b.name, 1, b.p_idx, b.pos, b.rot );
+	
 			// Save First Child to Parent Mapping
-			if( b.p_idx != null && !map[ b.p_idx ] ) map[ b.p_idx ] = i;
+			if( b.p_idx != null && map[ b.p_idx ] == null ) map[ b.p_idx ] = i;
 		}
-
-		arm.finalize();
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Set the Entity Transfrom from Armature's Node Transform if available.
-		// Loading Meshes that where originally FBX need this to display correctly.
-		//console.log( n_info );
-		if( n_info.scl ) e.Node.set_scl( n_info.scl );
-		if( n_info.rot ) e.Node.set_rot( n_info.rot );
-
+	
+		arm.ready(); // Finalize Armature, Compute Worldspace Bind Pose
+	
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Calc the Length of Each Bone
 		let c;
 		for( i=0; i < len; i++ ){
 			b = arm.bones[ i ];
-
-			if( !map[ i ] ) b.len = def_len;
+	
+			if( !map[ i ] ) b.len = default_len;
 			else{
 				c = arm.bones[ map[ i ] ]; // First Child's World Space Transform
 				b.len = Vec3.len( b.world.pos, c.world.pos ); // Distance from Parent to Child
 			}
-			//console.log( b.name, b.len );
 		}
-
-		return e;
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Set the Entity Transfrom from Armature's Node Transform if available.
+		// Loading Meshes that where originally FBX need this to display correctly.
+		return n_info;
 	}
 	// #endregion //////////////////////////////////////////////////////////////
 

@@ -27,9 +27,18 @@ this.mesh 	= App.mesh.from_buffer_config([
 	{ name: "inst", buffer: this.buf, instanced:true, interleaved: this.data.generate_config( 6, true ) },
 ], "PointShapes", 6 );
 
-Maybe setup a new structure that will can load Bin or Type Array
-{ name:verts, data_type:int32, attrib_loc:0, component_len:3, is_static:true
-	data OR byte_offset, byte_size, element_cnt:100 }
+let config	= [
+	// Static Mesh
+	{ name:"indices",	data:geo.idx,	size:1, is_index:true, },
+	{ name:"vertices",	data:geo.vert,	size:4, attrib_loc:App.shader.POS_LOC, },
+	{ name:"color",		data:geo.color,	size:3, attrib_loc:App.shader.COLOR_LOC, },
+
+	// Mesh Instances
+	{ name:"rot",	data:bv.rot_buffer,	size:4, attrib_loc:10, is_static:false,	instanced:true, },
+	{ name:"pos",	data:bv.pos_buffer,	size:3, attrib_loc:11, is_static:false,	instanced:true, },
+	{ name:"scl",	data:bv.scl_buffer,	size:3, attrib_loc:12, is_static:false,	instanced:true, },
+	{ name:"len",	data:len_buf,		size:1, attrib_loc:13, is_static:true,	instanced:true, },
+];
 */
 
 class MeshFactory{
@@ -143,6 +152,7 @@ class MeshFactory{
 			buf, o;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Index Buffer
 		if( json.indices ){
 			o = json.indices;
 			switch( o.data_type ){ // Indices can be imported as different Int types.
@@ -158,6 +168,7 @@ class MeshFactory{
 		}
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Array Buffers
 		o	= json.vertices;
 		buf	= this.buffer.bin_array( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
 		mesh.buffers.set( "vertices", buf );
@@ -167,23 +178,23 @@ class MeshFactory{
 		// BONE INDICES AND WEIGHTS
 		if( load_skin && json.joints && json.weights ){
 			// JOINT INDICES
-			// Can make this work BUT need to parse joints out of BIN as a Uint16 array, then pass
-			// that to Buffer.array instead of fromBin. Javascript knows well enough how to convert
-			// Uint16Array to Float32Array before saving it to the GPU. This is an issue because
-			// there does not seem to be a way to use Uint16 Buffers other then Index. Only option is
-			// to use float buffers, so this conversion is needed.
-
+			// Can make this work BUT need to parse joints out of BIN as a Uint16 array, then
+			// convert it to a Float32Array. This is a work around since there doesn't 
+			// seem to be a way to use Uint16 as an ARRAY buffer.
 			// elmCount * compLen = Total Uints ( not total bytes )
-			/*
+			
 			o = json.joints;
-			let ui16 = new Uint16Array( bin, o.byte_start, o.elm_cnt * o.comp_len );
-			m.buf.bone_idx = Buf.new_array( ui16, o.comp_len, true, false );
-			vao.add_buf( m.buf.bone_idx, Shader.BONE_IDX_LOC );
+			let data = new Float32Array(
+				new Uint16Array( bin, o.byte_offset, o.element_cnt * o.component_len )
+			);
+			buf = this.buffer.new_array( data, o.component_len, true, false );
+			mesh.buffers.set( "skin_idx", buf );
+			config.push( { buffer: buf, attrib_loc: this.shader.SKIN_IDX_LOC } );
 
 			o = json.weights;
-			m.buf.bone_wgt = Buf.new_array_bin( dv, o.byte_start, o.byte_cnt, o.comp_len, true, false );
-			vao.add_buf( m.buf.bone_wgt, Shader.BONE_WGT_LOC );
-			*/
+			buf	= this.buffer.bin_array( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
+			mesh.buffers.set( "skin_wgt", buf );
+			config.push( { buffer: buf, attrib_loc: this.shader.SKIN_WGT_LOC } );
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -204,7 +215,6 @@ class MeshFactory{
 				if( i.data instanceof Uint16Array ) 		mesh.element_type = USHORT;
 				else if( i.data instanceof Uint32Array ) 	mesh.element_type = UINT;
 			}else{
-				console.log( "BUFFER ", i.name, i.size, i.data );
 				buf = this.buffer.new_array( i.data, i.size, i.is_static ?? true );
 			}
 
@@ -213,7 +223,7 @@ class MeshFactory{
 			mesh.buffers.set( i.name, buf );	// Save Buffer to Mesh
 			i.buffer = buf;						// Save Buffer to Config for VAO Generator
 		}
-		console.log( config );
+
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Final Configurations
 		mesh.vao			= this.vao.new( config );

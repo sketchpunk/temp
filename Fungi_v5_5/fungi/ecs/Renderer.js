@@ -2,17 +2,17 @@ import App from "../App.js";
 
 class Renderer{
 	constructor(){
-		//Render Objects
+		// Render Objects
 		this.frame_buffer 		= null;
 		this.material			= null;
 		this.shader				= null;
 		this.vao				= null;
 
-		//UBOs for Updating
+		// UBOs for Updating
 		this.ubo_model			= App.ubo.get( "Model" );
 		this.ubo_global			= App.ubo.get( "Global" );
 
-		//GL Option states
+		// GL Option states
 		this.options	= {
 			blend 					: { state : false,	id : App.gl.ctx.BLEND },
 			sampleAlphaCoverage 	: { state : false,	id : App.gl.ctx.SAMPLE_ALPHA_TO_COVERAGE },
@@ -21,7 +21,22 @@ class Renderer{
 			cullFace				: { state : true,	id : App.gl.ctx.CULL_FACE },
 			cullDir					: { state : App.gl.ctx.BACK },
 			blendMode				: { state : App.gl.BLEND_ALPHA },
-		}		
+		}
+		
+		// MISC
+		this.custom_loaders	= null;
+	}
+
+	add_custom_loader( loader ){
+		if( !this.custom_loaders ) this.custom_loaders = new Array();
+		this.custom_loaders.push( loader );
+		return this;
+	}
+
+	run_loaders( e ){
+		if( !this.custom_loaders ) return;
+		let o;
+		for( o of this.custom_loaders ) o.load( e, App );
 	}
 
 	// #region FRAMES

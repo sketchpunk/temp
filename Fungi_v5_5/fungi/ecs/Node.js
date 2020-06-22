@@ -140,8 +140,6 @@ function NodeSys( ecs ){
 
 	let n;
 	for( n of ary ){
-		//console.log( ecs.entities.instances[ n._entity_id ].name );
-
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// if parent has been modified, then child should also be concidered modified.
 		if( n.parent !== null && n.parent.updated ) n.updated = true;
@@ -149,11 +147,13 @@ function NodeSys( ecs ){
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// if parent exists, add parent's world transform to the child's local transform
-		if( n.parent !== null )	n.world.from_add( n.parent.world, n.local );
+		if( n.parent != null )	n.world.from_add( n.parent.world, n.local );
 		else					n.world.copy( n.local );
 
 		// Create Model Matrix for Shaders
 		n.model_matrix.from_quat_tran_scale( n.world.rot, n.world.pos, n.world.scl );
+
+		//console.log( "[ %s ] %s ", n.level, ecs.entities.instances[ n._entity_id ].name );
 	}
 }
 

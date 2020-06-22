@@ -1,5 +1,5 @@
 import App 		from "../App.js";
-import Renderer	from "./Renderer.js";
+
 
 //#########################################################################
 
@@ -36,7 +36,7 @@ function draw_priority_sort( a, b ){
 }
 
 class DrawSys{
-	constructor(){ this.render = new Renderer(); }
+	constructor(){ this.render = App.renderer; }
 
 	run( ecs ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -58,6 +58,8 @@ class DrawSys{
 			//console.log( "-- DRAWING", e.name, d.priority );
 			//--------------------------------------
 			r.load_node( ecs.get_com( e.id, "Node" ) ); // Push Model Matrix to UBO
+
+			r.run_loaders( e );
 
 			for( di of d.items ){
 				if( di.mesh.element_cnt == 0 ) continue;

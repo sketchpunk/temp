@@ -14,6 +14,7 @@ import Node,{ NodeSys, NodeCleanupSys } from "./ecs/Node.js";
 import Camera,{ CameraSys }				from "./ecs/Camera.js";
 import Draw, { DrawSys }				from "./ecs/Draw.js";
 import OrbitCameraSystem				from "./ecs/OrbitCameraSystem.js";
+import Renderer							from "./ecs/Renderer.js";
 
 import Maths, { Quat, Vec3, Transform, Mat4 } from "./maths/Maths.js";
 
@@ -37,6 +38,7 @@ let App = {
 	delta_time	: 0,		// Time between frames
 	since_start	: 1,		// Time since the render loop started.
 
+	renderer	: null,
 	render_loop	: null,
 	on_render	: null,
 
@@ -64,7 +66,9 @@ let App = {
 		return { id, node, draw };
 	},
 
-	render_mode : ( m )=>{
+	render_by : ( m, fn=null )=>{
+		if( fn ) App.on_render = fn;
+
 		if( m == 0 ){
 			App.render_loop.stop()
 			App.input.on_input = ()=>{ App.render(); };
@@ -102,12 +106,12 @@ class Launcher{
     
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// CORE
-        App.buffer	= new Buffer( App.gl );
-        App.ubo 	= new Ubo( App.gl );
-        App.shader	= new Shader( App.gl );
-        App.vao		= new Vao( App.gl );
-		App.mesh	= new Mesh( App.gl, App.vao, App.buffer, App.shader );
-		App.input	= new InputTracker( App.gl.canvas );
+        App.buffer		= new Buffer( App.gl );
+        App.ubo 		= new Ubo( App.gl );
+        App.shader		= new Shader( App.gl );
+        App.vao			= new Vao( App.gl );
+		App.mesh		= new Mesh( App.gl, App.vao, App.buffer, App.shader );
+		App.input		= new InputTracker( App.gl.canvas );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// RENDERING UBOs
@@ -123,6 +127,11 @@ class Launcher{
 		App.ubo.new( "Model", 1, [
 			{ name:"view_matrix", type:"mat4" },
 		]);
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		App.renderer	= new Renderer();
+		App.render_loop = new RenderLoop( App.render );
+		App.render_by( 0 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// ECS SETUP
@@ -143,10 +152,6 @@ class Launcher{
 		App.cam_com		= new Camera().set_perspective( 45, 0.01, 1000.0 );
 		App.cam_node	= new Node();
 		App.ecs.new_entity( "Camera", App.cam_node, App.cam_com );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		App.render_loop = new RenderLoop( App.render );
-		App.render_mode( 0 );
 
 		return true;
 	}
@@ -182,6 +187,15 @@ class Launcher{
 			return true;
 		})
 		return this;
+	}
+
+	load_pkg( config=null ){
+		this.task(async()=>{
+			let pkg = await import( "../" + config.name + "/pkg.js" );
+			await pkg.default( App, config );
+			return true;
+		});
+		return this
 	}
 
 	set_camera( ox=-15, oy=15, od=2.5, tx=0, ty=0.75, tz=0 ){

@@ -1,0 +1,81 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	//let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
+	let [ json, bin ] = await XhrQueue.url( "../../files/anim/", "Walking.gltf", "Walking.bin" );
+	//let e = GltfUtil.get_skin_view_entity( "Test", json, bin, "LowPolySkin" );
+
+	//let e = GltfUtil.get_bone_only_entity( "Test", json, bin );
+	//e.draw.items[0].material.set_depth_test( true );
+
+	let anim = Gltf.get_animation( json, bin, null, true );
+	console.log( anim );
+
+	return true;
+}
+
+class Animation{
+	frame_cnt	= 0;
+	time_max	= 0;
+	time_ary	= 0;
+	tracks		= new Array();
+
+	//type: "pos", time_idx: 0, joint_idx: 0, interp: "LINEAR", data: Float32Array(90)}
+}
+
+class Track{
+	prop			= "pos";
+	time_idx		= 0;
+	skin_idx		= 0;
+	interpolation	= "LINEAR"
+	data			= null;
+}
+
+class PoseAnimator{
+
+}
+
+class PoseBone{
+	constructor( bone ){
+		this.name		= bone.name;
+		this.idx		= bone.idx;
+		this.p_idx		= bone.p_idx;
+		this.len 		= bone.len;
+		this.local 		= new Transform( bone.local );
+		this.world		= new Transform( bone.world );
+		this.chg_state	= 0;
+	}
+}
+
+class Pose{
+	constructor( arm ){
+		this.arm			= arm;								// Reference Back to Armature, Make Apply work Easily
+		this.bones			= new Array( arm.bones.length );	// Recreation of Bone Hierarchy
+		this.root_offset	= new Transform();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Bone Transform Hierarchy to do transformations
+		// without changing the actual armature.
+		for( let i=0; i < arm.bones.length; i++ ){
+			this.bones = new PoseBone( arm.bones[ i ] );
+		}
+	}
+}	
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
