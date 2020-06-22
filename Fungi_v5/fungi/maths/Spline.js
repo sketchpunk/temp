@@ -83,7 +83,20 @@ class Spline{
             v0.copy( v1 );
         }
         return this;
-    }
+	}
+	
+	deserialize_hermite( ary ){
+		this.clear();
+		let data, pos = new Vec3();
+		for( let i=0; i < ary.length; i+= 5 ){
+			data = { 
+				tension	: ary[ i+3 ],
+				bias	: ary[ i+4 ],
+			};
+			this.add( pos.from_buf( ary, i ), data );
+		}
+		return this; 
+	}
 }
 
 //####################################################################################

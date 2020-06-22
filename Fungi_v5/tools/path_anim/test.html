@@ -1,0 +1,213 @@
+<html>
+<body style="background-color:#25282F;">
+<style>
+	html, body{ padding:0px; margin:0px; }
+</style>
+<canvas id="canvas" style="border:0px solid red;"></canvas>
+
+<script type="module">
+	import Canvas		from "./Canvas.js";
+	import Vec3			from "../../fungi/maths/Vec3.js";
+	import Spline		from "../../fungi/maths/Spline.js";
+	import ClockTick	from "./ClockTick.js";
+	import RenderLoop	from "./RenderLoop.js";
+
+	let $		= new Canvas("canvas" ).center().font_size( 14 ).fill("#808080");
+	let $loop	= new RenderLoop();
+	let $spline, $spline_map,
+	
+	$animator, $pos = new Vec3();
+
+	let $sim_anim;
+	let $tick;
+	
+	window.addEventListener( "load", function(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// LOAD UP PATH
+		$spline = Spline.from_hermite( false ).deserialize_hermite(
+			[53.09403991699219,0,-51.01209259033203,0,0,42.742305755615234,0,-40.23370361328125,0,0,9.802534103393555,0,28.487712860107422,0,0,0.48722729086875916,0,57.71915054321289,0,0,0.20924994349479675,0,103.15430450439453,0,0,9.162997245788574,0,112.33043670654297,0.5,0,-12.612710952758789,0,112.34493255615234,1,0,-26.061891555786133,0,112.14350128173828,1,0]
+		);
+
+		// Scale the Path Up for Canvas
+		$spline.points.forEach( (o,i)=>{ o.pos.scale( 2.5 ); } );
+
+		// Create ArcLength to Time Map.
+		$spline_map = $spline.gen_map( 30 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Animator that uses ArcLength for smooth movement on path.
+		$animator = new PathAnimator( $spline );
+		$sim_anim = new SimAnimator()
+			.set_sim_time( 15 )
+			.set_tick_time( 2 )
+			.set_now( "01/01/2000 00:00:00 GMT" )
+			.set_time_min( "01/01/2000 00:00:00 GMT" )
+			.set_time_max( "01/01/2000 02:00:00 GMT" );
+
+		$tick = new ClockTick( "01/01/2000 00:00:00 GMT" )
+			.set_tick_min( 15 )
+			.set_interval( 2 )
+			.set_fn( (dt,tick)=>{ 
+				console.log( "Tick", tick.to_string() );
+				$sim_anim.time_now = tick.now;
+			} )
+			.start();
+
+		// 2 SimHRs to complete path is 8 SEC in Real Time.
+		$loop.set_callback( on_render ).start();
+	});
+	
+	function on_render( dt, ss ){
+		// Move Sim Time Forward
+		$sim_anim.update( dt );
+		
+		// Get Curve T from Map
+		let t_path = $spline_map.at( $sim_anim.time_grad );
+		
+		$spline.at( t_path, $pos );	// Get Position on Curve
+		rot_2d( $pos, $pos );		// 3D to 2D Rotate -90D
+
+		$.clear();		// Clear Scene
+		spline_draw();	// Draw Spline
+		
+		// Draw Plane
+		$.fill( "#00ff00" ).tri_vec( 9, 10, $pos.x, $pos.y );
+		
+		// Draw Time Stats
+		$	.text( "MIN : " + $sim_anim.min_to_string(), 10, -50 )
+			.text( "NOW : " + $sim_anim.now_to_string(), 10, -30 )
+			.text( "MAX : " + $sim_anim.max_to_string(), 10, -10 );
+	}
+
+	// #region SUPPORT
+
+	// Take a 3D Point, Convert to 2D, 
+	// then do a -90 Degree Rotation
+	function rot_2d( d3, d2 ){
+		let x = d3.x, 
+			y = d3.z;
+		d2.x = -y;
+		d2.y = x;
+	}
+
+	function spline_draw( spline=$spline, steps=5 ){
+		let i, t, 
+			v	= new Vec3(),
+			a	= new Vec3(), 
+			b	= new Vec3();
+
+		$.fill( "#606060" ).stroke( "#606060" ).line_width( 1 );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		spline.at_curve( 0, 0, v );	// Get the first point of the spline
+		rot_2d( v, a );
+
+		for( let c = 0; c < spline.curve_count(); c++ ){
+			
+			for( i=1; i <= steps; i++ ){
+				t = i / steps;
+				spline.at_curve( c, t, v );
+				rot_2d( v, b );
+
+				$.line_vec( a, b );
+				a.copy( b );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( i of spline.points ){
+			// 3D to 2D Plus - Rotate -90 Degrees
+			rot_2d( i.pos, v );
+			$.circle_vec( v, 4 );
+		}
+	}
+	// #endregion /////////////////////////////////////////////////////////////
+
+	// #region SUPPORT
+	class PathAnimator{
+		constructor( path ){
+			this.path		= path;
+			this.map		= path.gen_map( 30 ); // ArcLength Time Mapping
+			this.time_now	= 0;
+			this.time_max	= 5;
+			this.pos		= new Vec3();
+		}
+		
+		update( dt ){
+			this.time_now	= (this.time_now + dt) % this.time_max;
+			let t_anim		= this.time_now / this.time_max;
+			let t_path		= this.map.at( t_anim );
+			//this.path.at( t_anim, this.pos );
+			this.path.at( t_path, this.pos );
+
+			return this.pos;
+		}
+	}
+	// #endregion /////////////////////////////////////////////////////////////
+
+
+	class SimAnimator{
+		// #region MAIN
+		time_now	= 0;	// Current Time ( GMT MS )
+		time_min	= 0;	// Starting Time ( GMT MS )
+		time_max	= 0;	// Ending Time ( GMT MS )
+		time_rng	= 0;	// Time Range
+		time_grad	= 0;	// Time Range Gradient
+
+		tick_time	= 2;	// 2 Seconds, How long between Ticks
+		sim_time	= 15 * 60 * 1000;	// 15 Minute of Simulator Time per Tick
+		// #endregion ///////////////////////////////////////////////////////////
+
+		// #region SETTINGS
+		set_tick_time( v ){ this.tick_time = v; return this; }
+		set_sim_time( v ){ this.sim_time = v * 60 * 1000; return this; }
+
+		set_now( dt_str ){		this.time_now = this.now = Date.parse( dt_str ); return this; }
+		set_time_min( dt_str ){
+			this.time_min = Date.parse( dt_str );
+			this.time_rng = this.time_max - this.time_min;
+			return this;
+		}
+		set_time_max( dt_str ){
+			this.time_max = Date.parse( dt_str );
+			this.time_rng = this.time_max - this.time_min;
+			return this;
+		}
+
+		to_string( gmt ){
+			let dt	= new Date( gmt ),
+				txt	= dt.toUTCString();
+			return txt.slice( txt.indexOf(" ")+1, txt.length - 4 );
+		}
+
+		now_to_string(){ return this.to_string( this.time_now ); }
+		min_to_string(){ return this.to_string( this.time_min ); }
+		max_to_string(){ return this.to_string( this.time_max ); }
+
+		// #endregion ///////////////////////////////////////////////////////////
+		
+		// #region SETTINGS
+		update( dt ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Move Sim Time Forward based on Realtime DeltaTime
+			// Convert DeltaTime in relation to Tick time, which
+			// us a gradient value that we mul with sim_time.
+			// The main Idea is to Convert Real Time to Sim Time.
+			this.time_now += ( dt / this.tick_time ) * this.sim_time;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Compute Time Gradient
+			if( this.time_now <= this.time_min ) 		this.time_grad = 0;
+			else if( this.time_now >= this.time_max )	this.time_grad = 1;
+			else{
+				this.time_grad = ( this.time_now - this.time_min ) / this.time_rng;
+			}
+
+			//console.log( this.time_grad, this.now_to_string() );
+		}
+		// #endregion ///////////////////////////////////////////////////////////
+	}
+</script>
+
+</body>
+</html>

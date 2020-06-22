@@ -1,4 +1,5 @@
 import App, { Mat4, Transform } from "../fungi/App.js";
+import Pose from "./Pose.js";
 
 //###################################################################################
 
@@ -76,6 +77,8 @@ class Armature{
 		if( idx == null ){ console.error( "Armature.get_node - Bone name not found : %s", bname ); return null; }
 		return this.nodes[ idx ];
 	}
+
+	new_pose(){ return new Pose( this ); }
 	// #endregion /////////////////////////////////////////////////////////////
 
     // #region COMPUTE
