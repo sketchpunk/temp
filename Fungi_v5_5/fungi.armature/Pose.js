@@ -67,6 +67,13 @@ class Pose{
 	// #endregion /////////////////////////////////////////////////////////
 
 	// #region SETTING / GETTING
+	set_local_pos( idx, v ){
+		let b = this.bones[ idx ];
+		b.local.pos.copy( v );
+		b.chg_state |= Pose.POS;
+		return this;
+	}
+
 	set_local_rot( idx, q ){
 		let b = this.bones[ idx ];
 		b.local.rot.copy( q );
