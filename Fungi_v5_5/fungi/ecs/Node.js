@@ -131,6 +131,16 @@ class Node{
 		return tf;
 	}
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
+
+	// #region STATIC
+	static debug_node_tree( n ){
+		let c, spot	= "--";
+		let e		= App.ecs.entities.instances[ n._entity_id ];
+		console.log( "%s [ %s ] %s",spot.repeat( n.level ), n.level, e.name );
+	
+		for( c of n.children ) this.debug_node_tree( c );
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////////// 
 }
 
 

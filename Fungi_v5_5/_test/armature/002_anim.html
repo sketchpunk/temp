@@ -3,105 +3,41 @@ import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
 import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
 import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
 
-import Animation from "../../fungi.armature/Animation.js";
+import { Animation, PoseAnimator } from "../../fungi.armature/Animation.js";
 
 //#####################################################
 App
 	.init( true )
 	.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
-	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.set_camera( 20, 20, 4, 0, 0.7, 0 )
 	.task( init )
 	.then();
 
 //#####################################################
+let $anim, $animator, $pose;
 
 async function init(){
 	let [ json, bin ] = await XhrQueue.url( "../../files/anim/", "Walking.gltf", "Walking.bin" );
+	
 	let e = GltfUtil.get_bone_only_entity( "Test", json, bin );
 	e.draw.items[0].material.set_depth_test( true );
 
-	let pose = e.arm.new_pose();
-
-	/*
-	let b = pose.get_bone( "LeftUpLeg" );
-	let q = pose.get_local_rot( b.idx );
-	q.rot_x( -45 * Math.PI / 180 );
-	pose.set_local_rot( b.idx, q );
-	pose.apply();
-	*/
-
-	//console.log( b.idx, pose.bones );
-
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let data = Gltf.get_animation( json, bin, null, true );
-	let anim = Animation.from_gltf( data );
-	//console.log( anim );
+	$anim		= Animation.from_gltf( data );
+	$animator	= new PoseAnimator();
+	$pose		= e.arm.new_pose();
 
-	let animator = new PoseAnimator();
-	animator.tick( 0.2 ).update( anim, pose );
-	pose.apply();
-
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//on_render( 0.6 );
+	App.render_by( 1, on_render );
 	return true;
 }
 
-class PoseAnimator{
-	clock	= 0;
-	frames 	= new Array();
-
-	// #region METHODS
-	tick( dt ){ this.clock += dt; return this; }
-	reset(){ this.clock = 0; return this; }
-	// #endregion /////////////////////////////////////////////////////////
-
-	// #region METHODS
-	update( anim, pose ){
-		let track, time = this.clock % anim.time_max;
-		this.compute_frame_time( time, anim.time_ary );
-		for( track of anim.tracks ){
-			track.frame_pose( pose, this.frames[ track.time_idx ] );
-		}
-	}
-
-	compute_frame_time( time, time_ary ){
-		let j, i, ary, itm, len = time_ary.length;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Precreate date to hold our frame data
-		if( this.frames.length < len ){
-			for( i=this.frames.length; i < len; i++ ){
-				this.frames.push( { a_idx:0, b_idx:0, time:0 } );
-			}
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		for( j=0; j < len; j++ ){
-			ary	= time_ary[ j ];	// Set of Frame Time Data
-			itm	= this.frames[ j ];	// Container
-			
-			//-----------------------------------
-			// Find the first frame that is less then the clock.
-			itm.a_idx = 0;
-			for( i=time.length-2; i > 0; i-- ){
-				if( ary[i] < time ){ itm.a_idx = i; break; }
-			}
-
-			//-----------------------------------
-			// Normalize Time Between Frames
-			itm.b_idx = itm.a_idx + 1;	// Next Frame
-
-			// if not over, compute T between the two frames
-			if( itm.b_idx < ary.length ){ 
-				itm.time = ( time - ary[ itm.a_idx ] ) / ( ary[ itm.b_idx ] - ary[ itm.a_idx ] );
-			}else{ 
-				itm.b_idx	= 0;
-				itm.time	= 0;
-			}
-		}
-	}
-	// #endregion /////////////////////////////////////////////////////////
+function on_render( dt, ss ){
+	$animator.tick( dt ).update( $anim, $pose );
+	$pose.clear_root_motion( 0, 1 ).apply();
 }
-
-// #region 
-// #endregion /////////////////////////////////////////////////////////
 
 //#####################################################
 </script>

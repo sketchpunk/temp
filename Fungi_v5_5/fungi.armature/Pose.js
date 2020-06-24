@@ -19,6 +19,7 @@ class Pose{
 	static SCL = 4;
 
 	constructor( arm ){
+		this.name			= "UntitledPose";
 		this.arm			= arm;								// Reference Back to Armature, Make Apply work Easily
 		this.bones			= new Array( arm.bones.length );	// Recreation of Bone Hierarchy
 		this.root_offset	= new Transform();
@@ -33,6 +34,16 @@ class Pose{
 	// #endregion /////////////////////////////////////////////////////////
 
 	// #region METHODS
+	// Clears out root movement. XZ is customizable because of Maximo.
+	clear_root_motion( x=0, z=2 ){
+		let b = this.bones[ 0 ];
+		if( b.chg_state & Pose.POS ){
+			b.local.pos[ x ] = 0;
+			b.local.pos[ z ] = 0;
+		}
+		return this;
+	}
+	
 	// Copies modified Local Transforms of the Pose to the Bone Entity Node Component.
 	apply(){
 		let i,
@@ -62,6 +73,14 @@ class Pose{
 		}
 
 		if( cnt != 0 ) this.arm.updated = true;
+		return this;
+	}
+
+	update_world(){
+		for( let b of this.bones ){
+			if( b.p_idx != null )	b.world.from_add( this.bones[ b.p_idx ].world, b.local ); // Parent.World + Child.Local
+			else					b.world.from_add( this.root_offset, b.local );
+		}
 		return this;
 	}
 	// #endregion /////////////////////////////////////////////////////////
@@ -103,14 +122,6 @@ class Pose{
 }
 
 /*
-		update_world(){
-			for( let b of this.bones ){
-				if( b.p_idx != null )	b.world.from_add( this.bones[ b.p_idx ].world, b.local ); // Parent.World + Child.Local
-				else					b.world.from_add( this.root_offset, b.local );
-			}
-			return this;
-		}
-
 		get_parent_world( b_idx, pt=null, ct=null, t_offset=null ){
 			let cbone = this.bones[ b_idx ];
 			pt = pt || new Transform();

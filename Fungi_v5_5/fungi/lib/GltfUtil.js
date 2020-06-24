@@ -93,46 +93,6 @@ class GltfUtil{
 		e.arm = arm;
 		return e;
 	}
-
-	// Loads in Mesh Only
-	static get_meshxxx( e_name, json, bin, mat, m_names=null ){
-		let e = App.$Draw( e_name );
-		this.load_mesh_into( e, json, bin, mat, m_names, false );
-		return e;
-	}
-
-	static meshxxx( json, bin, mesh_name ){
-		let geo_ary = Gltf.get_mesh( mesh_name, json, bin, true ); // Spec Only, Doing a BIN Loading
-		if( geo_ary.length == 0 ){	console.error("Mesh not found", mesh_name ); return null; }
-		if( geo_ary.length > 1 ){	console.log( "Mesh has sub geometry, only returning first one" ); }
-		
-		return App.Mesh.from_bin( mesh_name, geo_ary[0], bin );
-	}
-
-	// Load Skinned Mesh with Bone View
-	static get_debug_viewxxx( e_name, json, bin, mat, m_names=null, arm_name=null ){
-		let e = App.ecs.entity( e_name, ["Node", "Draw", "Armature", "BoneView"] );
-		this.load_mesh_into( e, json, bin, mat, m_names, true );	// Mesh
-		this.load_bones_into( e, json, bin, arm_name );				// Armature
-		e.BoneView.init();											// Render Bones
-		return e;
-	}
-
-	// Load Armature and BoneView Only
-	static get_bone_viewxxx( e_name, json, bin, arm_name=null ){
-		let e = App.ecs.entity( e_name, [ "Node", "Draw", "Armature", "BoneView" ] );
-		this.load_bones_into( e, json, bin, arm_name );				// Armature
-		e.BoneView.init();											// Render Bones
-		return e;
-	}
-
-	// Load Skinned Mesh
-	static get_skin_meshxxx( e_name, json, bin, mat, m_names=null, arm_name=null ){
-		let e = App.ecs.entity( e_name, ["Node", "Draw", "Armature"] );
-		this.load_mesh_into( e, json, bin, mat, m_names, true );	// Mesh
-		this.load_bones_into( e, json, bin, arm_name );				// Armature
-		return e;
-	}
 	// #endregion //////////////////////////////////////////////////////////////
 
 	// #region LOADERS

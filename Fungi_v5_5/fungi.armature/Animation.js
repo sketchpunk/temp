@@ -70,6 +70,66 @@ class BoneTrack{
 	};
 }
 
+class PoseAnimator{
+	clock			= 0;
+	frames			= new Array();
+
+	// #region METHODS
+	tick( dt ){ this.clock += dt; return this; }
+	reset(){ this.clock = 0; return this; }
+	// #endregion /////////////////////////////////////////////////////////
+
+	// #region METHODS
+	update( anim, pose ){
+		let track, time = this.clock % anim.time_max;
+		this.compute_frame_time( time, anim.time_ary );
+
+		//console.log( time, this.frames );
+
+		for( track of anim.tracks ){
+			track.frame_pose( pose, this.frames[ track.time_idx ] );
+		}
+	}
+
+	compute_frame_time( time, time_ary ){
+		let j, i, ary, itm, len = time_ary.length;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Precreate date to hold our frame data
+		if( this.frames.length < len ){
+			for( i=this.frames.length; i < len; i++ ){
+				this.frames.push( { a_idx:0, b_idx:0, time:0 } );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( j=0; j < len; j++ ){
+			ary	= time_ary[ j ];	// Set of Frame Time Data
+			itm	= this.frames[ j ];	// Container
+			
+			//-----------------------------------
+			// Find the first frame that is less then the clock.
+			itm.a_idx = 0;
+			for( i=ary.length-2; i > 0; i-- ){
+				if( ary[i] < time ){ itm.a_idx = i; break; }
+			}
+
+			//-----------------------------------
+			// Normalize Time Between Frames
+			itm.b_idx = itm.a_idx + 1;	// Next Frame
+
+			// if not over, compute T between the two frames
+			if( itm.b_idx < ary.length ){ 
+				itm.time = ( time - ary[ itm.a_idx ] ) / ( ary[ itm.b_idx ] - ary[ itm.a_idx ] );
+			}else{ 
+				itm.b_idx	= 0;
+				itm.time	= 0;
+			}
+		}
+	}
+	// #endregion /////////////////////////////////////////////////////////
+}
+
 // #region QUATERNION FUNCTIONS
 function quat_norm( q ){
 	let len =  q[0]**2 + q[1]**2 + q[2]**2 + q[3]**2;
@@ -149,4 +209,4 @@ function vec3_buf_lerp( buf, ai, bi, t, out ){
 
 // #endregion /////////////////////////////////////////////////////////
 
-export default Animation;
+export { Animation, PoseAnimator };

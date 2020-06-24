@@ -1,0 +1,69 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App
+    .init( true )
+    .load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+    .set_camera( 0, 20, 3, 0, 0.7, 0 )
+    .task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
+    let e = GltfUtil.get_skin_view_entity( "Test", json, bin, "LowPolySkin" );
+
+    //let tpose = e.arm.new_pose();
+    //GltfUtil.get_pose( tpose, json, "tpose", false );
+
+    return true;
+}
+
+class Chain{
+	bones		= new Array();	// Index to a bone in an armature / pose
+	len			= 0;			// Chain Length
+	len_sqr		= 0;			// Chain Length Squared, Cached for Checks without SQRT
+	bone_cnt	= 0;			// How many Bones in the chain
+	end_idx 	= null;			// Joint that Marks the true end of the chain
+
+	alt_fwd 	= Vec3.FORWARD.clone();
+	alt_up		= Vec3.UP.clone();
+	ik_solver 	= null;
+}
+
+class IKRig{
+    arm 	= null;		// Reference back to Armature Component
+	tpose	= null;		// TPose or Bind Pose, TPose is better for IK
+	pose	= null;		// Pose object to manipulate before applying to bone entities
+	chains  = {};		// Bone Chains, Usually Limbs / Spine / Hair / Tail
+	points  = {};		// Main Single Bones of the Rig, like Head / Hip / Chest
+
+	leg_len_lmt = 0;
+}
+
+class IKHumanRig{
+	arm		= null;
+	tpose	= null;
+	pose	= null;
+
+	foot_l	= null;
+	foot_r	= null;
+	arm_r	= null;
+	arm_l	= null;
+	leg_r	= null;
+	leg_l	= null;
+	hip		= null;
+	spine	= null;
+	head	= null;
+}
+
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
