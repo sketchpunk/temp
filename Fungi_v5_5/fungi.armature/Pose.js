@@ -18,8 +18,8 @@ class Pose{
 	static POS = 2;
 	static SCL = 4;
 
-	constructor( arm ){
-		this.name			= "UntitledPose";
+	constructor( arm, name="UntitledPose" ){
+		this.name			= name;
 		this.arm			= arm;								// Reference Back to Armature, Make Apply work Easily
 		this.bones			= new Array( arm.bones.length );	// Recreation of Bone Hierarchy
 		this.root_offset	= new Transform();
@@ -109,7 +109,7 @@ class Pose{
 
 	get_bone( bname ){
 		let idx = this.arm.names[ bname ];
-		if( idx == null ){ console.error( "Armature.get_node - Bone name not found : %s", bname ); return null; }
+		if( idx == null ){ console.error( "Pose.get_bone - Bone name not found : %s", bname ); return null; }
 		return this.bones[ idx ];
 	}
 

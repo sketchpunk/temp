@@ -151,8 +151,8 @@ class GltfUtil{
 		return `{ "name":"${name}", "skin":${skin}, "joints":[\n${buf}\n]}`;
 	}
 
-	static get_pose( e, json, pose_name=null, do_world_calc=false ){
-		if( !json.poses || json.poses.length == 0 ){ console.error("No Poses in file"); return null; }
+	static load_pose( pose, json, pose_name=null, do_world_calc=false ){
+		if( !json.poses || json.poses.length == 0 ){ console.error( "No Poses in gltf file" ); return null; }
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Find Which Pose To Use.
@@ -162,22 +162,21 @@ class GltfUtil{
 			for( i=0; i < json.poses.length; i++ ){
 				if( json.poses[ i ].name == pose_name ){ p_idx = i; break; }
 			}
+
 			if( i != p_idx ){ console.log("Can not find pose by the name: ", pose_name ); return null; }
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Save pose local space transform
-		let bones	= json.poses[ p_idx ].joints,
-			pose	= e.Armature.new_pose(),
-			i, b;
+		let i, b, bones = json.poses[ p_idx ].joints;
 
 		for( i=0; i < bones.length; i++ ){
 			b = bones[ i ];
-			pose.set_bone( i, b.rot, b.pos, b.scl );
+			if( b.rot ) pose.set_local_rot( i, b.rot );
+			if( b.pos ) pose.set_local_pos( i, b.pos );
 		}
 
 		if( do_world_calc ) pose.update_world();
-
 		return pose;
 	}
 	// #endregion //////////////////////////////////////////////////////////////

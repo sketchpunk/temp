@@ -78,7 +78,7 @@ class Armature{
 		return this.nodes[ idx ];
 	}
 
-	new_pose(){ return new Pose( this ); }
+	new_pose( name="undefined_pose" ){ return new Pose( this, name ); }
 	// #endregion /////////////////////////////////////////////////////////////
 
     // #region COMPUTE
