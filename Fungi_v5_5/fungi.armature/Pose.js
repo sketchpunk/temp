@@ -119,6 +119,37 @@ class Pose{
 		return this.arm.nodes[ idx ];
 	}
 	// #endregion /////////////////////////////////////////////////////////
+
+	// #region COMPUTE
+	get_parent_world( b_idx, pt=null, ct=null, t_offset=null ){
+		let cbone = this.bones[ b_idx ];
+		pt = pt || new Transform();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Child is a Root Bone, just reset since there is no parent.
+		if( cbone.p_idx == null ){ 
+			pt.clear();
+		}else{
+			// Parents Exist, loop till reaching the root
+			let b = this.bones[ cbone.p_idx ];
+			pt.copy( b.local );
+
+			while( b.p_idx != null ){
+				b = this.bones[ b.p_idx ];
+				pt.add_rev( b.local );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		
+		pt.add_rev( this.root_offset );				// Add Starting Offset
+		if( t_offset ) pt.add_rev( t_offset );		// Add Additional Starting Offset
+
+		if( ct ) ct.from_add( pt, cbone.local );	// Requesting Child WS Info Too
+
+		return pt;
+	}
+	// #endregion /////////////////////////////////////////////////////////
 }
 
 /*

@@ -61,76 +61,8 @@ class IKTarget{
 	///////////////////////////////////////////////////////////////////
 	// Single Bone Solvers
 	///////////////////////////////////////////////////////////////////
-		
-		_aim_bonexxx( chain, pose, p_wt, out ){
-			/*
-			The idea is to Aim the root bone in the direction of the target. Originally used a lookAt rotation 
-			then correcting it to take in account the bone's points up, not forward.
 
-			Instead, Build a rotation based on axis direction. Start by using target's fwd dir as the bone's up dir.
-			To Help keep orientation, use the bone's Bind( or TPose ) world space fwd as a starting point to help get
-			the left dir. With UP and Left, do another cross product for fwd to keep the axis orthogonal.
-
-			This aims the limb pretty well at the target. The final step is to twist the limb so its joint (elbow, knee)
-			is pointing at the UP dir of the target axis. This helps define how much twisting we need to apply to the bone.
-			Arm and Knees tend to have different natural pose. The leg's fwd is fwd but the arm's fwd may be point down or back,
-			all depends on how the rigging was setup.
-
-			Since he bone is now aligned to the target, it shares the same Direction axis that we can then easily apply a twist
-			rotation. The target's UP is final dir, so we take the lumb's aligning axis's world space dire and simply use 
-			Quat.rotateTo( v1, v2 ). This function creates a rotation needed to get from One Vector dir to the other.
-			*/
-			
-			let rot		= Quat.mul( p_wt.rot, pose.get_local_rot( chain.bones[0].idx ) ),	// Get World Space Rotation for Bone
-				f_dir	= Vec3.transform_quat( Vec3.FORWARD, rot ),					// Get Bone's WS Forward Dir
-				l_dir	= Vec3.cross( this.axis.z, f_dir ).norm();					// WS Left Dir
-
-			f_dir.from_cross( l_dir, this.axis.z ).norm();							// Realign forward to keep axis orthogonal for proper rotation
-
-			out.from_axis( l_dir, this.axis.z, f_dir );								// Final World Space Rotation
-			if( Quat.dot( out, rot ) < 0 ) out.negate();							// If axis is point in the opposite direction of the bind rot, flip the signs : Thx @gszauer
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Need to apply a twist rotation to aim the bending joint 
-			// (elbow,knee) in the direction of the IK Target UP Axis.
-
-			let align_dir;
-			switch( chain.align_axis ){ // Arm/Legs have different Axis to align to Twisting.
-				case "x": align_dir = l_dir; break;
-				case "z": align_dir = f_dir; break;
-			}
-			
-			//console.log("epp", Vec3.dot( align_dir, this.axis.y ) );
-			//####################################################
-			let b = pose.bones[ chain.first() ];
-			let t = new Transform();
-			t.from_add( p_wt, b.local );
-			//console.log(  chain.align_axis  );
-			//App.Debug.ln( t.pos, Vec3.add( t.pos, align_dir ), "orange" );
-			//App.Debug.ln( t.pos, Vec3.add( t.pos, this.axis.y ), "white" );
-			//####################################################
-
-			// Shortest Twisting Direction
-			let vdot = Vec3.dot( align_dir, this.axis.y );
-			if( vdot < 0 ) align_dir.invert();
-			
-
-			// Create and apply twist rotation.
-			rot.from_unit_vecs( align_dir, this.axis.y );
-			out.pmul( rot );
-
-
-			return out;
-		}
-
-		aimxxx( chain, tpose, pose, p_wt ){
-			let rot = new Quat();
-			this._aim_bone( chain, tpose, p_wt, rot );
-			rot.pmul_invert( p_wt.rot ); // Convert to Bone's Local Space by mul invert of parent bone rotation
-			pose.set_bone( chain.bones[ 0 ].idx, rot );
-		}
-
-		aim2( chain, tpose, pose, p_wt ){
+		aim( chain, tpose, pose, p_wt ){
 			let rot = new Quat();
 			this._aim_bone2( chain, tpose, p_wt, rot );
 
@@ -138,7 +70,7 @@ class IKTarget{
 			pose.set_bone( chain.bones[ 0 ].idx, rot );
 		}
 
-		_aim_bone2( chain, tpose, p_wt, out ){
+		_aim_bone( chain, tpose, p_wt, out ){
 			let rot	= Quat.mul( p_wt.rot, tpose.get_local_rot( chain.first() ) ),	// Get World Space Rotation for Bone
 				dir	= Vec3.transform_quat( chain.alt_fwd, rot );					// Get Bone's WS Forward Dir
 
@@ -218,14 +150,14 @@ class IKTarget{
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// FIRST BONE - Aim then rotate by the angle.
-			this._aim_bone2( chain, tpose, p_wt, rot );				// Aim the first bone toward the target oriented with the bend direction.
+			this._aim_bone( chain, tpose, p_wt, rot );				// Aim the first bone toward the target oriented with the bend direction.
 
 			rad	= Maths.lawcos_sss( aLen, cLen, bLen );				// Get the Angle between First Bone and Target.
 			
 			rot	.pmul_axis_angle( this.axis.x, -rad )				// Use the Target's X axis for rotation along with the angle from SSS
 				.pmul_invert( p_wt.rot );							// Convert to Bone's Local Space by mul invert of parent bone rotation
 
-			pose.set_bone( bind_a.idx, rot );						// Save result to bone.
+			pose.set_local_rot( bind_a.idx, rot );					// Save result to bone.
 			pose_a.world											// Update World Data for future use
 				.copy( p_wt )
 				.add( rot, bind_a.local.pos, bind_a.local.scl );
@@ -240,7 +172,7 @@ class IKTarget{
 				.pmul_axis_angle( this.axis.x, rad )				// Rotate it by the target's x-axis
 				.pmul_invert( pose_a.world.rot );					// Convert to Bone's Local Space
 
-			pose.set_bone( bind_b.idx, rot );						// Save result to bone.
+			pose.set_local_rot( bind_b.idx, rot );					// Save result to bone.
 			pose_b.world											// Update World Data for future use
 				.copy( pose_a.world )
 				.add( rot, bind_b.local.pos, bind_b.local.scl );

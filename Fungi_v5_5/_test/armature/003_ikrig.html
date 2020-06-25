@@ -2,10 +2,12 @@
 import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
 import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
 import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+import IKTarget				from "../../fungi.armature/IKTarget.js";
 
 //#####################################################
 App
-    .init( true )
+	.init( true )
+	.use_debug()
     .load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
     .set_camera( 0, 20, 3, 0, 0.7, 0 )
     .task( init )
@@ -26,6 +28,30 @@ async function init(){
 		.use_maximo();
 
 	console.log( rig );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = new Vec3( 0.3, 1.0, 0.2 );
+	let b = tpose.get_bone( "LeftArm" );
+	console.log( b );
+
+	//App.Debug.pnt( b.world.pos, "green", 0.05 );
+	//App.Debug.pnt( pos, "green", 0.05 );
+	
+	let p_wt = new Transform(),
+		c_wt = new Transform();
+
+	tpose.get_parent_world( b.idx, p_wt, c_wt );
+	//App.Debug.pnt( p_wt.pos, "green", 0.05 );
+	//App.Debug.pnt( c_wt.pos, "green", 0.05 );
+	
+	let tar = new IKTarget();
+	tar.from_pos( b.world.pos, pos, Vec3.DOWN );
+
+	tar.debug( App.Debug );
+
+	tar.limb( rig.chains.arm_l, rig.tpose, rig.pose, p_wt );
+
+	rig.pose.apply();
 
     return true;
 }
