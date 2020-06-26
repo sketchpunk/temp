@@ -1,0 +1,315 @@
+<html>
+<body style="background-color:#25282F;">
+<style>
+	html, body{ padding:0px; margin:0px; }
+</style>
+<canvas id="canvas" style="border:0px solid red;"></canvas>
+
+<script type="module">
+	import Canvas		from "./Canvas.js";
+	import Vec3			from "./Vec3.js";
+	import Spline		from "./Spline.js";
+	import ClockTick	from "./ClockTick.js";
+	import RenderLoop	from "./RenderLoop.js";
+	import SpringFloat	from "./SpringFloat.js";
+	import { StateMachine, IState } from "./StateMachine.js";
+
+	let $		= new Canvas("canvas" ).center().font_size( 14 ).fill("#808080");
+	let $loop	= new RenderLoop();
+	let $tick, $sim_anim, $spline, $spline_map, $animator,
+		$tmp = new Vec3(),
+		$dir = new Vec3(),
+		$pos = new Vec3();
+	
+	window.addEventListener( "load", function(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// LOAD UP PATH
+		$spline = Spline.from_hermite( false ).deserialize_hermite(
+			[53.09403991699219,0,-51.01209259033203,0,0,42.742305755615234,0,-40.23370361328125,0,0,9.802534103393555,0,28.487712860107422,0,0,0.48722729086875916,0,57.71915054321289,0,0,0.20924994349479675,0,103.15430450439453,0,0,9.162997245788574,0,112.33043670654297,0.5,0,-12.612710952758789,0,112.34493255615234,1,0,-26.061891555786133,0,112.14350128173828,1,0]
+		);
+
+		// Scale the Path Up for Canvas
+		$spline.points.forEach( (o,i)=>{ o.pos.scale( 2.5 ); } );
+
+		// Create ArcLength to Time Map.
+		$spline_map = $spline.gen_map( 30 );
+
+		// Add Custom Data To Points that will be handled Manually.
+		$spline.points[ 5 ].data.dir = [0,1];
+		$spline.points[ 6 ].data.dir = [0,1];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Animator that uses ArcLength for smooth movement on path.
+		$sim_anim = new SimAnimator()
+			.set_sim_time( 15 )
+			.set_tick_time( 2 )
+			.set_local( "01/01/2000 00:00:00 GMT" )
+			.set_server( "01/01/2000 00:00:00 GMT" )
+			.set_time_min( "01/01/2000 00:00:00 GMT" )
+			.set_time_max( "01/01/2000 02:00:00 GMT" );
+
+		$tick = new ClockTick( "01/01/2000 00:00:00 GMT" )
+			.set_tick_min( 15 )
+			.set_interval( 2.5 )
+			.set_fn( (dt,tick)=>{ 
+				console.log( "Tick", tick.to_string() );
+				//$sim_anim.time_now = tick.now;
+				$sim_anim.set_server( tick.now );
+			} )
+			.start();
+
+		// 2 SimHRs to complete path is 8 SEC in Real Time.
+		$loop.set_callback( on_render ).start();
+	});
+	
+	function on_render( dt, ss ){
+		// Move Sim Time Forward
+		$sim_anim.update( dt );
+
+		//--------------------------------------------
+		let time_grad	= $sim_anim.state.time_grad;	// Get
+		let t_path		= $spline_map.at( time_grad );	// Get Curve T from Map
+		let data		= $spline.data_at( t_path );	// Get Custom Data at T
+
+		//--------------------------------------------
+		// POSITION
+		$spline.at( t_path, $pos );		// Get Position on Curve
+		rot_2d( $pos, $pos );			// 3D to 2D Rotate -90D
+
+		//--------------------------------------------
+		// DIRECTION
+		$spline.dxdy( t_path, $dir );	// Get Derivatives
+		rot_2d( $dir, $dir );
+		norm_2d( $dir );
+
+		// Handle Custom Direction at Specific Points
+		if( data.b.dir && data.c.dir ){
+			let b = data.b.dir;
+			let c = data.c.dir;
+			$dir.x = b[0] * (1-data.t) + c[0] * data.t;
+			$dir.y = b[1] * (1-data.t) + c[1] * data.t;
+			norm_2d( $dir );
+		}else if( data.c.dir ){
+			let c = data.c.dir;
+			$dir.x = $dir.x * (1-data.t) + c[0] * data.t;
+			$dir.y = $dir.y * (1-data.t) + c[1] * data.t;
+			norm_2d( $dir );
+		}else if( data.b.dir ){
+			let b = data.b.dir;
+			$dir.x = b[0] * (1-data.t) + $dir.x * data.t;
+			$dir.y = b[1] * (1-data.t) + $dir.y * data.t;
+			norm_2d( $dir );
+		}
+
+		let angle = Math.atan2( $dir.y, $dir.x ) - Math.PI * 0.5;
+		
+		//--------------------------------------------
+		// MAIN DRAW
+		$.clear();		// Clear Scene
+		spline_draw();	// Draw Spline
+		
+		// Draw Plane
+		$.save_transform( $pos, angle, null );
+		$.fill( "#00ff00" ).tri_vec( 8, 12, 0, 0 );
+		$.restore_transform();
+
+		//--------------------------------------------
+		// Draw Time Stats
+		$.fill( "#00ff00" )
+		$.text( "MIN : " + $sim_anim.min_to_string(), 10, -70 );
+		$.text( "LOC : " + $sim_anim.local_to_string(), 10, -50 );
+		$.text( "SER : " + $sim_anim.server_to_string(), 10, -30 );
+		$.text( "MAX : " + $sim_anim.max_to_string(), 10, -10 );
+
+		let delta = ($sim_anim.state.local_time - $sim_anim.state.server_time) / 1000 / 60;
+		$.text( "SIM MIN DELTA : " + delta, 10, 10 );
+	}
+
+	// #region SUPPORT
+	// Take a 3D Point, Convert to 2D, then do a -90 Degree Rotation
+	function rot_2d( d3, d2 ){
+		let x = d3.x, 
+			y = d3.z;
+		d2.x = -y;
+		d2.y = x;
+	}
+
+	function norm_2d( v ){
+		let len = 1 / Math.sqrt( v[0]**2 + v[1]**2 );
+		v[0] *= len;
+		v[1] *= len;
+	}
+
+	function spline_draw( spline=$spline, steps=5 ){
+		let i, t, 
+			v	= new Vec3(),
+			a	= new Vec3(), 
+			b	= new Vec3();
+
+		$.fill( "#606060" ).stroke( "#606060" ).line_width( 1 );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		spline.at_curve( 0, 0, v );	// Get the first point of the spline
+		rot_2d( v, a );
+
+		for( let c = 0; c < spline.curve_count(); c++ ){
+			
+			for( i=1; i <= steps; i++ ){
+				t = i / steps;
+				spline.at_curve( c, t, v );
+				rot_2d( v, b );
+
+				$.line_vec( a, b );
+				a.copy( b );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( i of spline.points ){
+			// 3D to 2D Plus - Rotate -90 Degrees
+			rot_2d( i.pos, v );
+			$.circle_vec( v, 4 );
+		}
+	}
+	// #endregion /////////////////////////////////////////////////////////////
+
+	class SpeedUpState extends IState{
+		name	= "speed_up";
+		spring	= new SpringFloat( 1, 1 );
+		on_enter(){	console.log( "Speed Up - Start" ); }
+		on_exit(){ console.log( "Speed Up - Exit" ); }
+		update( dt, state, time ){
+			this.spring
+				.set_value( state.local_time )
+				.set_target( state.server_time )
+				.update( dt );
+			state.local_time = this.spring.value;
+		}
+	}
+
+	class SpeedDnState extends IState{
+		name		= "speed_dn";
+		spring		= new SpringFloat( 1, 1 );
+		time_vel	= 0;
+
+		on_enter( data ){	console.log( "Speed Dn - Start" ); }
+		on_exit( data ){	console.log( "Speed Dn - Exit" ); }
+		update( dt, state, time ){
+			this.spring.update( dt );
+			this.time_vel = ( dt / state.tick_time ) * this.spring.value; 
+			state.local_time += this.time_vel;
+		}
+	}
+
+	class ContinueState extends IState{
+		name	= "continue";
+		on_enter( data ){ console.log( "Continue - Start" ); }
+		on_exit(){	console.log( "Continue - Exit" ); }
+		update( dt, state, time ){ state.local_time += time; }
+	}
+
+	class SimAnimator{
+		// #region MAIN		
+		machine			= new StateMachine();
+		state			= {
+			server_time	: 0,
+			local_time	: 0,
+
+			time_min	: 0,
+			time_max 	: 0,
+			time_rng	: 0,
+			time_grad	: 0,
+
+			tick_time	: 2,			// 2 Seconds, How long between Ticks
+			sim_time	: 15*60*1000,	// 15 Minute of Simulator Time per Tick
+		};
+
+		constructor(){
+			let st_continue	= new ContinueState();
+			let st_speedup	= new SpeedUpState();
+			let st_speeddn	= new SpeedDnState();
+			this.machine
+				.add( st_continue, true )
+				.add( st_speedup )
+				.add( st_speeddn )
+				.add_transition( "continue", "speed_dn", (a,b,v)=>{ 
+					b.spring
+						.set_velocity( 0 )
+						.set_value( v.sim_time )
+						.set_target( v.sim_time * 0.5 );
+				})
+				.add_transition( "speed_dn", "speed_up", (a,b,v)=>{ 
+					b.spring.set_velocity( a.time_vel );
+				})
+				.add_transition( "speed_up", "speed_dn", (a,b,v)=>{ 
+					b.spring
+						.set_velocity( 0 )
+						.set_value( a.spring.vel / v.sim_time )
+						.set_target( v.sim_time * 0.5 );
+				})
+				.begin( this.state );
+		}
+		// #endregion ///////////////////////////////////////////////////////////
+
+		// #region SETTERS
+		set_tick_time( v ){ this.state.tick_time = v; return this; }
+		set_sim_time( v ){ this.state.sim_time = v * 60 * 1000; return this; }
+
+		set_server( dt ){ this.state.server_time = ( typeof dt == "string" )? Date.parse( dt ) : dt; return this; }
+		set_local( dt ){ this.state.local_time = ( typeof dt == "string" )? Date.parse( dt ) : dt; return this; }
+		set_time_min( dt_str ){
+			this.state.time_min = Date.parse( dt_str );
+			this.state.time_rng = this.state.time_max - this.state.time_min;
+			return this;
+		}
+		set_time_max( dt_str ){
+			this.state.time_max = Date.parse( dt_str );
+			this.state.time_rng = this.state.time_max - this.state.time_min;
+			return this;
+		}
+
+		to_string( gmt ){
+			let dt	= new Date( gmt ),
+				txt	= dt.toUTCString();
+			return txt.slice( txt.indexOf(" ")+1, txt.length - 4 );
+		}
+
+		server_to_string(){ return this.to_string( this.state.server_time ); }
+		local_to_string(){ return this.to_string( this.state.local_time ); }
+		min_to_string(){ return this.to_string( this.state.time_min ); }
+		max_to_string(){ return this.to_string( this.state.time_max ); }
+		// #endregion ///////////////////////////////////////////////////////////
+		
+		// #region METHODS
+		update( dt ){
+			const ms_to_min = 1 / 1000 / 60 ;
+			let delta = (this.state.local_time - this.state.server_time) * ms_to_min;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			if( delta >= 1 && !this.machine.is( "speed_dn" ) )
+				this.machine.switch( "speed_dn", this.state );
+
+			else if( delta <= -1 && !this.machine.is( "speed_up" ) )
+				this.machine.switch( "speed_up", this.state );
+
+			else if( (delta < 1 && delta > -1) && !this.machine.is( "continue" ) )
+				this.machine.switch( "continue", this.state );
+
+			let time = ( dt / this.state.tick_time ) * this.state.sim_time;
+			this.machine.state.update( dt, this.state, time );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			this.state.server_time += time;
+
+			if( this.state.local_time <= this.state.time_min ) 		this.state.time_grad = 0;
+			else if( this.state.local_time >= this.state.time_max )	this.state.time_grad = 1;
+			else{
+				this.state.time_grad = ( this.state.local_time - this.state.time_min ) / this.state.time_rng;
+			}
+		}
+		// #endregion ///////////////////////////////////////////////////////////
+	}
+</script>
+
+</body>
+</html>

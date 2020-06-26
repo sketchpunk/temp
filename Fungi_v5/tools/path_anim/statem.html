@@ -1,0 +1,90 @@
+<html>
+<script>
+// https://webdevstudios.com/2019/02/19/observable-pattern-in-javascript/
+// https://gameprogrammingpatterns.com/state.html
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy
+class StateMachine{
+	initial		= null;
+	state		= null;
+	map			= new Map();
+	//transitions	= new Map();
+	// trans = { name:something from:On, to:Off, fn: }
+	// 
+
+	add( state, is_initial=false ){
+		if( this.map.has( state.name ) ){
+			console.error( "State by the name: %s already exists", state.name );
+			return this;
+		}
+
+		if( is_initial ) this.initial = state.name;
+
+		state.on_init( this );
+		this.map.set( state.name, state );
+		return this;
+	}
+
+	// Check current state;
+	is( s_name ){ return !( this.state == null || this.state.name != s_name ); }
+
+	// Switch to a different state
+	switch( s_name, data ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if the current state is the same as our switch to state
+		console.log("SWIITCH", this.state.name, "to", s_name );
+		if( this.state != null && this.state.name == s_name ){
+			console.log( "Machine already in that state" );
+			return this;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let s = this.map.get( s_name );
+		if( s == null ){
+			console.error( "State not found when switching : %s", s_name );
+			return this;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( this.state != null ) this.state.on_exit( data );
+		s.on_enter( data );
+
+		this.state = s;
+		return this;
+	}
+
+	begin(){
+		if( this.initial == null )	console.log( "No state was set as initial" );
+		else						this.switch( this.initial );
+		return this;
+	}
+}
+
+class IState{
+	name		= "BASE";
+	machine		= null;
+
+	on_init( m ){ this.machine = m; }
+	on_enter(){ console.log( "ON_ENTER %s", this.name ); }
+	on_exit(){ console.log("ON EXIT %s", this.name ); }
+}
+
+class OnState extends IState{
+	name = "ON";
+}
+
+class OffState extends IState{
+	name = "OFF";
+}
+
+let s = new StateMachine();
+s.add( new OnState(), true );
+s.add( new OffState() );
+
+s.begin();
+s.switch( "OFF" );
+s.switch( "ON" );
+
+console.log( s );
+
+</script>
+</html>

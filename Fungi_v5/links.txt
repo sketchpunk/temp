@@ -23,6 +23,10 @@ Lots of amazing Tutorials
 https://twitter.com/i/events/1122251136239570947
 
 
+SWIMMING
+https://catlikecoding.com/unity/tutorials/movement/swimming/
+
+
 Googles WebGL simple renderer
 https://github.com/GoogleWebComponents/model-viewer
 
@@ -64,6 +68,9 @@ https://github.com/Konstantin84UKR/WebGL_tutorials
 STATE MACHINE
 https://gameprogrammingpatterns.com/state.html
 
+HANDLING GRID TYPES, CUBE, TRIANGLES, HEX, POLYGONS
+http://www-cs-students.stanford.edu/~amitp/game-programming/grids/
+https://www.redblobgames.com/grids/edges/#corners
 
 PROCEDURAL GEN
 https://pvigier.github.io/2019/05/12/vagabond-map-generation.html
@@ -137,3 +144,6 @@ https://medium.com/@spenserhuang/learn-build-a-javascript-blockchain-part-1-ca61
 
 DISTRIBUTION SAMPLING 
 https://bost.ocks.org/mike/algorithms/ TONS OF GOOD STUFF
+
+CHAINS
+https://www.patreon.com/posts/38499638

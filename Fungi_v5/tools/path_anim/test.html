@@ -11,6 +11,7 @@
 	import Spline		from "../../fungi/maths/Spline.js";
 	import ClockTick	from "./ClockTick.js";
 	import RenderLoop	from "./RenderLoop.js";
+	import SpringFloat	from "./SpringFloat.js";
 
 	let $		= new Canvas("canvas" ).center().font_size( 14 ).fill("#808080");
 	let $loop	= new RenderLoop();
@@ -36,20 +37,21 @@
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Create Animator that uses ArcLength for smooth movement on path.
-		$animator = new PathAnimator( $spline );
+		//$animator = new PathAnimator( $spline );
 		$sim_anim = new SimAnimator()
 			.set_sim_time( 15 )
-			.set_tick_time( 2 )
+			.set_tick_time( 1 )
 			.set_now( "01/01/2000 00:00:00 GMT" )
 			.set_time_min( "01/01/2000 00:00:00 GMT" )
 			.set_time_max( "01/01/2000 02:00:00 GMT" );
 
 		$tick = new ClockTick( "01/01/2000 00:00:00 GMT" )
 			.set_tick_min( 15 )
-			.set_interval( 2 )
+			.set_interval( 1.5 )
 			.set_fn( (dt,tick)=>{ 
 				console.log( "Tick", tick.to_string() );
-				$sim_anim.time_now = tick.now;
+				//$sim_anim.time_now = tick.now;
+				$sim_anim.set_now_ease( tick.now );
 			} )
 			.start();
 
@@ -148,21 +150,26 @@
 
 	class SimAnimator{
 		// #region MAIN
-		time_now	= 0;	// Current Time ( GMT MS )
-		time_min	= 0;	// Starting Time ( GMT MS )
-		time_max	= 0;	// Ending Time ( GMT MS )
-		time_rng	= 0;	// Time Range
-		time_grad	= 0;	// Time Range Gradient
+		time_now		= 0;	// Current Time ( GMT MS )
+		time_min		= 0;	// Starting Time ( GMT MS )
+		time_max		= 0;	// Ending Time ( GMT MS )
+		time_rng		= 0;	// Time Range
+		time_grad		= 0;	// Time Range Gradient
 
-		tick_time	= 2;	// 2 Seconds, How long between Ticks
-		sim_time	= 15 * 60 * 1000;	// 15 Minute of Simulator Time per Tick
+		//time_prev		= 0;	// Previous Time_now
+
+		state 			= "run";
+		state_fn		= null;
+
+		tick_time		= 2;	// 2 Seconds, How long between Ticks
+		sim_time		= 15 * 60 * 1000;	// 15 Minute of Simulator Time per Tick
 		// #endregion ///////////////////////////////////////////////////////////
 
 		// #region SETTINGS
 		set_tick_time( v ){ this.tick_time = v; return this; }
 		set_sim_time( v ){ this.sim_time = v * 60 * 1000; return this; }
 
-		set_now( dt_str ){		this.time_now = this.now = Date.parse( dt_str ); return this; }
+		set_now( dt_str ){ this.time_now = Date.parse( dt_str ); return this; }
 		set_time_min( dt_str ){
 			this.time_min = Date.parse( dt_str );
 			this.time_rng = this.time_max - this.time_min;
@@ -180,6 +187,95 @@
 			return txt.slice( txt.indexOf(" ")+1, txt.length - 4 );
 		}
 
+		set_now_ease( dt ){
+			let now = ( typeof dt == "string" )? Date.parse( dt_str ) : dt;
+
+			let delta = this.time_now - now;
+			
+			if( now > this.time_now ){
+				console.log( "Speed Up");
+				if( this.state != "speed" ){
+					this.state		= "speed";
+					this.state_fn	= {
+						start	: this.time_now,
+						end 	: now,
+						lerp	: 0,
+						run		: function( dt, now, tick_time, sim_time ){
+							this.lerp += dt;
+							let t = this.lerp / (tick_time * 0.5);
+							this.end += ( dt / tick_time ) * sim_time;
+							return this.start * (1-t) + this.end * t;
+						}
+					}
+				}
+			}else if ( now < this.time_now ){
+				console.log( "Speed Down");
+				if( this.state != "slow" ){
+					this.state = "slow";
+					this.state_fn = {
+						spring	: new SpringFloat( 1, 1 ).set_value( this.sim_time ).set_target( this.sim_time * 0.5 ),
+						run		: function( dt, now, tick_time ){
+							this.spring.update( dt );
+							now += ( dt / tick_time ) * this.spring.value;
+							return now;
+						},
+					}
+				}
+			}
+
+			console.log( "new Now", now, "DELTA", delta / 1000 / 60, this.state );
+
+			/*
+			this.time_prev = this.time_now;
+			this.time_lerp = 0;
+		
+			if( typeof dt == "string" ) this.set_now( dt_str );
+			else						this.time_now = dt;
+
+
+			let delta = this.time_prev - this.time_now;
+			console.log( "Delta-", delta / 1000 / 60, this.sim_time / 1000 / 60 );
+			*/
+
+			/*
+			if( delta <= this.sim_time ){
+				console.log( "slow_down" );
+				let dist = (this.time_now + this.sim_time) - this.time_prev;
+
+				this.merge_state = {
+					prev	: this.time_prev,
+					rate	: dist / ( this.tick_time * 0.5 ),
+					run		: ( dt )=>{
+						this.merge_state.prev += ( dt / ( this.tick_time * 0.5 ) ) * this.merge_state.rate;
+						return this.merge_state.prev;
+					},
+				};
+			}
+			*/
+
+			/*
+			// How Much Distance Traveled within Half a Tick
+			// Each Tick = Sim Time
+			let ht_dist		= this.sim_time * 0.5;
+
+			let destination	= this.time_now + ht_dist;
+			let dist		= destination - this.time_prev;
+
+			console.log( "Distance Apart", (this.time_prev - this.time_now) / 1000 / 60 );
+			console.log( "Future Range", ht_dist / 1000 / 60 );
+			console.log( "Future Range", ht_dist / 1000 / 60 );
+
+			//console.log( ht_dist / 1000/ 60, destination, this.time_now, this.time_prev );
+
+			this.time_prev_rate	= dist / (this.tick_time * 0.5);
+
+			//console.log( dist / 1000 / 60, );
+			*/
+
+			//this.time_lerp_rng = this.time_now - this.time_prev;
+			return this;
+		}
+
 		now_to_string(){ return this.to_string( this.time_now ); }
 		min_to_string(){ return this.to_string( this.time_min ); }
 		max_to_string(){ return this.to_string( this.time_max ); }
@@ -193,20 +289,139 @@
 			// Convert DeltaTime in relation to Tick time, which
 			// us a gradient value that we mul with sim_time.
 			// The main Idea is to Convert Real Time to Sim Time.
-			this.time_now += ( dt / this.tick_time ) * this.sim_time;
+			let now = this.time_now;
+
+			if( this.state == "run" ){
+				this.time_now += ( dt / this.tick_time ) * this.sim_time;
+				now = this.time_now;
+			}
+
+			if( this.state == "slow" ){
+				this.time_now = this.state_fn.run( dt, this.time_now, this.tick_time );
+				now = this.time_now;
+			}
+
+			if( this.state == "speed" ){
+				this.time_now = this.state_fn.run( dt, this.time_now, this.tick_time, this.tick_time );
+				now = this.time_now;
+
+				if( this.state_fn.lerp >= 1 ) this.state = "run";
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			/*
+			Catchup Modes
+			if Distance is over 1 ticks or more away, Lerp within 1 Ticks Time.
+			if Distance is less then 1 Tick, Slow down to catch up
+			*/
+
+			/*
+			if( this.time_prev_rate != 0 ){
+				this.time_lerp += dt;
+				this.time_prev += ( dt / (this.tick_time * 0.5) ) * this.time_prev_rate;
+				now = this.time_prev;
+
+				if( this.time_lerp >= ( this.tick_time * 0.5 ) ) this.time_prev_rate = 0;
+			}
+			*/
+
+			//if( this.time_lerp_rng != 0 ){
+				/*
+				Slow down Moving Previous
+
+				if Prev Time is Ahead, Slow Down
+				if Prev Time is Behind, Speed Up.
+
+				*/
+
+				//if Negative, Time now Is Behind.
+
+				/*
+				let dist	= this.time_now - this.time_prev;
+				
+				this.time_span_lerp	+= dt; // Only have this.tick_time to ease into previous point.
+
+				// This is how much time I have to ease Prev Into Now.
+				let ease_t = Math.min( this.time_span_lerp / ( this.tick_time * 0.5 ), 1.0 );
+				let slow_t = Math.min( this.time_span_lerp / ( this.tick_time * 0.5 ), 1.0 );
+				let dist_t = (dist * 0.5) / this.time_lerp_rng;
+
+				this.time_prev += ( dt / this.tick_time ) * this.sim_time * dist_t; //(1-slow_t);
+
+				now = this.time_prev * (1-ease_t) + this.time_now * ease_t;
+
+				console.log( "ease", ease_t, "slow", slow_t, "dist", dist_t );
+				
+				if( ease_t >= 1 ) this.time_lerp_rng = 0;
+
+				*/
+
+				/*
+				if( dist < 0 ){
+					let t = (dist * 0.9) / this.time_lerp_rng; // 1-0
+
+					this.time_prev += ( dt / this.tick_time ) * this.sim_time * circ_Out( t );
+
+
+					now = this.time_prev * (t) + this.time_now * (1-t);
+					
+					console.log( dist, this.time_lerp_rng, dist/this.time_lerp_rng );
+
+				}
+				*/
+
+				//if( dist > 0.0001 ){
+
+					//let dist_lerp = ( dist * 0.1 ) / this.time_lerp_rng;
+
+					//console.log( dist );
+					//time_lerp += dt
+					//this.time_prev += ( dt / this.tick_time ) * this.sim_time * 0.5;
+
+					//let t = dist_lerp;
+
+					//now = this.time_prev * (1-t) + this.time_now * t;
+
+					//this.time_lerp = Math.min( this.time_lerp + dt * 0.5, 1.0 );
+
+					// As Time Lerp Progresses, Move Previous Time slower
+					//this.time_prev += ( dt / this.tick_time ) * this.sim_time * ( 1 - this.time_lerp );
+
+					//console.log( this.time_lerp, dist / this.time_lerp_rng );
+
+					//console.log( Math.abs( this.time_prev - this.time_now ) / this.time_lerp_rng );
+
+					//this.time_lerp = Math.min( this.time_lerp + dt * 1.0, 1.0 );
+					//let t = circ_Out( this.time_lerp );
+
+					//this.time_prev += ( dt / this.tick_time ) * this.sim_time;
+					
+					//console.log( this.time_lerp );
+					//now = this.time_prev * (1-t) + this.time_now * t;
+					//now = this.time_prev;
+
+				//}//else this.time_lerp_rng = 0;		
+			//}
 
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Compute Time Gradient
 			if( this.time_now <= this.time_min ) 		this.time_grad = 0;
 			else if( this.time_now >= this.time_max )	this.time_grad = 1;
 			else{
-				this.time_grad = ( this.time_now - this.time_min ) / this.time_rng;
+				this.time_grad = ( now - this.time_min ) / this.time_rng;
 			}
 
 			//console.log( this.time_grad, this.now_to_string() );
 		}
 		// #endregion ///////////////////////////////////////////////////////////
 	}
+	function circ_Out(k){ return Math.sqrt(1 - (--k * k)); }
+	function cubic_Out(k){ return --k * k * k + 1; }
+	function exp_Out(k){ return k === 1 ? 1 : 1 - Math.pow(2, - 10 * k); }
+
+	function exp_In(k){ return k === 0 ? 0 : Math.pow(1024, k - 1); }
+	function circ_In(k){ return 1 - Math.sqrt(1 - k * k); }
+	function back_In(k){ return k * k * ((1.70158 + 1) * k - 1.70158); }
 </script>
 
 </body>
