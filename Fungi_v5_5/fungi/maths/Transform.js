@@ -23,6 +23,13 @@ class Transform{
 	//////////////////////////////////////////////////////////////////////
 	// GETTER / SETTER
 	//////////////////////////////////////////////////////////////////////
+		reset(){
+			this.rot.set( 0,0,0,1 );
+			this.pos.set( 0,0,0 );
+			this.scl.set( 1,1,1 );
+			return this;
+		}
+
 		copy( t ){
 			this.rot.copy( t.rot );
 			this.pos.copy( t.pos );

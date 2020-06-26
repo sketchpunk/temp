@@ -20,7 +20,7 @@ class Chain{
 		let o = { idx, len };
 
 		this.bones.push( o );
-		this.cnt++;
+		this.bone_cnt++;
 		this.len		+= len;
 		this.len_sqr	= this.len * this.len;
 		return this;
@@ -28,7 +28,7 @@ class Chain{
 
 	// Get Skeleton Index of Bones
 	first(){ return this.bones[0].idx; }
-	last(){ return this.bones[ this.cnt-1 ].idx; }
+	last(){ return this.bones[ this.bone_cnt-1 ].idx; }
 	idx( i ){ return this.bones[ i ].idx; }
 
 	set_alt( fwd, up, tpose=null ){

@@ -19,6 +19,8 @@ https://gist.github.com/galek/53557375251e1a942dfa  PBR in GLSL
 https://threejs.org/examples/#webgl_loader_gltf
 
 
+https://github.com/oframe/ibl-converter/blob/master/src/shaders/PBRShader.js GREAT SIMPLE IMAGE BASED LIGHT PBR SHADER
+
 https://learnopengl.com/PBR/Theory
 https://github.com/KhronosGroup/glTF-Sample-Viewer
 https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/glTF-WebGL-PBR
