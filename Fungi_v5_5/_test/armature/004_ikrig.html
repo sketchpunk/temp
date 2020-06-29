@@ -117,9 +117,6 @@ class IKPose{
 	hip = {
 		bind_height	: 0,			// Use to help Scale movement.
 		movement	: new Vec3(),	// How Much Movement the Hip did in world space
-		dir			: new Vec3(),   
-		twist		: 0,
-
 		look_dir	: new Vec3(),
 		twist_dir	: new Vec3(),
 	};
@@ -173,6 +170,7 @@ class IKPose{
 		// the hip always points in the FORWARD Axis, so We can use that to quicky get Swing Rotation
 		// Take note that vegeta and roborex's Hips are completely different but by using that inverse
 		// direction trick, we are easily able to apply the same movement to both.
+		/*
 		let p_rot	= rig.pose.get_parent_rot( b_info.idx );	// Incase the Hip isn't the Root bone, but in our example they are.
 		let b_rot	= Quat.mul( p_rot, bind.local.rot );		// Add LS rot of the hip to the WS Parent to get its WS Rot.
 		let q		= Quat
@@ -187,6 +185,9 @@ class IKPose{
 		q.pmul_invert( p_rot );
 
 		rig.pose.set_local_rot( b_info.idx, q ); // Save LS rotation to pose
+		*/
+
+		this.apply_look_twist( rig, b_info, this.hip, Vec3.FORWARD, Vec3.UP );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// TRANSLATION
@@ -264,13 +265,17 @@ class IKPose{
 		// Next we need to get the Foot's Quaternion Inverse Direction
 		// Which matches up with the same Directions used to calculate the IK
 		// information.
+		
+		/*
 		let q_inv 			= Quat.invert( bind.world.rot ),
 			alt_look_dir	= Vec3.transform_quat( look_dir, q_inv ),
 			alt_twist_dir	= Vec3.transform_quat( twist_dir, q_inv );
+		*/
 
 		// After the HIP was moved and The Limb IK is complete, This is where 
 		// the ALT Look Direction currently points to.
-		let now_look_dir = Vec3.transform_quat( alt_look_dir, c_rot );
+		//let now_look_dir = Vec3.transform_quat( alt_look_dir, c_rot );
+		let now_look_dir = Vec3.transform_quat( b_info.alt_fwd, c_rot );
 
 		/* DEBUG - Here we can see where the bone is currently pointing to and where we need it to point 
 		App.Debug.ln( tpos, Vec3.scale( now_look_dir, 0.5 ).add( tpos ), "yellow" );	// Current Direction
@@ -296,7 +301,8 @@ class IKPose{
 
 		// Now we need to know where the Twist Direction points to after 
 		// swing rotation has been applied. Then use it to compute our twist rotation.
-		let now_twist_dir	= Vec3.transform_quat( alt_twist_dir, rot );
+		//let now_twist_dir	= Vec3.transform_quat( alt_twist_dir, rot );
+		let now_twist_dir	= Vec3.transform_quat( b_info.alt_up, rot );
 		let twist 			= Quat.unit_vecs( now_twist_dir, ik.twist_dir  );
 		rot.pmul( twist );	// Apply Twist
 
@@ -455,73 +461,17 @@ class IKCompute{
 
 	static hip( rig, ik_pose ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// First thing we need is the Hip bone from the Animated Pose
-		// Plus what the hip's Bind Pose as well.
-		// We use these two states to determine what change the animation did to the tpose.
 		let b_info	= rig.points.hip,					// Rig Hip Info
 			pose 	= rig.pose.bones[ b_info.idx ],		// Animated Pose Bone
 			bind 	= rig.tpose.bones[ b_info.idx ];	// TPose Bone
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Lets create the Quaternion Inverse Direction based on the
-		// TBone's World Space rotation. We don't really know the orientation 
-		// of the bone's starting rotation and our targets will have their own
-		// orientation, so by doing this we can easily say no matter what the
-		// default direction of the hip, we want to say all hips bones point 
-		// at the FORWARD axis and the tail of the bone points UP.
-		let q_inv 		= Quat.invert( bind.world.rot ),				// This part can be optimized out and Saved into the Rig Hip's Data.
-			alt_fwd		= Vec3.transform_quat( Vec3.FORWARD, q_inv ),
-			alt_up		= Vec3.transform_quat( Vec3.UP, q_inv );
-
-		let pose_fwd 	= Vec3.transform_quat( alt_fwd, pose.world.rot ),
-			pose_up 	= Vec3.transform_quat( alt_up, pose.world.rot );
-
-		/* VISUAL DEBUG TPOSE AND ANIMATED POSE DIRECTIONS 
-		let pos = pose.world.pos.clone().add( [0,0,0.1] );
-		App.Debug.ln( pos, Vec3.add(pos, Vec3.FORWARD), "white" );
-		App.Debug.ln( pos, Vec3.add(pos, Vec3.UP), "white" );
-		App.Debug.ln( pos, Vec3.scale( pose_fwd, 0.8 ).add( pos ), "orange" );
-		App.Debug.ln( pos, Vec3.scale( pose_up, 0.8 ).add( pos ), "orange" );
-		*/
+		// Compute the Look / Twist direction of the hip bone
+		this.look_twist( rig, b_info, ik_pose.hip,  Vec3.FORWARD, Vec3.UP );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// With our directions known between our TPose and Animated Pose, Next we
-		// start to calculate the Swing and Twist Values to swing our TPose into
-		// The animation direction
-
-		let swing = Quat.unit_vecs( Vec3.FORWARD, pose_fwd )	// First we create a swing rotation from one dir to the other.
-			.mul( bind.world.rot );		// Then we apply it to the TBone Rotation, this will do a FWD Swing which will create
-										// a new Up direction based on only swing.
-		let swing_up	= Vec3.transform_quat( Vec3.UP, swing ),
-			twist		= Vec3.angle( swing_up, pose_up );		// Swing + Pose have same Fwd, Use Angle between both UPs for twist
-
-		/* VISUAL DEBUG SWING AND ANIMATED POSE DIRECTIONS 
-		let pos 		= pose.world.pos.clone().add( [0,0,0.1] );
-		let swing_fwd	= Vec3.transform_quat( Vec3.FORWARD, swing );
-		App.Debug.ln( pos, Vec3.scale( pose_fwd, 1.5 ).add( pos ), "white" );	// Out Swing FWD Matches Animated Pose Forward
-		App.Debug.ln( pos, Vec3.scale( swing_fwd, 1.3 ).add( pos ), "orange" );
-		App.Debug.ln( pos, Vec3.scale( pose_up, 1.5 ).add( pos ), "white" );	// Now we see the TPose Up Direction in its Swing Rotation
-		App.Debug.ln( pos, Vec3.scale( swing_up, 1.5 ).add( pos ), "orange" );	// Both UPs share the same forward, resulting in a "Twist" Difference.
-		*/
-
-		if( twist <= (0.01 * Math.PI / 180) ){
-			twist = 0; // If Less the .01 Degree, dont bother twisting.
-		}else{
-			// The difference between Pose UP and Swing UP is what makes up our twist since they both
-			// share the same forward access. The issue is that we do not know if that twist is in the Negative direction
-			// or positive. So by computing the Swing Left Direction, we can use the Dot Product to determine
-			// if swing UP is Over 90 Degrees, if so then its a positive twist else its negative.
-			let swing_lft = Vec3.cross( swing_up, pose_fwd );
-			// App.Debug.ln( pos, Vec3.scale( swing_lft, 1.5 ).add( pos ), "orange" );
-			if( Vec3.dot( swing_lft, pose_up ) >= 0 ) twist = -twist; 
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Save all the info we need to our IK Pose.
+		// Position
 		ik_pose.hip.bind_height	= bind.world.pos.y;	// The Bind Pose Height of the Hip, Helps with scaling.
-		ik_pose.hip.movement.from_sub( pose.world.pos, bind.world.pos );	// How much movement did the hip do between Bind and Animated.
-		ik_pose.hip.dir.copy( pose_fwd );	// Pose Forward is the direction we want the Hip to Point to.
-		ik_pose.hip.twist = twist;	// How Much Twisting to Apply after pointing in the correct direction.
+		ik_pose.hip.movement.from_sub( pose.world.pos, bind.world.pos );	// Difference of position between TPose and Pose.
 	}
 
 	static limb( pose, chain, ik_limb  ){
@@ -568,18 +518,25 @@ class IKCompute{
 		let pose = rig.pose.bones[ b_info.idx ],	// Animated Pose Bone
 			bind = rig.tpose.bones[ b_info.idx ];	// TPose Bone
 
-        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		
+
         // First compute the Quaternion Invert Directions based on the Defined
         // Directions that was passed into the function. Most often, your look
         // direction is FORWARD and the Direction used to determine twist is UP.
         // But there are times we need the directions to be different depending
         // on how we view the bone in certain situations.
+		/*
 		let q_inv 		    = Quat.invert( bind.world.rot ),
 			alt_look_dir	= Vec3.transform_quat( look_dir, q_inv ),
 			alt_twist_dir	= Vec3.transform_quat( twist_dir, q_inv );
 
 		let pose_look_dir 	= Vec3.transform_quat( alt_look_dir, pose.world.rot ),
 			pose_twist_dir 	= Vec3.transform_quat( alt_twist_dir, pose.world.rot );
+		*/
+		
+		//let pose_look_dir 	= Vec3.transform_quat( b_info.alt_fwd, pose.world.rot ),
+		//	pose_twist_dir 	= Vec3.transform_quat( b_info.alt_up, pose.world.rot );
 
 		/* VISUAL DEBUG TPOSE AND ANIMATED POSE DIRECTIONS 
 		let pos = pose.world.pos.clone().add( [0,0,0.0] );
@@ -590,9 +547,13 @@ class IKCompute{
 		*/
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		ik.look_dir.copy( pose_look_dir );
-		ik.twist_dir.copy( pose_twist_dir );
-    }
+		//ik.look_dir.copy( pose_look_dir );
+		//ik.twist_dir.copy( pose_twist_dir );
+
+		// Compute the Altenate Direction
+		ik.look_dir.from_quat(	pose.world.rot, b_info.alt_fwd );
+		ik.twist_dir.from_quat(	pose.world.rot, b_info.alt_up );
+	}
 
 	static spine( rig, chain, ik_pose, look_dir, twist_dir ){
 		let idx_ary		= [ chain.first(), chain.last() ], // First and Last Bone of the Chain.
@@ -640,7 +601,7 @@ class IKCompute{
 // How to visualize the IK Pose Informaation to get an Idea of what we're looking at.
 class IKVisualize{
 	static run( rig, ik ){
-        this.hip( rig, ik );
+		this.hip( rig, ik );
 
 		this.limb( rig.pose, rig.chains.leg_l, ik.leg_l );
 		this.limb( rig.pose, rig.chains.leg_r, ik.leg_r );
@@ -659,7 +620,10 @@ class IKVisualize{
 		let ws = rig.pose.bones[ rig.points.hip.idx ].world;
 		App.Debug
 			.pnt( ws.pos, "orange", 0.09, 6 )
-			.ln( ws.pos, Vec3.scale( ik.hip.dir, 0.20 ).add( ws.pos ), "cyan", null, true );
+			//.ln( ws.pos, Vec3.scale( ik.hip.dir, 0.20 ).add( ws.pos ), "cyan", null, true )
+			;
+
+		this.look_twist( rig, rig.points.hip, ik.hip, Vec3.FORWARD, Vec3.UP );
 	}
 
 	static limb( pose, chain, ik ){

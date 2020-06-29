@@ -119,6 +119,8 @@ class IKRig{
 		this.chains.arm_l.set_alt( Vec3.LEFT, Vec3.BACK, this.tpose );
 
 		this.points.hip.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.points.foot_l.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.points.foot_r.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
 		return this;
 	}
 
