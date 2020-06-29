@@ -47,6 +47,38 @@ class Chain{
 	// #endregion ////////////////////////////////////////////////
 }
 
+class Point{
+	// #region MAIN
+	idx		= null;
+	len		= 0;
+
+	// Alternate Direction and IK Stuff
+	alt_fwd = Vec3.FORWARD.clone();
+	alt_up	= Vec3.UP.clone();
+
+	constructor( idx, len ){
+		this.idx = idx;
+		this.len = len;
+	}
+	// #endregion ////////////////////////////////////////////////
+
+	// #region GETTERS / SETTERS
+	set_alt( fwd, up, tpose=null ){
+		if( tpose ){
+			let b = tpose.bones[ this.idx ],
+				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
+
+			this.alt_fwd.from_quat( q, fwd );	// Use invert to get direction that will Recreate the real direction
+			this.alt_up.from_quat( q, up );	
+		}else{
+			this.alt_fwd.copy( fwd );
+			this.alt_up.copy( up );
+		}
+		return this;
+	}
+	// #endregion ////////////////////////////////////////////////
+}
+
 class IKRig{
 	arm 	= null;		// Reference back to Armature Component
 	tpose	= null;		// TPose or Bind Pose, TPose is better for IK
@@ -85,27 +117,28 @@ class IKRig{
 		this.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, this.tpose );
 		this.chains.arm_r.set_alt( Vec3.RIGHT, Vec3.BACK, this.tpose );
 		this.chains.arm_l.set_alt( Vec3.LEFT, Vec3.BACK, this.tpose );
+
+		this.points.hip.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
 		return this;
 	}
 
 	// #region MANAGE POINTS AND CHAINS
 	add_point( name, b_name ){
-		this.points[ name ] = { 
-			idx : this.arm.names[ b_name ]
-		}; 
+		let b = this.tpose.get_bone( b_name );
+		this.points[ name ] = new Point( b.idx, b.len );
 		return this;
 	}
 	
 	add_chain( name, name_ary, end_name=null, ik_solver=null ){
 		let i, b, ch = new Chain(); // axis
 		for( i of name_ary ){
-			b = this.pose.get_bone( i );
+			b = this.tpose.get_bone( i );
 			ch.add_bone( b.idx, b.len );
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		if( end_name ){
-			ch.end_idx = this.pose.get_bone( end_name ).idx;
+			ch.end_idx = this.tpose.get_bone( end_name ).idx;
 		}
 
 		ch.ik_solver = ik_solver;

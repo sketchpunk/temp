@@ -1,4 +1,4 @@
-import { Quat, Transform } from "../fungi/App.js";
+import { Vec3, Quat, Transform } from "../fungi/App.js";
 
 class PoseBone{
 	constructor( bone ){
@@ -75,14 +75,6 @@ class Pose{
 		if( cnt != 0 ) this.arm.updated = true;
 		return this;
 	}
-
-	update_world(){
-		for( let b of this.bones ){
-			if( b.p_idx != null )	b.world.from_add( this.bones[ b.p_idx ].world, b.local ); // Parent.World + Child.Local
-			else					b.world.from_add( this.root_offset, b.local );
-		}
-		return this;
-	}
 	// #endregion /////////////////////////////////////////////////////////
 
 	// #region SETTING / GETTING
@@ -149,64 +141,61 @@ class Pose{
 
 		return pt;
 	}
+
+	get_parent_rot( b_idx, q=null ){
+		let cbone = this.bones[ b_idx ];
+		q = q || new Quat();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Child is a Root Bone, just reset since there is no parent.
+		if( cbone.p_idx == null ) q.reset();
+		else{
+			// Parents Exist, loop till reaching the root
+			let b = this.bones[ cbone.p_idx ];
+			q.copy( b.local.rot );
+
+			while( b.p_idx != null ){
+				b = this.bones[ b.p_idx ];
+				q.pmul( b.local.rot );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		q.pmul( this.root_offset.rot ); // Add Starting Offset
+		return q;
+	}
+
+	// Updates world space of all the bones
+	update_world(){
+		for( let b of this.bones ){
+			if( b.p_idx != null )	b.world.from_add( this.bones[ b.p_idx ].world, b.local ); // Parent.World + Child.Local
+			else					b.world.from_add( this.root_offset, b.local );
+		}
+		return this;
+	}
+
+	// Certain instances where the pose will handle a root offset, which
+	// then requires the length of bones to be recomputed.
+	// Should be called AFTER update_world
+	recompute_bone_len(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Map Parent Bone with the first child Bone
+		let p, c, map = {};
+		for( c of this.bones ){
+			if( map[ c.p_idx ] == null ) map[ c.p_idx ] = c.idx;
+		}
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		for( p of this.bones ){
+			if( map[ p.idx ] != null ){
+				c		= this.bones[ map[ p.idx ] ];
+				p.len	= Vec3.len( p.world.pos, c.world.pos );
+			}
+		}
+
+		return this;
+	}
 	// #endregion /////////////////////////////////////////////////////////
 }
-
-/*
-		get_parent_world( b_idx, pt=null, ct=null, t_offset=null ){
-			let cbone = this.bones[ b_idx ];
-			pt = pt || new Transform();
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-			// Child is a Root Bone, just reset since there is no parent.
-			if( cbone.p_idx == null ){ 
-				pt.clear();
-			}else{
-				// Parents Exist, loop till reaching the root
-				let b = this.bones[ cbone.p_idx ];
-				pt.copy( b.local );
-
-				while( b.p_idx != null ){
-					b = this.bones[ b.p_idx ];
-					pt.add_rev( b.local );
-				}
-			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			
-			pt.add_rev( this.root_offset );				// Add Starting Offset
-			if( t_offset ) pt.add_rev( t_offset );		// Add Additional Starting Offset
-
-			if( ct ) ct.from_add( pt, cbone.local );	// Requesting Child WS Info Too
-
-			return pt;
-		}
-
-		get_parent_rot( b_idx, q=null ){
-			let cbone = this.bones[ b_idx ];
-			q = q || new Quat();
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			// Child is a Root Bone, just reset since there is no parent.
-			if( cbone.p_idx == null ) q.reset();
-			else{
-				// Parents Exist, loop till reaching the root
-				let b = this.bones[ cbone.p_idx ];
-				q.copy( b.local.rot );
-
-				while( b.p_idx != null ){
-					b = this.bones[ b.p_idx ];
-					q.pmul( b.local.rot );
-				}
-			}
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			q.pmul( this.root_offset.rot ); // Add Starting Offset
-			return q;
-		}
-
-*/
-
 
 export default Pose;

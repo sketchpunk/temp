@@ -29,7 +29,7 @@ const vert_src = `#version 300 es
 
 	//------------------------------------------
 
-	vec3 mtx_bone_transform( vec3 pos, mat4x4[90] pose_mtx, vec4 b_idx, vec4 b_wgt ){
+	vec4 mtx_bone_transform( vec3 pos, mat4x4[90] pose_mtx, vec4 b_idx, vec4 b_wgt ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// NORMALIZE BONE WEIGHT VECTOR 
 		
@@ -48,18 +48,17 @@ const vert_src = `#version 300 es
 							pose_mtx[ c ] * b_wgt.z +
 							pose_mtx[ d ] * b_wgt.w;
 
-		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
+		return wgt_mtx * vec4( pos, 1.0 );
 	}
 
 	//------------------------------------------
 
 	void main(void){
-		vec3 pos		= mtx_bone_transform( a_pos, arm.bones, a_skin_idx, a_skin_wgt );
-		
-		frag_pos		= pos;
+		vec4 wpos		= model.view_matrix * mtx_bone_transform( a_pos, arm.bones, a_skin_idx, a_skin_wgt );
+		frag_pos		= wpos.xyz;
 		frag_cam_pos	= global.camera_pos;
 
-		gl_Position		= global.proj_view * vec4( pos, 1.0 );		
+		gl_Position		= global.proj_view * wpos;		
 	}`;
 
 const frag_src = `#version 300 es

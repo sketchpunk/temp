@@ -82,18 +82,18 @@ class Debug{
 	static transform( t, scl=1 ){ this.quat( t.rot, t.pos, scl ); return this; }
 
 	static quat( q, offset=null, scl=1, color=null ){
-		let v = new App.Vec3();
-		offset = offset || App.Vec3.ZERO;
+		let v = new Vec3();
+		offset = offset || Vec3.ZERO;
 		this
-			.ln( offset, v.from_scale( App.Vec3.FORWARD, scl ).transform_quat( q ).add( offset ), (color || "green") )
-			.ln( offset, v.from_scale( App.Vec3.UP, scl ).transform_quat( q ).add( offset ), (color || "blue") )
-			.ln( offset, v.from_scale( App.Vec3.LEFT, scl ).transform_quat( q ).add( offset ), (color || "red") );
+			.ln( offset, v.from_scale( Vec3.FORWARD, scl ).transform_quat( q ).add( offset ), (color || "green") )
+			.ln( offset, v.from_scale( Vec3.UP, scl ).transform_quat( q ).add( offset ), (color || "blue") )
+			.ln( offset, v.from_scale( Vec3.LEFT, scl ).transform_quat( q ).add( offset ), (color || "red") );
 		return this;
 	}
 
 	static axis( a, offset=null, scl=1, color=null ){
-		let v = new App.Vec3();
-		offset = offset || App.Vec3.ZERO;
+		let v = new Vec3();
+		offset = offset || Vec3.ZERO;
 		this
 			.ln( offset, v.from_scale( a.z, scl ).add( offset ), (color || "green") )
 			.ln( offset, v.from_scale( a.y, scl ).add( offset ), (color || "blue") )

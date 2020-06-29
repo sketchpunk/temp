@@ -12,25 +12,62 @@ App
 	.init( true )
 	.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
 	.use_debug()
-	.set_camera( 20, 20, 4, 0, 0.7, 0 )
+	.set_camera( 20, 20, 3.0, 0, 0.7, 0 )
 	.task( init )
 	.then();
 
 //#####################################################
-let $anim, $animator, $src, $ikpose;
+let $anim, $animator, $src, $mesh, $ikpose;
 
 async function init(){
-	let [ json, bin ] = await XhrQueue.url( "../../files/anim/", "Walking.gltf", "Walking.bin" );
+	let dl = await XhrQueue.url( "../../files/" )
+		.grp( "src", "anim/Walking.gltf", "json", "anim/Walking.bin", "bin" )
+		.grp( "ma", "models/vegeta.gltf", "json", "models/vegeta.bin", "bin" )
+	;
 	
-	let e = GltfUtil.get_bone_only_entity( "Test", json, bin );
-	e.draw.items[0].material.set_depth_test( true );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	load_src( dl.src.json, dl.src.bin );
+	load_mesh( dl.ma.json, dl.ma.bin );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//on_render( 0.6 );
+	App.render_by( 1, on_render );
+	return true;
+}
+
+function on_render( dt, ss ){
+	let pose = $src.rig.pose;
+	$animator.tick( dt * 1.0 ).update( $anim, pose );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+	// Maximo animation needs a Root Transform
+	pose.root_offset.copy( $src.node.local );
+	pose.clear_root_motion( 0, 1 );
+	pose.update_world();
+
+	IKCompute.run( $src.rig, $ikpose );
+	IKVisualize.run( $src.rig, $ikpose );
+
+	$ikpose.apply_rig( $mesh.rig );
+	$mesh.rig.pose.apply();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	pose.apply();
+}
+
+function load_src( json, bin ){
+	let e = GltfUtil.get_bone_only_entity( "src_bones", json, bin );
+	e.draw.items[ 0 ].material.set_depth_test( true );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let rig = new IKRig().use_armature( e.arm );
+
 	rig.pose.root_offset.copy( e.node.local );
 	rig.tpose.root_offset.copy( e.node.local );
-	rig.tpose.update_world();
-	rig.use_maximo();
+	rig.tpose.update_world().recompute_bone_len();
+
+	// Generate Chains after Offset + World Update + New Bone Lenths
+	rig.use_maximo();	
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let data	= Gltf.get_animation( json, bin, null, true );
@@ -44,28 +81,31 @@ async function init(){
 		node	: e.node,
 		arm		: e.arm,
 	};
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	on_render( 0.6 );
-	App.render_by( 1, on_render );
-	return true;
 }
 
-function on_render( dt, ss ){
-	let pose = $src.rig.pose;
-	$animator.tick( dt ).update( $anim, pose );
+function load_mesh( json, bin ){
+	let e = GltfUtil.get_skin_view_entity( "Target", json, bin, "LowPolySkin" );
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
-	// Maximo animation needs a Root Transform
-	pose.root_offset.copy( $src.node.local );
-	pose.clear_root_motion( 0, 1 );
-	pose.update_world();
+	e.node.set_pos( 1.2, 0, 0 );
 
-	IKCompute.run( $src.rig, $ikpose );
-	IKVisualize.run( $src.rig, $ikpose );
+	//~~~~~~~~~~~~~~~~~~~~~~~~/~~~~~~~~~~~~~~~~~~~~~~~
+	// Load TPose + IKRig
+	let tpose = e.arm.new_pose( "tpose" );
+	GltfUtil.load_pose( tpose, json, "tpose", false );
+	tpose.update_world().apply();
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	pose.apply();
+	let rig = new IKRig()
+		.use_armature( e.arm, tpose )
+		.use_maximo();
+
+	rig.points.head.idx = rig.points.neck.idx;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$mesh = {
+		rig		: rig,
+		node	: e.node,
+		arm		: e.arm,
+	};
 }
 
 //#####################################################
@@ -79,6 +119,9 @@ class IKPose{
 		movement	: new Vec3(),	// How Much Movement the Hip did in world space
 		dir			: new Vec3(),   
 		twist		: 0,
+
+		look_dir	: new Vec3(),
+		twist_dir	: new Vec3(),
 	};
 
     foot_l = { look_dir:new Vec3(), twist_dir:new Vec3() };
@@ -135,14 +178,15 @@ class IKPose{
 		let q		= Quat
 			.unit_vecs( Vec3.FORWARD, this.hip.dir )	// Create Swing Rotation
 			.mul( b_rot );								// Apply it to our WS Rotation
-		
+
 		// If There is a Twist Value, Apply that as a PreMultiplication.
 		if( this.hip.twist != 0 ) q.pmul_axis_angle( this.hip.dir, this.hip.twist );
 
+		//let tq = q.clone();
 		// In the end, we need to convert to local space. Simply premul by the inverse of the parent
 		q.pmul_invert( p_rot );
 
-		rig.pose.set_bone( b_info.idx, q ); // Save LS rotation to pose
+		rig.pose.set_local_rot( b_info.idx, q ); // Save LS rotation to pose
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// TRANSLATION
@@ -151,6 +195,8 @@ class IKPose{
 			.scale( this.hip.movement, h_scl )		// Scale the Translation Differnce to Match this Models Scale
 			.add( bind.world.pos );					// Then Add that change to the TPose Position
 
+		//App.Debug.quat( tq, pos );
+
 		// MAYBE we want to keep the stride distance exact, we can reset the XZ positions
 		// BUT we need to keep the Y Movement scaled, else our leg IK won't work well since
 		// our source is taller then our targets, this will cause our target legs to always
@@ -158,7 +204,7 @@ class IKPose{
 		//pos.x = this.hip.movement.x;
 		//pos.z = this.hip.movement.z;
 
-		rig.pose.set_bone( b_info.idx, null, pos );	// Save Position to Pose
+		rig.pose.set_local_pos( b_info.idx, pos );	// Save Position to Pose
 	}
 
 	apply_limb( rig, chain, limb, grounding=0 ){
@@ -265,7 +311,7 @@ class IKPose{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		rot.pmul_invert( p_rot );				// To Local Space
-		rig.pose.set_bone( b_info.idx, rot );	// Save to pose.		
+		rig.pose.set_local_rot( b_info.idx, rot );	// Save to pose.		
 	}
 
     apply_grounding( y_lmt ){
@@ -320,7 +366,7 @@ class IKPose{
 		// Since we are building up the Skeleton, We look at the pose object to know where the Hips
 		// currently exist in World Space.
 
-		let cnt			= chain.cnt - 1,								// How Many Spine Bones to deal with
+		let cnt			= chain.bone_cnt - 1,								// How Many Spine Bones to deal with
 			p_tran		= rig.pose.get_parent_world( chain.first() ),	// World Space Transform of the spine's parent, usually the hips
 			c_tran		= new Transform(),
 			ik_look		= new Vec3(),
@@ -377,7 +423,7 @@ class IKPose{
 			rot.pmul_invert( p_tran.rot );				// To Local Space
 			
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			rig.pose.set_bone( idx, rot );						// Save back to pose
+			rig.pose.set_local_rot( idx, rot );						// Save back to pose
 			if( t != 1 ) p_tran.add( rot, bind.local.pos, bind.local.scl );	// Compute the WS Transform for the next bone in the chain.
 		}
 	}
