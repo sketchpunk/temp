@@ -10,8 +10,9 @@ class Chain{
 	end_idx 	= null;			// Joint that Marks the true end of the chain
 	
 	// Alternate Direction and IK Stuff
-	alt_fwd 	= Vec3.FORWARD.clone();
+	alt_fwd 	= Vec3.FORWARD.clone();	// FIRST SET
 	alt_up		= Vec3.UP.clone();
+	alt_dir		= [ { fwd:Vec3.FORWARD.clone(), up:Vec3.UP.clone() } ];
 	ik_solver 	= null;
 	// #endregion ////////////////////////////////////////////////
 
@@ -32,6 +33,20 @@ class Chain{
 	idx( i ){ return this.bones[ i ].idx; }
 
 	set_alt( fwd, up, tpose=null ){
+		if( tpose ){
+			let b = tpose.bones[ this.bones[ 0 ].idx ],
+				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
+
+			this.alt_fwd.from_quat( q, fwd );	// Use invert to get direction that will Recreate the real direction
+			this.alt_up.from_quat( q, up );	
+		}else{
+			this.alt_fwd.copy( fwd );
+			this.alt_up.copy( up );
+		}
+		return this;
+	}
+
+	set_alt_dir( fwd, up, tpose=null, to_all=false ){
 		if( tpose ){
 			let b = tpose.bones[ this.bones[ 0 ].idx ],
 				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
