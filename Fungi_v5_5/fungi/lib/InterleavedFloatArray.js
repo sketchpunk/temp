@@ -14,7 +14,7 @@ class InterleavedFloatArray{
 	var_map		= {};			// Definition of Interleaved Data 
 	auto_expand	= 0;
 	
-	constructor( config, init_size=1, auto_expend=0 ){
+	constructor( config, init_size=1, auto_expend=0, use_all=false ){
 		this.auto_expand = auto_expend;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -32,6 +32,8 @@ class InterleavedFloatArray{
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.expand_by( init_size );
+
+		if( use_all ) this.len = this.capacity;
 	}
 
 	get byte_capacity(){ return this.buffer.byteLength; }	// Get the Capacity Length in Bytes
@@ -108,6 +110,39 @@ class InterleavedFloatArray{
 		this.len++;
 		return idx;
 	}
+
+	set( idx, ...args ){
+		let i, v;
+		idx *= this.stride_len;
+
+		for( i=0; i < args.length; i++ ){
+			v = this.var_config[ i ];
+
+			if( v.len == 1 ) 	this.buffer[ idx + v.offset ] = args[ i ];
+			else				this.buffer.set( args[ i ], idx + v.offset );
+		}
+
+		return this;
+	}
+
+	/*
+	set_var( idx, v_name, data ){
+		let vr = this.vars[ this.map[ v_name ] ];
+
+		idx = (idx * this.stride_len) + vr.offset;
+
+		if( vr.len == 1 )	this.buffer[ idx ] = data;
+		else				this.buffer.set( data, idx );
+
+		//for( let i=0; i < vr.len; i++ ) this.buffer[ idx + i ] = data[ i ];
+		//}
+
+		return this;
+	}
+	*/
+	
+
+	
 }
 
 export default InterleavedFloatArray

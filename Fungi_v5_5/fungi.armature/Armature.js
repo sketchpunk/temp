@@ -68,7 +68,15 @@ class Armature{
 		
 		// Setup the Inverted Bind Pose
 		this.compute_bind_pose();
-    }
+	}
+	
+	load_config( config ){
+		// [ { "name":"Hips", "len":0.105, "idx":0,"p_idx":null,"pos":[0,1.039,0.020], "rot":[2.4268916831715615e-7,0,0,1]  }, ]
+		let i;
+		for( i of config ) this.add_bone( i.name, i.len, i.p_idx, i.pos, i.rot );
+		this.ready();
+		return this;
+	}
     // #endregion /////////////////////////////////////////////////////////////
 
 	// #region GETTERS/SETTERS

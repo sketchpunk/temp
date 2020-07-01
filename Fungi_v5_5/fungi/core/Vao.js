@@ -3,8 +3,8 @@ let buf = App.Buffer.new_array( new Float32Array([0,0,0]) );
 let vao = App.Vao.new([
 	{ name:"a", buffer:buf, attrib_loc:App.shader.POS_LOC, instanced:false, },
 	{ name:"a", buffer:buf, instanced:false, interleaved: [
-		{ attrib_loc:0, size:3, stride_len:4 * 4, offset:0 * 4, instanced:false },
-		{ attrib_loc:1, size:1, stride_len:4 * 4, offset:3 * 4, instanced:false },
+		{ attrib_loc:0, size:3, stride_len:4 * 4, offset:0 * 4 },
+		{ attrib_loc:1, size:1, stride_len:4 * 4, offset:3 * 4 },
 	]},
 ]);
 */
