@@ -71,8 +71,10 @@ class IKTarget{
 		}
 
 		_aim_bone( chain, tpose, p_wt, out ){
-			let rot	= Quat.mul( p_wt.rot, tpose.get_local_rot( chain.first() ) ),	// Get World Space Rotation for Bone
-				dir	= Vec3.transform_quat( chain.alt_fwd, rot );					// Get Bone's WS Forward Dir
+			let alt_fwd	= chain.alt_dir[ 0 ].fwd,
+				alt_up	= chain.alt_dir[ 0 ].up,
+				rot		= Quat.mul( p_wt.rot, tpose.get_local_rot( chain.first() ) ),	// Get World Space Rotation for Bone
+				dir		= Vec3.transform_quat( alt_fwd, rot );					// Get Bone's WS Forward Dir
 
 			//let ct = new Transform();
 			//let b = tpose.bones[ chain.first() ];
@@ -89,7 +91,7 @@ class IKTarget{
 			//let twist 	= Vec3.angle( u_dir, this.axis.y );
 			//App.Debug.ln( ct.pos, Vec3.add( ct.pos, u_dir), "white" );
 
-			dir.from_quat( out, chain.alt_up );				// After Swing, Whats the UP Direction
+			dir.from_quat( out, alt_up );					// After Swing, Whats the UP Direction
 			let twist 	= Vec3.angle( dir, this.axis.y );	// Get difference between Swing Up and Target Up
 
 			if( twist <= 0.00017453292 ) twist = 0;

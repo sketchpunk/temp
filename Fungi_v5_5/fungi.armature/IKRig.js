@@ -10,8 +10,6 @@ class Chain{
 	end_idx 	= null;			// Joint that Marks the true end of the chain
 	
 	// Alternate Direction and IK Stuff
-	alt_fwd 	= Vec3.FORWARD.clone();	// FIRST SET
-	alt_up		= Vec3.UP.clone();
 	alt_dir		= [ { fwd:Vec3.FORWARD.clone(), up:Vec3.UP.clone() } ];
 	ik_solver 	= null;
 	// #endregion ////////////////////////////////////////////////
@@ -32,30 +30,49 @@ class Chain{
 	last(){ return this.bones[ this.bone_cnt-1 ].idx; }
 	idx( i ){ return this.bones[ i ].idx; }
 
-	set_alt( fwd, up, tpose=null ){
-		if( tpose ){
-			let b = tpose.bones[ this.bones[ 0 ].idx ],
-				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
-
-			this.alt_fwd.from_quat( q, fwd );	// Use invert to get direction that will Recreate the real direction
-			this.alt_up.from_quat( q, up );	
-		}else{
-			this.alt_fwd.copy( fwd );
-			this.alt_up.copy( up );
-		}
-		return this;
-	}
-
 	set_alt_dir( fwd, up, tpose=null, to_all=false ){
-		if( tpose ){
-			let b = tpose.bones[ this.bones[ 0 ].idx ],
-				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
+		let i;
 
-			this.alt_fwd.from_quat( q, fwd );	// Use invert to get direction that will Recreate the real direction
-			this.alt_up.from_quat( q, up );	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Extra Elements for alts for all bones
+		if( to_all && this.alt_dir.length != this.bone_cnt ){
+			for( i=this.alt_dir.length; i < this.bone_cnt; i++ ){
+				this.alt_dir.push( { fwd:Vec3.FORWARD.clone(), up:Vec3.UP.clone() } );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( tpose ){
+			let b, q = new Quat();
+			
+			if( to_all ){	// Compute for All Bones
+				for( i in this.bones ){
+					b = tpose.bones[ this.bones[ i ].idx ],
+					q.from_invert( b.world.rot );	// Invert World Space Rotation 
+					
+					this.alt_dir[ i ].fwd.from_quat( q, fwd );	
+					this.alt_dir[ i ].up.from_quat( q, up );
+				}
+			}else{	// Compute for First Bone
+				b = tpose.bones[ this.bones[ 0 ].idx ],
+				q.from_invert( b.world.rot );	// Invert World Space Rotation 
+
+				// Use invert to get direction that will Recreate the real direction
+				this.alt_dir[ 0 ].fwd.from_quat( q, fwd );	
+				this.alt_dir[ 0 ].up.from_quat( q, up );
+			}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		}else{
-			this.alt_fwd.copy( fwd );
-			this.alt_up.copy( up );
+			if( to_all ){ // Save to All Bones
+				for( i of this.alt_dir ){
+					i.fwd.copy( fwd );
+					i.up.copy( fwd );
+				}
+			}else{	// Save to First Bone
+				this.alt_dir[ 0 ].fwd.copy( fwd );
+				this.alt_dir[ 0 ].up.copy( up );
+			}
 		}
 		return this;
 	}
@@ -78,7 +95,7 @@ class Point{
 	// #endregion ////////////////////////////////////////////////
 
 	// #region GETTERS / SETTERS
-	set_alt( fwd, up, tpose=null ){
+	set_alt_dir( fwd, up, tpose=null ){
 		if( tpose ){
 			let b = tpose.bones[ this.idx ],
 				q = Quat.invert( b.world.rot );	// Invert World Space Rotation 
@@ -128,14 +145,19 @@ class IKRig{
 		.add_chain( "spine", [ "Spine", "Spine1", "Spine2" ] );
 
 		// Set Direction of Joints on th Limbs
-		this.chains.leg_l.set_alt( Vec3.DOWN, Vec3.FORWARD, this.tpose );
-		this.chains.leg_r.set_alt( Vec3.DOWN, Vec3.FORWARD, this.tpose );
-		this.chains.arm_r.set_alt( Vec3.RIGHT, Vec3.BACK, this.tpose );
-		this.chains.arm_l.set_alt( Vec3.LEFT, Vec3.BACK, this.tpose );
+		this.chains.leg_l.set_alt_dir( Vec3.DOWN, Vec3.FORWARD, this.tpose );
+		this.chains.leg_r.set_alt_dir( Vec3.DOWN, Vec3.FORWARD, this.tpose );
+		this.chains.arm_r.set_alt_dir( Vec3.RIGHT, Vec3.BACK, this.tpose );
+		this.chains.arm_l.set_alt_dir( Vec3.LEFT, Vec3.BACK, this.tpose );
 
-		this.points.hip.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
-		this.points.foot_l.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
-		this.points.foot_r.set_alt( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.chains.spine.set_alt_dir( Vec3.UP, Vec3.FORWARD, this.tpose, true );
+
+		this.points.hip.set_alt_dir( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.points.foot_l.set_alt_dir( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.points.foot_r.set_alt_dir( Vec3.FORWARD, Vec3.UP, this.tpose );
+
+		this.points.neck.set_alt_dir( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.points.head.set_alt_dir( Vec3.FORWARD, Vec3.UP, this.tpose );
 		return this;
 	}
 
