@@ -39,10 +39,10 @@ async function init( x ){
 	e.node.set_pos( 0, 0.5, 0 );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load Capsule
-	//( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	/* Load Capsule
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
 	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
-	e.node.set_pos( 0, 0.5, -2 );
+	e.node.set_pos( 0, 0.5, -2 ); */
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Show Light Location
@@ -52,7 +52,7 @@ async function init( x ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Motion Closure for Point
-	gMotion = Motion.circle( gPnt, 0.3, 3, 2 );
+	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	on_render();
@@ -78,13 +78,15 @@ function init_shader(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"base_color", type:"rgba", value:"#203F65ff" },
-		{ name:"other_color", type:"rgba", value:"#84D6FDff" },
-		{ name:"specular_color", type:"rgb", value:"#A6F6FF" },
+		{ name:"base_color", type:"rgb", value:"#CC6626" },
+		{ name:"specular_color", type:"rgb", value:"#CC7233" },
+		{ name:"hilite_color", type:"rgb", value:"#999999" },
+		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
 // https://www.patreon.com/posts/21398935
+// https://www.pinterest.com/pin/295900638011647083/
 
 const VERT_SRC = `#version 300 es
 	layout(location=0) in vec3 a_pos;
@@ -134,22 +136,19 @@ const FRAG_SRC = `#version 300 es
 		vec3 color;
 	} light;
 
-	uniform vec4 base_color;
-	uniform vec4 other_color;
+	uniform vec3 base_color;
 	uniform vec3 specular_color;
+	uniform vec3 hilite_color;
+	uniform vec3 rim_color;
 
 	in vec3 frag_norm;
 	in vec3 frag_cam_pos;
 	in vec3 frag_wpos;
 	in vec3 frag_lpos;
-	
-	//-------------------------
-
-	const vec3 ambient = vec3( 0.4 );
 
 	//-------------------------
 
-	float fgradient( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
+	float ramp_step( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
 		if( grad >= ramp_pos[ cnt-1 ] ) return ramp[ cnt-1 ]; // Greater ten final check.
 
 		for( int i=1; i < cnt; i++ ){
@@ -158,62 +157,63 @@ const FRAG_SRC = `#version 300 es
 		return ramp[ 0 ];
 	}
 
-	// https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Posterize-Node.html
-	float Posterize( float In, float Steps ){
-		//return floor( In / ( 1.0 / Steps ) ) * ( 1.0 / Steps ); // WHY UNITY??? To much divisions.
-		return floor( In * Steps ) / Steps;
-	}
 	void main( void ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
-		vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
-		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		vec3 norm 		= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light	= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		
+		float brightness	= 1.1; // 0 > 2
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 1 - Calculate Light Intensity
-		float intensity = clamp( dot( norm, dir_light ), 0.0, 1.0 ); // Saturate == Clamp(0,1);
-		//out_color.rgb = base_color.rgb * intensity;
+		// SPECULAR COLOR
+		float spec			= dot( normalize( dir_cam + dir_light ), norm );
+		float spec_cutoff	= smoothstep( 0.78, 0.8, spec ); // step( spec, 0.8 );
+		vec3 c_spec			= specular_color * ( 1.0 - spec_cutoff ) * brightness;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BASE COLOR
+		vec3 c_base = base_color * spec_cutoff;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// HIGHLIGHT
+		float hlite			= clamp( dot( dir_light, norm ), 0.0, 1.0 );	// Unity saturate = clamp( x, 0, 1 );
+		float hlite_cutoff	= smoothstep( 0.940, 0.96, hlite ); 			// step( 0.95, hlite );
+		vec3 c_hlite		= hilite_color * hlite_cutoff;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 2 - Posterize and Lerp between shaded and lit.
-		float steps = 3.0; // CAN BE A UNIFORM VALUE
-		float post = Posterize( intensity, steps );
-		out_color = mix( base_color, other_color, post );
+		// RIM LIGHT
+		float rim	= 1.0 - clamp( dot( dir_cam, norm  ), 0.1, 1.0 );
+		vec3 c_rim	= rim_color * pow( rim, 6.0 ); // 0 > 20.
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 3 - Calculate Halfway Vector
-		vec3 half_dir = normalize( dir_frag_cam + dir_light );
+		/* Blend Colors Together, Original Way */
+		out_color = vec4( c_base + c_spec + c_hlite + c_rim, 1.0 );
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 4 - Use Halfway vector to calculate highlight
-		float highlight = dot( half_dir, norm );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 5 - Hard Cutoff
-		float edge = 0.985; // CAN BE UNIFORM VALUE
-		float cutoff = step( edge, highlight );
-		//out_color.rgb = vec3( cutoff );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 6 - Add Highlight color
-		out_color.rgb = mix( out_color.rgb, specular_color, cutoff );
+		/* Experimenting with Lerping Colors 
+		out_color.rgb = mix( base_color, specular_color, 1.0-spec_cutoff );
+		out_color.rgb = mix( out_color.rgb, hilite_color, hlite_cutoff );
+		out_color.rgb = mix( out_color.rgb, vec3(1.0), pow( rim, 6.0 ) );
+		*/
 	}`;
 
 
 /*
+ORIGINAL UNITY SHADER BY MINIONART
+
 Shader "Toon/Lit Metal" {
 	Properties {
-		_Color ("Base Color", Color) = (0.8,0.4,0.15,1)
+		_Color ("Base Color", Color) = (0.8,0.4,0.15,1)   204,102,38 #CC6626
 		_Ramp ("Toon Ramp (RGB)", 2D) = "white" {} 
 		[Header(Metal)]
 		_Brightness("Specular Brightness", Range(0, 2)) = 1.3  
 		_Offset("Specular Size", Range(0, 1)) = 0.8 //  
-		_SpecuColor("Specular Color", Color) = (0.8,0.45,0.2,1)
+		_SpecuColor("Specular Color", Color) = (0.8,0.45,0.2,1)  204,114,51 #CC7233
 		[Header(Highlight)]
 		_HighlightOffset("Highlight Size", Range(0, 1)) = 0.9  
 		_HiColor("Highlight Color", Color) = (1,1,1,1)
 		[Header(Rim)]
-		_RimColor("Rim Color", Color) = (1,0.3,0.3,1)
+		_RimColor("Rim Color", Color) = (1,0.3,0.3,1)	255,76,76 #FF4C4C
 		_RimPower("Rim Power", Range(0, 20)) = 6 
 			}
 

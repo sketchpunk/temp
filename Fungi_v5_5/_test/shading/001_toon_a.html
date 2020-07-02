@@ -36,13 +36,14 @@ async function init( x ){
 		.then();
 
 	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
-	e.node.set_pos( 0, 0.5, 0 );
+	e.node.set_pos( 0, 0.6, 0 );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load Capsule
-	//( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	/* Load Capsule
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
 	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
 	e.node.set_pos( 0, 0.5, -2 );
+	*/
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Show Light Location
@@ -55,7 +56,7 @@ async function init( x ){
 	gMotion = Motion.circle( gPnt, 0.3, 3, 2 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	on_render();
+	on_render( 0, 0 );
 	//App.render_by( 1, on_render );
 	return true;
 }
@@ -71,16 +72,16 @@ function init_shader(){
 	]);
 
 	gUbo
-		.set( "pos", [2,5,1] )
+		.set( "pos", [0,5,0] )
 		.set( "color", Colour.rgb_array( "#ffffff" ) );
 	App.ubo.update( gUbo );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"base_color", type:"rgba", value:"#203F65ff" },
-		{ name:"other_color", type:"rgba", value:"#84D6FDff" },
-		{ name:"specular_color", type:"rgb", value:"#A6F6FF" },
+		{ name:"base_color", type:"rgba", value:"#DB00FFFF" },
+		{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -119,11 +120,11 @@ const VERT_SRC = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		gl_Position = global.proj_view * wpos;
-		gl_PointSize = 8.0;
+
 	}`;
 
 const FRAG_SRC = `#version 300 es
-	precision mediump float;
+precision mediump float;
 	
 	out vec4 out_color;
 
@@ -142,10 +143,6 @@ const FRAG_SRC = `#version 300 es
 	in vec3 frag_cam_pos;
 	in vec3 frag_wpos;
 	in vec3 frag_lpos;
-	
-	//-------------------------
-
-	const vec3 ambient = vec3( 0.4 );
 
 	//-------------------------
 
@@ -158,48 +155,66 @@ const FRAG_SRC = `#version 300 es
 		return ramp[ 0 ];
 	}
 
-	// https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Posterize-Node.html
-	// Posterization or posterisation of an image entails conversion of a continuous gradation of 
-	// tone to several regions of fewer tones, with abrupt changes from one tone to another.
-	float Posterize( float In, float Steps ){
-		//return floor( In / ( 1.0 / Steps ) ) * ( 1.0 / Steps ); // WHY UNITY??? To much divisions.
-		return floor( In * Steps ) / Steps;
-	}
 	void main( void ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
-		vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
-		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		vec3 norm 			= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+		vec3 dir_light		= normalize( light.pos - frag_wpos );	// Direction of light from fragment
+		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_wpos );	
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 1 - Calculate Light Intensity
-		float intensity = clamp( dot( norm, dir_light ), 0.0, 1.0 ); // Saturate == Clamp(0,1);
-		//out_color.rgb = base_color.rgb * intensity;
+		// DIFFUSE LIGHT
+		float diff		= max( dot( norm, dir_light ), 0.0 ); 	// Angle between Frag Normal and Light Direction ( 0 to 1 )
+
+		//float[] gray_ramp		= float[4]( 0.045174, 0.528885, 0.796753, 1.0 );
+		float[] gray_ramp		= float[4]( 0.125174, 0.528885, 0.796753, 1.0 );
+		float[] gray_ramp_pos	= float[4]( 0.0, 0.05, 0.109092, 0.190909 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 2 - Posterize and Lerp between shaded and lit.
-		float steps = 3.0; // CAN BE A UNIFORM VALUE
-		float post = Posterize( intensity, steps );
-		out_color = mix( base_color, other_color, post );
+		// SEPARATE XYZ
+		float y_grad = frag_lpos.y * 0.9 + 0.55; // clamp( , 0.0, 1.0 );
+		
+		// Color Ramp Node ( Main Color )
+		vec3 ramp_c = mix( base_color.rgb, other_color.rgb, y_grad ); 
+		
+		// Diffuse BSDF
+		float dif_grad = fgradient( diff, gray_ramp, gray_ramp_pos, 4 );
+		vec3 diff_c = ramp_c * diff; // Main Color with Diffuse Lighting.
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 3 - Calculate Halfway Vector
-		vec3 half_dir = normalize( dir_frag_cam + dir_light );
+		// Color Ramp GrayScale
+		vec3 grad_c = vec3(
+			fgradient( diff_c.r, gray_ramp, gray_ramp_pos, 4 ),
+			fgradient( diff_c.g, gray_ramp, gray_ramp_pos, 4 ),
+			fgradient( diff_c.b, gray_ramp, gray_ramp_pos, 4 )
+		);
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 4 - Use Halfway vector to calculate highlight
-		float highlight = dot( half_dir, norm );
+		float min = min( min( grad_c.r, grad_c.g ), grad_c.b ); // Smallist Value
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 5 - Hard Cutoff
-		float edge = 0.985; // CAN BE UNIFORM VALUE
-		float cutoff = step( edge, highlight );
-		//out_color.rgb = vec3( cutoff );
+		// Multiple
+		//out_color.rgb = grad_c * ramp_c;
+		out_color.rgb = min * ramp_c;
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step 6 - Add Highlight color
-		out_color.rgb = mix( out_color.rgb, specular_color, cutoff );
+		// Layer Weight
+		float blend	= 0.13;
+		float wgt	= 1.0 - pow( dot( dir_frag_cam, norm ), 2.0 * blend ); // Its is basicly Rim Lighting
+		//float wgt	= pow( 1.0 - dot( dir_frag_cam, norm ), 0.6 ); // THIS CHANGE GIVES IT A BLACK CHROME LIKE EFFECT
+
+		//float rim	= 1.0 - clamp( dot( dir_cam, norm  ), 0.1, 1.0 );
+		//vec3 c_rim	= rim_color * pow( rim, 6.0 ); // 0 > 20.
+
+		float wgt_scale = step( wgt, 0.313637 ); // same ( wgt < 0.313637 )? 1.0 : 0.0;
+		out_color.rgb *= wgt_scale;
 	}`;
+
+	/*
+	LAYER WEIGHT
+	https://blenderartists.org/t/what-is-it-that-layer-weight-nodes-facing-output-is-supposed-to-be/691884/32
+	if blend in [0.0, 0.5[:
+		result = 1 - pow(dot(N,I), 2*blend)
+	if blend == 0.5:
+		result = 1 - dot(N,I)
+	if blend in ]0.5, 1.0[:
+		result = 1 - pow(dot(N,I), 0.5/(1-blend))
+	*/
 
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
