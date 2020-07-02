@@ -173,6 +173,20 @@ class MeshFactory{
 		buf	= this.buffer.bin_array( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
 		mesh.buffers.set( "vertices", buf );
 		config.push( { buffer: buf, attrib_loc: this.shader.POS_LOC } );
+
+		if( json.normal ){
+			o	= json.normal;
+			buf	= this.buffer.bin_array( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
+			mesh.buffers.set( "normal", buf );
+			config.push( { buffer: buf, attrib_loc: this.shader.NORM_LOC } );
+		}
+
+		if( json.uv ){
+			o	= json.uv;
+			buf	= this.buffer.bin_array( dv, o.byte_offset, o.byte_size, o.component_len, true, false );
+			mesh.buffers.set( "uv", buf );
+			config.push( { buffer: buf, attrib_loc: this.shader.UV_LOC } );
+		}
 	
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// BONE INDICES AND WEIGHTS

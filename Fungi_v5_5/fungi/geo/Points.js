@@ -13,6 +13,17 @@ function PointsSys( ecs ){
 }
 
 class Points{
+	// #region STATIC
+	static new_entity( name="PntEntity" ){
+		let e = App.mesh_entity( name );
+		e.points = new Points();
+		e.draw.items.push( e.points.get_draw_item() );
+		App.ecs.add_com( e.id, e.points );
+		return e;
+	}
+
+	// #endregion /////////////////////////////////////////////////////////////
+
 	// #region MAIN
 	constructor( ini_cnt=INITAL_CNT, auto_ext=AUTO_EXTEND ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

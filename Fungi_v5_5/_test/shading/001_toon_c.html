@@ -1,0 +1,402 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Capsule
+	//( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 0, 0.5, -2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 1.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.3, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"base_color", type:"rgba", value:"#203F65ff" },
+		{ name:"other_color", type:"rgba", value:"#84D6FDff" },
+		{ name:"specular_color", type:"rgb", value:"#A6F6FF" },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+// https://www.patreon.com/posts/21398935
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+	}`;
+
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec4 base_color;
+	uniform vec4 other_color;
+	uniform vec3 specular_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	
+	//-------------------------
+
+	const vec3 ambient = vec3( 0.4 );
+
+	//-------------------------
+
+	float fgradient( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
+		if( grad >= ramp_pos[ cnt-1 ] ) return ramp[ cnt-1 ]; // Greater ten final check.
+
+		for( int i=1; i < cnt; i++ ){
+			if( ramp_pos[ i ] > grad ) return ramp[ i-1 ];
+		}
+		return ramp[ 0 ];
+	}
+
+	// https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Posterize-Node.html
+	float Posterize( float In, float Steps ){
+		//return floor( In / ( 1.0 / Steps ) ) * ( 1.0 / Steps ); // WHY UNITY??? To much divisions.
+		return floor( In * Steps ) / Steps;
+	}
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 1 - Calculate Light Intensity
+		float intensity = clamp( dot( norm, dir_light ), 0.0, 1.0 ); // Saturate == Clamp(0,1);
+		//out_color.rgb = base_color.rgb * intensity;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 2 - Posterize and Lerp between shaded and lit.
+		float steps = 3.0; // CAN BE A UNIFORM VALUE
+		float post = Posterize( intensity, steps );
+		out_color = mix( base_color, other_color, post );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 3 - Calculate Halfway Vector
+		vec3 half_dir = normalize( dir_frag_cam + dir_light );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 4 - Use Halfway vector to calculate highlight
+		float highlight = dot( half_dir, norm );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 5 - Hard Cutoff
+		float edge = 0.985; // CAN BE UNIFORM VALUE
+		float cutoff = step( edge, highlight );
+		//out_color.rgb = vec3( cutoff );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step 6 - Add Highlight color
+		out_color.rgb = mix( out_color.rgb, specular_color, cutoff );
+	}`;
+
+
+/*
+Shader "Toon/Lit Metal" {
+	Properties {
+		_Color ("Base Color", Color) = (0.8,0.4,0.15,1)
+		_Ramp ("Toon Ramp (RGB)", 2D) = "white" {} 
+		[Header(Metal)]
+		_Brightness("Specular Brightness", Range(0, 2)) = 1.3  
+		_Offset("Specular Size", Range(0, 1)) = 0.8 //  
+		_SpecuColor("Specular Color", Color) = (0.8,0.45,0.2,1)
+		[Header(Highlight)]
+		_HighlightOffset("Highlight Size", Range(0, 1)) = 0.9  
+		_HiColor("Highlight Color", Color) = (1,1,1,1)
+		[Header(Rim)]
+		_RimColor("Rim Color", Color) = (1,0.3,0.3,1)
+		_RimPower("Rim Power", Range(0, 20)) = 6 
+			}
+
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+CGPROGRAM
+#pragma surface surf ToonRamp vertex:vert
+
+sampler2D _Ramp;
+
+// custom lighting function that uses a texture ramp based
+// on angle between light direction and normal
+#pragma lighting ToonRamp exclude_path:prepass
+inline half4 LightingToonRamp (SurfaceOutput s, half3 lightDir, half atten)
+{
+	#ifndef USING_DIRECTIONAL_LIGHT
+	lightDir = normalize(lightDir);
+	#endif
+	
+	half d = dot (s.Normal, lightDir)*0.5 + 0.5;
+	half3 ramp = tex2D (_Ramp, float2(d,d)).rgb;
+	
+	half4 c;
+	c.rgb = s.Albedo * _LightColor0.rgb * ramp * (atten * 2);
+	c.a = 0;
+	return c;
+}
+
+
+float4 _Color;
+float _Offset;
+float4 _HiColor;
+float _HighlightOffset;
+float _Brightness;
+float4 _SpecuColor;
+float4 _RimColor;
+float _RimPower;
+
+struct Input {
+	float2 uv_MainTex : TEXCOORD0;
+	float3 viewDir;
+	float3 lightDir;
+};
+
+ void vert(inout appdata_full v, out Input o)
+    {
+        UNITY_INITIALIZE_OUTPUT(Input, o);
+        o.lightDir = WorldSpaceLightDir(v.vertex); // get the worldspace lighting direction
+    }
+ 
+
+void surf (Input IN, inout SurfaceOutput o) {
+	float spec = dot(normalize(IN.viewDir + IN.lightDir), o.Normal);// specular based on view and light direction
+	float cutOff = step(spec, _Offset); // cutoff for where base color is
+	float3 baseAlbedo = _Color * cutOff;// base color
+	float3 specularAlbedo = _SpecuColor * (1-cutOff) * _Brightness;// inverted base cutoff times specular color
+	float highlight = saturate(dot(IN.lightDir, o.Normal)); // highlight based on light direction
+	float4 highlightAlbedo =  (step(_HighlightOffset,highlight) * _HiColor); //glowing highlight
+	o.Albedo = baseAlbedo + specularAlbedo  + highlightAlbedo;// result
+	half rim = 1- saturate(dot (normalize(IN.viewDir), o.Normal));// standard rim calculation   
+	o.Emission += _RimColor.rgb * pow(rim, _RimPower);// rim lighting added to glowing highlight
+	
+	
+}
+ENDCG
+
+	} 
+
+	Fallback "Diffuse"
+}
+
+----------------------------------------------------------------------------
+Shader "Toon/Lit Metal Normal" {
+	Properties {
+		_Color ("Base Color", Color) = (0.8,0.4,0.15,1)
+		_Ramp ("Toon Ramp (RGB)", 2D) = "white" {} 
+		_Normal("Normal Map", 2D) = "bump" {}
+		[Header(Metal)]
+		_Brightness("Specular Brightness", Range(0, 2)) = 1.3  
+		_Offset("Specular Size", Range(0, 5)) = 0.8 //  
+		_SpecuColor("Specular Color", Color) = (0.8,0.45,0.2,1)
+		[Header(Highlight)]
+		_HighlightOffset("Highlight Size", Range(0, 5)) = 0.9  
+		_HiColor("Highlight Color", Color) = (1,1,1,1)
+		[Header(Rim)]
+		_RimColor("Rim Color", Color) = (1,0.3,0.3,1)
+		_RimPower("Rim Power", Range(0, 20)) = 6 
+			}
+
+	SubShader {
+		Tags { "RenderType"="Opaque" }
+		LOD 200
+		
+CGPROGRAM
+#pragma surface surf ToonRamp vertex:vert
+#pragma target 3.5
+sampler2D _Ramp;
+
+	struct SurfaceOutputCustom {
+	fixed3 Albedo;
+	fixed3 Normal;
+	fixed3 Emission;
+	half Specular;
+	fixed Gloss;
+	fixed Alpha;
+	fixed3 Custom;
+	};
+
+// custom lighting function that uses a texture ramp based
+// on angle between light direction and normal
+#pragma lighting ToonRamp exclude_path:prepass
+inline half4 LightingToonRamp (SurfaceOutputCustom s, half3 lightDir, half atten)
+{
+	#ifndef USING_DIRECTIONAL_LIGHT
+	lightDir = normalize(lightDir);
+	#endif
+		
+	half d = dot (s.Normal + s.Custom, lightDir)*0.5 + 0.5;
+	half3 ramp = tex2D (_Ramp, float2(d,d)).rgb;
+	
+	half4 c;
+	c.rgb = s.Albedo * _LightColor0.rgb * ramp * (atten * 2);
+	c.a = 0;
+	return c;
+}
+
+
+float4 _Color;
+float _Offset;
+float4 _HiColor;
+float _HighlightOffset;
+float _Brightness;
+float4 _SpecuColor;
+float4 _RimColor;
+float _RimPower;
+sampler2D _Normal;
+
+
+
+struct Input {
+	float2 uv_MainTex : TEXCOORD0;
+	float2 uv_Normal;
+	float3 viewDir;
+	float3 lightDir;
+};
+
+ void vert(inout appdata_full v, out Input o)
+    {
+        UNITY_INITIALIZE_OUTPUT(Input, o);
+        o.lightDir = WorldSpaceLightDir(v.vertex); // get the worldspace lighting direction		
+    }
+ 
+
+void surf (Input IN, inout SurfaceOutputCustom o) {
+
+	float3 nor = UnpackNormal(tex2D(_Normal, IN.uv_Normal));
+	float spec = dot(normalize(IN.viewDir) + IN.lightDir, o.Normal);// specular based on view and light direction
+	float cutOff = step(spec + nor, _Offset); // cutoff for where base color is
+	float3 baseAlbedo = _Color * cutOff;// base color
+	float3 specularAlbedo = _SpecuColor * (1-cutOff) * _Brightness;// inverted base cutoff times specular color
+	float highlight = dot(IN.lightDir, o.Normal); // highlight based on light direction
+    highlight =  step(_HighlightOffset,highlight + nor); //glowing highlight
+	float3 highlightAlbedo = highlight * _HiColor; //glowing highlight
+	o.Albedo = baseAlbedo + specularAlbedo  + highlightAlbedo;// result
+	half rim = 1- saturate(dot (normalize(IN.viewDir), o.Normal * nor));// standard rim calculation   
+	o.Emission += _RimColor.rgb * pow(rim, _RimPower);// rim lighting added to glowing highlight
+	o.Custom = nor;
+	
+}
+ENDCG
+
+	} 
+
+	Fallback "Diffuse"
+}
+*/
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
+
+<!--
+
+-->
