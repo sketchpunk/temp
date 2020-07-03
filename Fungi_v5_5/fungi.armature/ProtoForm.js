@@ -2,45 +2,19 @@ import App, { Draw }			from "../fungi/App.js";
 import InterleavedFloatArray	from "../fungi/lib/InterleavedFloatArray.js";
 import Capsule					from "../fungi/geo/Capsule.js";
 
-class ProtoRig{
-	armature		= null;
+class ProtoForm{
+	armature		= null;	// Reference to Armature
 	mesh			= null;	// Instanced Mesh
 	trans_buffer	= null;	// Copy of World Space Pos / Rot from Armature Bones
 	config_buffer	= null;	// Instance Configuration of each capsule
 
 	constructor(){
-		/*
-		this.bone_transform = new InterleavedFloatArray([
-			{ name:"rot",	size:4 },
-			{ name:"pos",	size:3 },
-		], ini_cnt, auto_ext );
-
-		this.config = new InterleavedFloatArray([
-			{ name:"top",	size:4 },
-			{ name:"bot",	size:4 },
-			{ name:"rot",	size:4 },
-			{ name:"pos",	size:3 },
-		], ini_cnt, auto_ext );
-		*/
-
-		/*
-		// Flat Worldspace Transform from Armature Bones
-		this.bone_transform = new InterleavedFloatArray()
-			.add_var( "rot", 4 )
-			.add_var( "pos", 3 );
-
-		// Capsule Visual Configuration
-		this.config = new InterleavedFloatArray()
-			.add_var( "top", 4 )	// xyz = scale dome, w translate Y position
-			.add_var( "bot", 4 )
-			.add_var( "rot", 4 )	// Quaternion Rotation
-			.add_var( "pos", 3 );	// Quaternion Rotation
-		*/
 	}
 
 	use_armature( arm, config=null ){
 		let bcnt = arm.bones.length;
 
+		// Create Float buffer to hold our Bone Transform Data
 		this.trans_buffer = new InterleavedFloatArray([
 			{ name:"rot",	size:4 },
 			{ name:"pos",	size:3 },
@@ -118,8 +92,8 @@ class ProtoRig{
 
 		this.mesh = App.mesh.from_buffer_config( bconfig, "PRMesh", geo.idx.length, cfg.len );
 
-		console.log( bconfig );
-		console.log( this.mesh );
+		//console.log( bconfig );
+		//console.log( this.mesh );
 
 		/**/
 
@@ -127,7 +101,7 @@ class ProtoRig{
 	}
 
 	get_draw_item(){ 
-		let mat = App.shader.new_material( "ProtoRig" );
+		let mat = App.shader.new_material( "ProtoForm" );
 		return Draw.new_draw_item( this.mesh, mat, App.mesh.TRI );
 	}
 
@@ -156,34 +130,12 @@ class ProtoRig{
 
 //#################################################################
 
-function ProtoRigSys( ecs ){
-	let ary = ecs.query_comp( "ProtoRig" );
+function ProtoFormSys( ecs ){
+	let a, ary = ecs.query_comp( "ProtoForm" );
 	if( !ary ) return; // No Componets, skip.
 
-	let i, a, e, ws, bones, flat;
 	for( a of ary ){
-		if( !a.armature.updated ) continue;
-
-		console.log( "- ProtoRigSys" );
-		a.update_buffers();
-
-		console.log( a.trans_buffer );
-
-
-		/*
-		e = ecs.entities[ a.entity_id ];		
-		if( !e.Armature.updated ) continue;
-
-		bones	= e.Armature.bones;
-		flat	= e.ProtoRig.bone_transform;
-				
-		for( i=0; i < bones.length; i++ ){
-			ws = bones[ i ].ref.Node.world;
-			flat.set( i, ws.rot, ws.pos );
-		}
-
-		e.ProtoRig.update_bone_buffer();
-		*/
+		if( a.armature.updated ) a.update_buffers();
 	}
 }
 
@@ -192,7 +144,7 @@ function ProtoRigSys( ecs ){
 
 // #region SHADER
 function LoadShader(){
-	App.shader.new( "ProtoRig", vert_src, frag_src, null, App.ubo.get_array( "Global", "Model" ) );
+	App.shader.new( "ProtoForm", vert_src, frag_src, null, App.ubo.get_array( "Global", "Model" ) );
 }
 
 const vert_src = `#version 300 es
@@ -221,10 +173,9 @@ const vert_src = `#version 300 es
 		mat4 view_matrix;
 	} model;
 
-	//out vec2 frag_uv;
 	out vec3 frag_norm;
 	out vec3 frag_cam_pos;
-	out vec3 frag_pos;
+	out vec3 frag_wpos;
 
 	const int DIV_IDX = 31; // LT = TOP DOME
 	vec3 quat_mul_vec3( vec4 q, vec3 v ){ return v + (2.0 * cross(q.xyz, cross(q.xyz, v) + (q.w * v))); }
@@ -258,9 +209,10 @@ const vert_src = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		//frag_uv		= a_uv;
-		frag_pos		= wpos.xyz;
+		frag_wpos		= wpos.xyz;
 
 		frag_norm 		= quat_mul_vec3( qmul( a_cfg_rot, a_ins_rot ), a_norm );
+		// TODO, Maybe possible fix is to turn rotation to matrix, mul with viewmat then do the inverse-tranpose
 		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * frag_norm;
 		
 		//frag_cam_pos	= global.camera_pos;
@@ -281,7 +233,7 @@ const frag_src = `#version 300 es
 
 	in vec3 frag_norm;
 	//in vec3 frag_cam_pos;
-	in vec3 frag_pos;
+	in vec3 frag_wpos;
 
 	const vec3 color 				= vec3( 1.0, 1.0, 1.0 );
 	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
@@ -299,7 +251,7 @@ const frag_src = `#version 300 es
 		vec3 cAmbient		= lightColor * uAmbientStrength;
 
 		// Diffuse Lighting
-		vec3 lightVector	= normalize( lightPosition - frag_pos );		//light direction based on pixel world position
+		vec3 lightVector	= normalize( lightPosition - frag_wpos );		//light direction based on pixel world position
 		float diffuseAngle	= max( dot( frag_norm, lightVector ) ,0.0 );	//Angle between Light Direction and Pixel Direction (1==90d)
 		vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
 
@@ -308,5 +260,5 @@ const frag_src = `#version 300 es
 `;
 // #endregion
 
-export default ProtoRig;
-export { ProtoRigSys, LoadShader };
+export default ProtoForm;
+export { ProtoFormSys, LoadShader };

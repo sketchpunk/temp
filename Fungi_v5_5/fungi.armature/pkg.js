@@ -47,13 +47,13 @@ export default async( App, config )=>{
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	if( config.protorig ){
-		let pr = await import( "./ProtoRig.js" );
+	if( config.protoform ){
+		let pr = await import( "./ProtoForm.js" );
 
 		App.ecs.components.reg( pr.default );
-		App.ecs.systems.reg( pr.ProtoRigSys, 810 );
+		App.ecs.systems.reg( pr.ProtoFormSys, 810 );
 		pr.LoadShader();
-		console.log( "[ Armature : ProtoRig ]" );
+		console.log( "[ Armature : ProtoForm ]" );
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

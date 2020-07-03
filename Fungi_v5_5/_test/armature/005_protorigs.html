@@ -1,12 +1,13 @@
 <!DOCTYPE html><script type="module">
 import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
-import ProtoRig		from "../../fungi.armature/ProtoRig.js";
 import Capsule		from "../../fungi/geo/Capsule.js";
+import ProtoForm	from "../../fungi.armature/ProtoForm.js";
+import ProtoHuman	from "../../fungi.armature/ProtoHuman.js";
 
 //#####################################################
 App
 	.init( true )
-	.load_pkg( { name:"fungi.armature", bone_view:false, protorig:true, mat:false } )
+	.load_pkg( { name:"fungi.armature", bone_view:false, protoform:true, mat:false } )
 	.load_shaders( "LowPoly.js" )
 	.set_camera( 0, 20, 3, 0, 0.7, 0 )
 	.task( init )
@@ -21,7 +22,7 @@ async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// STARTING ENTITY ( Node + Draw )
 	let e = App.mesh_entity( "test" );
-	console.log( e );
+	//console.log( e );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// CREATE ARMATURE
@@ -36,12 +37,27 @@ async function init(){
 	//e.draw.add( bview.mesh, mat, App.mesh.LINE );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let prig = new ProtoRig();
+	let prig = new ProtoForm();
 	prig.use_armature( arm, MAXIMO_CONFIG );
 	App.ecs.add_com( e.id, prig );
 
 	e.draw.items.push( prig.get_draw_item() );
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    arm.get_node( "RightUpLeg" ).rot_by( 65, "x" );
+	arm.get_node( "RightLeg" ).rot_by( -90, "x" );
+	arm.get_node( "LeftUpLeg" ).rot_by( -10, "x" );
+	arm.get_node( "LeftLeg" ).rot_by( -20, "x" );
+    arm.get_node( "Spine" ).rot_by( -20, "x" );
+    arm.get_node( "Spine1" ).rot_by( -20, "x" );
+	arm.get_node( "Neck" ).rot_by( -30, "x" );
+	arm.get_node( "Head" ).rot_by( -10, "x" );
+	arm.get_node( "LeftArm" ).rot_by( 20, "z" );
+	arm.get_node( "LeftForeArm" ).rot_by( -40, "x" );
+	arm.get_node( "RightArm" ).rot_by( 40, "z" );
+	arm.get_node( "RightForeArm" ).rot_by( 40, "x" );
+	arm.get_node( "RightFoot" ).rot_by( -40, "x" );
+	arm.get_node( "LeftFoot" ).rot_by( -20, "x" );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//App.render_by( 1, on_render );
@@ -49,8 +65,6 @@ async function init(){
 }
 
 //#####################################################
-
-
 
 const MAXIMO_BONES = [
 	{ "name":"Hips", "len":0.105, "idx":0,"p_idx":null,"pos":[0,1.039,0.020], "rot":[2.4268916831715615e-7,0,0,1]  },
@@ -113,7 +127,6 @@ const MAXIMO_BONES = [
 	{ "name":"RightFoot","len":0.115,"idx":50,"p_idx":49,"pos":[0,0.445,0],"rot":[0.3540933132171631,0.000004626839199772803,-0.0000017285617559537059,0.935210108757019] },
 	{ "name":"RightToeBase","len":0.1,"idx":51,"p_idx":50,"pos":[0,0.115,0],"rot":[0.4079799950122833,1.589943821045381e-7,-4.328248692786474e-8,0.9129908680915833] }
 ];
-
 
 const ROTX90	= [0,0,0.7071067690849304,0.7071067690849304];
 const ROTX20	= [0.1736481785774231, 0, 0, 0.9848077297210693];
