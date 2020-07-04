@@ -187,7 +187,7 @@ class ShaderFactory{
 	new_material( name=null, uniforms=null, options=null ){
 		let sh = this.cache.get( name );
 		if( !sh ){ console.error( "No Shader by the name %s.", name ); return null; }
-
+		
 		let k, v, mat = new Material( sh );
 
 		// Copy Uniforms

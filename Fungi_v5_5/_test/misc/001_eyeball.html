@@ -1,0 +1,571 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+//import Capsule	from "../../fungi/geo/Capsule.js";
+//import Points 	from "../../fungi/geo/Points.js";
+//import Motion 	from "../../fungi.test/Motion.js";
+import UVSphere		from "../../fungi/geo/UVSphere.js";
+
+
+//#####################################################
+App
+	.init()
+	.load_shaders( "LowPoly.js" )
+	.set_camera( 0, 20, 2, 0, 0.0, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	//if( dt ) gMotion( dt ); // Move Point
+	//App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Shader */
+	init_shader();
+
+	let mat = App.shader.new_material( "TESTER" );
+	let e	= UVSphere( "Eye", mat, 18, 25, 0.5, true, true );
+
+	e.node.set_pos( 0, 0.6, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 1.8, 5 );
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [ 2, 5, 1 ] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"eye_color", type:"rgb", value:"#ffffff" },
+		{ name:"specular_color", type:"rgb", value:"#CC7233" },
+		{ name:"edge_color", type:"rgb", value:"#0000ff" },
+		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+// https://www.patreon.com/posts/quick-game-art-29141036
+// https://pastebin.com/6LrRnwV4
+// https://pastebin.com/uj4fJk0j
+// https://www.patreon.com/posts/shader-graph-32245563
+
+// https://www.patreon.com/posts/quick-game-art-13059579 Toon Specular
+// https://github.com/LadTy/ParallaxGlitter Parallax Glitter Effect
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+	
+	//-------------------------
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	//-------------------------
+
+	out vec3 frag_norm;
+	out vec3 frag_cam;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	//-------------------------
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam		= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+	}`;
+
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec3 eye_color;
+	uniform vec3 edge_color;
+
+	uniform vec3 specular_color;
+	uniform vec3 rim_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+
+	//-------------------------
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 		= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+		vec3 dir_light	= normalize( light.pos - frag_wpos );	// Frag to Light Directiom
+		vec3 dir_cam	= normalize( frag_cam - frag_wpos );	// Frag tp Camera Direction
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// New Fragment local position, shifting closer to origin on Z Axis
+		// This way frags that are z=0.5 will have a length of 0, moving closer
+		// to 1 when world space z == 0.
+		vec3 fpos = vec3( frag_lpos.xy, frag_lpos.z - 0.5 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Diffuse Eye Color
+		float diff			= clamp( dot( norm, dir_light ) * 0.5 + 0.5, 0.0, 1.0 ); 
+		vec3 eye_diffuse	= eye_color * ( 0.2 + diff );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// IRIS
+		const float iris_radius = 0.3;
+
+		// Distance the Frag is from Origin.
+		float iris_len	= length( fpos );
+
+		// Limit distance, norm + clamp
+		float iris_rng	= iris_len / iris_radius;
+		float iris_grad	= 1.0 - clamp( iris_rng, 0.0, 1.0 ); 
+		
+		// Use Gradient to mix the Iris Color
+		vec3 iris_color	= mix( vec3( 1.0, 0.0, 0.0), vec3( 0.0, 1.0, 0.0), iris_grad );
+
+		// Turn Gradient into a more solid circle
+		//float iris_mask	= clamp( iris_grad * 20.0, 0.0, 1.0 );	// Original Way
+		float iris_mask	= smoothstep( 0.00001, 0.01, iris_grad );	// For Pixel thinness use fwidth but overkill
+	
+		//out_color.rgb = iris_color * iris_mask; // Filter out Iris
+		//out_color.rgb = vec3( iris_mask );
+		//out_color.rgb = ( eye_color * (1.0 - iris_mask) ) + iris_color * iris_mask;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// IRIS EDGE
+		const float edge_size = 0.1;
+
+		// Create a Larger Circle Circle
+		float edge_grad			= 1.0 - clamp( iris_rng - edge_size, 0.0, 1.0 );
+
+		// Make the Gradient a solid circle
+		//float edge_mask		= clamp( edge_grad * 20.0, 0.0, 1.0 );
+		float edge_mask			= smoothstep( 0.00001, 0.01, edge_grad );
+
+		// Using the Inverted Iris Mask, Cut a hole in the edge circle to make a ring.
+		float edge_ring_mask	= edge_mask * ( 1.0 - iris_mask );
+
+		//out_color.rgb = vec3( edge_ring_mask );
+		/*
+		out_color.rgb = 
+			( eye_color * ( 1.0 - edge_mask ) ) + 
+			edge_color * edge_ring_mask +
+			iris_color * iris_mask;
+		*/
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// PUPIL
+		const float pupil_radius = 0.11;
+
+		// Limit distance, norm + clamp
+		float pupil_rng		= iris_len / pupil_radius;
+		float pupil_grad	= 1.0 - clamp( pupil_rng, 0.0, 1.0 );
+		float pupil_mask	= smoothstep( 0.00001, 0.01, pupil_grad );
+		// out_color.rgb = vec3( pupil_mask );
+		
+		// Use Gradient to mix the Iris Color
+		vec3 pupil_color = mix( vec3( .4, 0.0, 0.0), vec3( 0.0, 0.0, 0.0), pupil_grad );
+		//out_color.rgb =  pupil_color * pupil_mask;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPECULAR
+		// Original
+		//float specu = dot( norm, normalize( dir_light + dir_cam ) ) * 0.5;
+		//specu = step( 0.48, specu );
+
+		const float specular_strength	= 1.0;
+		const float shininess 			= 32.0;
+
+		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
+		vec3 dir_frag_cam	= normalize( frag_cam - frag_lpos );		// Dir from Fragment to Camera
+		float specu 		= specular_strength * pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
+
+
+		out_color.rgb = 
+			( eye_diffuse * ( 1.0 - edge_mask ) ) +
+			edge_color * edge_ring_mask +
+			iris_color * ( iris_mask * ( 1.0 - pupil_mask )) +
+			pupil_color * pupil_mask +
+			vec3( 1.0 ) * specu;
+
+		
+
+		/*
+		//float dis = distance( vec3( 0.0 ), vec3(frag_lpos.x, frag_lpos.y, frag_lpos.z - 0.5) );
+		float dis = length( vec3( frag_lpos.xy, frag_lpos.z - 0.5) );
+
+		dis = 1.0 - clamp( (dis / 0.3),  0.0, 1.0 );
+		dis = clamp( dis * 20.0, 0.0, 1.0 );
+		//dis = step( 0.00001, dis );
+
+		vec3 color = vec3( dis );
+		//if( dis > 0.4 ) color = vec3( 1.0, 0.0, 0.0 );
+
+		out_color = vec4( color, 1.0 );
+		*/
+	}`;
+
+
+/*
+ORIGINAL UNITY SHADER BY MINIONART
+
+Shader "Custom/ProcEye"
+{
+    Properties
+    {
+		[Header(Main)]
+        _Color ("Color", Color) = (1,1,1,1)
+      
+		[Header(Iris)]
+		_IrisTex("Iris Texture (RGB)", 2D) = "white" {}
+		_IrisTexColor("Iris Texture Tint", Color) = (1,0,0,1)
+		_Radius("Iris Radius", Range(0,1)) = 0.4
+		_IrisColor("Iris Color", Color) = (0,1,1,1)
+		_IrisColorOut("Iris Color Out", Color) = (0,1,0,1)
+		_IrisScaleX("Iris Scale X", Range(0,2)) = 1
+		_IrisScaleY("Iris Scale Y", Range(0,2)) = 1
+		_Speed("Iris Scroll Speed", Range(-10,10)) = 0
+		_Scale("Iris Texture Scale", Range(0.1,10)) = 10
+		[Toggle(TEXTURE)] _TEXTURE("Circlular Texture", Float) = 0
+		_Distort("Iris Texture Distortion", Range(0,1)) = 0.5
+
+		[Header(Pupil)]	 	
+		_RadiusPupil("Pupil Radius", Range(0,0.5)) = 0.1
+		_PupilColor("Pupil Color", Color) = (0,0,0,1)
+		_PupilColorOut("Pupil Color Out", Color) = (0,0,1,1)
+		_PupilScaleX("Pupil Scale X", Range(0,1)) = 0.5
+		_PupilScaleY("Pupil Scale Y", Range(0,1)) = 0.5
+
+		[Header(Specular and Iris Edge)]
+		_Edgewidth("Iris Edge Width", Range(0,2)) = 0.1
+		_SpecSize("Specular Size", Range(0.2,0.5)) = 0.47
+		_IrisEdgeColor("Iris Edge Color", Color) = (0,0,0,1)
+					
+		
+	}
+		SubShader
+		{
+			Tags { "RenderType" = "Opaque" }
+			LOD 200
+		  CGPROGRAM
+        // Physically based Standard lighting model, and enable shadows on all light types
+        #pragma surface surf  Standard fullforwardshadows vertex:vert
+        #pragma target 3.5
+      
+		#pragma shader_feature TEXTURE
+
+		sampler2D _MainTex, _IrisTex;
+        struct Input
+        {
+            float2 uv_MainTex;
+			float3 objPos;
+			float3 lightDir;
+			float3 viewDir;
+        };
+
+ 
+		float _Radius, _RadiusPupil;
+        fixed4 _Color, _IrisColor, _PupilColor, _PupilColorOut, _IrisColorOut, _IrisTexColor, _IrisEdgeColor;
+		float _PupilScaleX, _PupilScaleY, _Edgewidth, _SpecSize, _IrisScaleX, _IrisScaleY, _Scale, _Speed, _Distort;
+		
+
+		void vert(inout appdata_full v, out Input o) {
+			UNITY_INITIALIZE_OUTPUT(Input, o);
+			o.objPos = v.vertex;
+			o.lightDir = WorldSpaceLightDir(v.vertex); // get the worldspace lighting direction
+		}
+
+        // Add instancing support for this shader. You need to check 'Enable Instancing' on materials that use the shader.
+        // See https://docs.unity3d.com/Manual/GPUInstancing.html for more information about instancing.
+        // #pragma instancing_options assumeuniformscaling
+        UNITY_INSTANCING_BUFFER_START(Props)
+            // put more per-instance properties here
+        UNITY_INSTANCING_BUFFER_END(Props)
+
+        void surf (Input IN, inout SurfaceOutputStandard o)
+        {
+     
+			// circles
+			float dis= distance(0, float3(IN.objPos.x * _IrisScaleX, IN.objPos.y * _IrisScaleY, IN.objPos.z - 0.5)); 
+			float disPup = (distance(0, float3(IN.objPos.x * _PupilScaleX, IN.objPos.y * _PupilScaleY , IN.objPos.z - 0.5))); 
+			float irisRadius = 1- saturate(dis / _Radius);
+			float pupilRadius = 1 - saturate(disPup / _RadiusPupil);
+			float irisEdge = 1 - saturate(dis / _Radius - _Edgewidth);
+		
+			// specular
+			half d = dot(o.Normal, normalize(IN.lightDir + IN.viewDir))*0.5;
+			d = step(_SpecSize, d);
+			
+			
+			// Iris texture
+			float4 i = tex2D(_IrisTex, IN.uv_MainTex);
+
+			float speed = _Time.x * _Speed + (_Distort *i);
+
+#if TEXTURE
+			// circular
+			i = tex2D(_IrisTex, float2((irisRadius * IN.uv_MainTex + speed) * _Scale) ) ;
+#else
+			// normal
+			i =tex2D(_IrisTex, (float2(IN.uv_MainTex.x, IN.uv_MainTex.y + speed)  * _Scale) ) * _Color;
+#endif
+			// add extra tint
+			i *= _IrisTexColor;
+
+
+			// increase strength then clamp it for a smooth circle
+			float irisCircle = saturate(irisRadius * 20);
+			float pupilCircle = saturate(pupilRadius * 20);
+			float irisEdgeCircle = saturate(irisEdge * 20);
+			
+			// eyewhite is everything but the iris 
+			float4 eyeWhite = _Color * (1 - irisEdgeCircle);
+
+			// subract to avoid bleeding through of colors
+			irisEdgeCircle -= irisCircle;
+			irisCircle -= pupilCircle;
+
+			// lerp colors
+			float4 irisLerp = lerp(_IrisColorOut,_IrisColor, irisRadius ) + i;
+			float4 irisColored = irisCircle * irisLerp;
+		
+			float4 pupilLerp = lerp(_PupilColorOut,_PupilColor, pupilRadius);
+			float4 pupilColored = pupilCircle * pupilLerp;
+
+			float4 irisEdgeColored = irisEdgeCircle * _IrisEdgeColor;
+
+			// all together
+			o.Albedo = eyeWhite + irisColored + pupilColored + irisEdgeColored;
+
+			// specular in emission
+			o.Emission = d;
+
+        }
+        ENDCG
+    }
+    FallBack "Diffuse"
+}
+
+
+Shader "Custom/ProcEye Textured"
+{
+    Properties
+    {
+		[Header(Main)]
+        _Color ("Color", Color) = (1,1,1,1)
+      
+		[Header(Iris)]
+		_IrisTex("Iris Texture (RGB)", 2D) = "black" {}
+		_IrisTexColor("Iris Texture Tint", Color) = (1,0,0,1)
+		_Radius("Iris Radius", Range(0,1)) = 0.4
+		_IrisColor("Iris Color", Color) = (0,1,1,1)
+		_IrisColorOut("Iris Color Out", Color) = (0,1,0,1)
+		_IrisScaleX("Iris Scale X", Range(0,2)) = 1
+		_IrisScaleY("Iris Scale Y", Range(0,2)) = 1
+		_Speed("Iris Scroll Speed", Range(-10,10)) = 0
+		_Scale("Iris Texture Scale", Range(0.1,10)) = 10
+		[Toggle(TEXTURE)] _TEXTURE("Circlular Texture", Float) = 0
+		_Distort("Iris Texture Distortion", Range(0,1)) = 0.5
+		_Brightness("Iris Texture Brigthness", Range(0,5)) = 1
+
+		[Header(Pupil)]	 	
+		_PupilTex("Pupil Texture (RGB)", 2D) = "white" {}
+		_PupilScale("Pupil Tex Radius", Range(0,1)) = 0.3
+		_RadiusPupil("Pupil Radius", Range(0,0.5)) = 0.1
+		_PupilColor("Pupil Color", Color) = (0,0,0,1)
+		_PupilColorOut("Pupil Color Out", Color) = (0,0,1,1)
+		_PupilScaleX("Pupil Scale X", Range(0,1)) = 0.5
+		_PupilScaleY("Pupil Scale Y", Range(0,1)) = 0.5
+
+		[Header(Highlight and Iris Edge)]
+		_GlintTex("Glint Texture (RGB)", 2D) = "black" {}
+		_GlintScale("Glint Scale", Range(0,1)) = 0.3
+		_Edgewidth("Iris Edge Width", Range(0,2)) = 0.1
+		_IrisEdgeColor("Iris Edge Color", Color) = (0,0,0,1)
+					
+		
+	}
+		SubShader
+		{
+			Tags { "RenderType" = "Opaque" }
+			LOD 200
+		  CGPROGRAM
+        // Physically based Standard lighting model, and enable shadows on all light types
+        #pragma surface surf  Standard fullforwardshadows vertex:vert
+        #pragma target 3.5
+      
+		#pragma shader_feature TEXTURE
+
+		sampler2D _MainTex, _IrisTex, _PupilTex, _GlintTex;
+        struct Input
+        {
+            float2 uv_MainTex;
+			float4 objPos;
+			float3 viewDir;
+        };
+
+ 
+		float _Radius, _RadiusPupil;
+        fixed4 _Color, _IrisColor, _PupilColor, _PupilColorOut, _IrisColorOut, _IrisTexColor, _IrisEdgeColor;
+		float _PupilScaleX, _PupilScaleY, _Edgewidth, _IrisScaleX, _IrisScaleY, _Scale, _Speed, _Distort, _Brightness;
+		float _PupilScale;
+		float  _GlintScale;
+
+		void vert(inout appdata_full v, out Input o) {
+			UNITY_INITIALIZE_OUTPUT(Input, o);
+			o.objPos = v.vertex;
+		}
+
+        // Add instancing support for this shader. You need to check 'Enable Instancing' on materials that use the shader.
+        // See https://docs.unity3d.com/Manual/GPUInstancing.html for more information about instancing.
+        // #pragma instancing_options assumeuniformscaling
+        UNITY_INSTANCING_BUFFER_START(Props)
+            // put more per-instance properties here
+        UNITY_INSTANCING_BUFFER_END(Props)
+
+        void surf (Input IN, inout SurfaceOutputStandard o)
+        {
+
+
+			// circles
+			float dis= distance(0, float3(IN.objPos.x * _IrisScaleX, IN.objPos.y * _IrisScaleY, IN.objPos.z - 0.5)); 
+			float disPup = (distance(0, float3(IN.objPos.x * _PupilScaleX, IN.objPos.y * _PupilScaleY , IN.objPos.z - 0.5))); 
+			float irisRadius = 1- saturate(dis / _Radius);
+			float pupilRadius = 1 - saturate(disPup / _RadiusPupil);
+			float irisEdge = 1 - saturate(dis / _Radius - _Edgewidth);
+		
+			// point in center of eye, flipped
+			float2 uv = float2(-IN.objPos.x , IN.objPos.y );
+			// uv for the pupil, adjusted for a sphere
+			float2 uvPup  = uv / (_PupilScale * 2);
+			uvPup += 0.5;
+			
+			// uv for the glint, adjusted for a sphere
+			float2 uvGlint = uv / (_GlintScale * 2);
+			uvGlint += 0.5;
+			uvGlint.x -= 0.2;
+			uvGlint += IN.viewDir * 0.2;
+
+		
+			
+			// Iris texture
+			float4 i = tex2D(_IrisTex, IN.uv_MainTex);
+
+			float speed = _Time.x * _Speed + (_Distort *i);
+
+#if TEXTURE
+			// circular
+			i = tex2D(_IrisTex, float2((disPup * IN.uv_MainTex + speed) * _Scale) ) ;
+#else
+			// normal
+			i =tex2D(_IrisTex, (float2(IN.uv_MainTex.x, IN.uv_MainTex.y + speed)  * _Scale) );
+#endif
+
+			// glint and pupil texture
+			float4 glint = tex2D(_GlintTex, uvGlint);
+			float4 pup = tex2D(_PupilTex, uvPup);
+
+			// add extra tint
+			i *= _IrisTexColor;
+			i *= _Brightness;
+
+			// increase strength then clamp it for a smooth circle
+			float irisCircle = saturate(irisRadius * 20);
+			float pupilCircle = saturate(pupilRadius * 20);
+			pupilCircle *= pup.r;
+			float irisEdgeCircle = saturate(irisEdge * 10);
+			
+			// eyewhite is everything but the iris 
+			float4 eyeWhite = _Color * (1 - irisEdgeCircle);
+			glint *= irisCircle;
+			// subract to avoid bleeding through of colors
+			irisEdgeCircle -=irisCircle ;
+		
+			irisCircle -= pupilCircle;
+
+			// lerp colors
+			float4 irisLerp = lerp(_IrisColorOut,_IrisColor, irisRadius ) + i;
+			float4 irisColored = irisCircle * irisLerp;
+		
+			float4 pupilLerp = lerp(_PupilColorOut,_PupilColor, pupilRadius);
+			float4 pupilColored = pupilCircle * pupilLerp;
+
+
+			float4 irisEdgeColored = irisEdgeCircle * _IrisEdgeColor;
+		
+			// all together
+			o.Albedo = eyeWhite + irisColored + pupilColored + irisEdgeColored;
+			// glint in emission
+			o.Emission =  glint;
+			o.Smoothness = 0.75;
+
+
+        }
+        ENDCG
+    }
+    FallBack "Diffuse"
+}
+*/
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

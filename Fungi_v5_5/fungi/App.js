@@ -176,6 +176,7 @@ class Launcher{
 		this.task( async()=>{
 			let i, url, ary = new Array( args.length );
 
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			for( i=0; i < args.length; i++ ){
 				url = args[ i ];
 				if( url.indexOf( "/") == -1 ) url = "./shaders/" + url;
@@ -183,7 +184,11 @@ class Launcher{
 				ary[ i ] = import( url );
 			}
 
-			await Promise.all( ary );
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			await Promise.all( ary ).then(( ary )=>{
+				let i;
+				for( i of ary ) console.log( "[ Load Shader : %s ]", i.default.name );
+			});
 			return true;
 		})
 		return this;
