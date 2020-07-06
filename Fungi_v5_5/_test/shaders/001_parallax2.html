@@ -42,7 +42,7 @@ async function init( x ){
 	let tex3	= App.texture.new( "glit_mask", img[3] );
 
 	let mat		= App.shader.new_material( "TESTER", { 
-		base_tex			: tex0,
+		bg_tex				: tex0,
 		glitter_hmap_tex	: tex1,
 		glitter_norm_tex	: tex2,
 		glitter_mask_tex	: tex3,
@@ -59,8 +59,9 @@ async function init( x ){
 
 function init_shader(){
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"base_tex",			type:"sampler2D", value:"null" },
-		{ name:"glitter_hmap_tex",	type:"sampler2D", value:"null" },
+		{ name:"bg_tex",			type:"sampler2D", value:"null" },
+		
+		{ name:"glit_hmap_tex",	type:"sampler2D", value:"null" },
 		{ name:"glitter_norm_tex",	type:"sampler2D", value:"null" },
 		{ name:"glitter_mask_tex",	type:"sampler2D", value:"null" },
 		{ name:"scale", type:"vec2", value:new Float32Array([1,1]), },
@@ -121,8 +122,8 @@ out vec4 out_color;
 
 //-------------------------
 
-uniform sampler2D base_tex;
-uniform sampler2D glitter_hmap_tex;
+uniform sampler2D bg_tex;
+uniform sampler2D glit_hmap_tex;
 uniform sampler2D glitter_norm_tex;
 uniform sampler2D glitter_mask_tex;
 
@@ -133,6 +134,9 @@ in vec3 frag_cam;
 in vec2 frag_uv;
 
 //-------------------------
+
+const float bg_depth		= 0.4; // 0 > 1
+const float bg_base_depth	= 1.0; // 0 > 3 
 
 const vec3 light_pos = vec3( 4, 2.0, 5.0 );
 
@@ -180,43 +184,40 @@ vec3 perturb_normal( vec3 N, vec3 V, vec2 texcoord ){
 }
 */
 
+// Compute the Parallax UV.
+vec2 parallax_uv( vec2 uv, vec3 look_dir, mat3 tbn, float height_map, float base_depth, float depth ){
+	return (
+		vec3( uv, 0.0 ) + 
+		( tbn * look_dir ).xyz *
+		( height_map - base_depth ) * depth
+	).xy;
+}
 
 void main(void){
-	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+	// STANDARD
 	vec3 norm 		= normalize( frag_norm );	
 	vec3 dir_cam	= normalize( frag_cam - frag_wpos );
 	vec3 dir_light	= normalize( light_pos - frag_wpos );
-	
-	vec4 px_main	= texture( base_tex, frag_uv ); //float4 _MainHeighmap_var = tex2D(_MainHeighmap,(i.uv0, _MainHeighmap));
 
-	
-	mat3 tangent_m3 = cotangent_frame( norm, -dir_cam, frag_uv );
-	const float DEPTH		= 0.4; // 0 > 1
-	const float BASE_DEPTH	= 1.0; // 0 > 3 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Need the Tangent Matrix for Parallax and
+	// Converting Normal Maps from TangentSpace to WorldSpace
 
-	/**/
-	vec4 hightmap_px = px_main; // no height map, so using main texture in its place
+	mat3 tbn = cotangent_frame( norm, -dir_cam, frag_uv );
 
-	vec2 parallax_uv = 
-	(
-		vec3( frag_uv, 0.0 ) +
-		(
-			( tangent_m3 * dir_cam ).xyz
-			*
-			( hightmap_px.r - BASE_DEPTH )
-			* 
-			DEPTH	
-		)
-	).rg;
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// BACKGROUND, If using a B & W texture, can use as both
+	// the main texture and its height map. Else you need two textures.
 
-	vec4 main_color	= texture( base_tex, parallax_uv );
-	out_color		= main_color;
+	vec4 bg_px		= texture( bg_tex, frag_uv );	// Height Map
+	vec2 bg_uv		= parallax_uv( frag_uv, dir_cam, tbn, bg_px.r, bg_base_depth, bg_depth );
+	vec4 bg_color	= texture( bg_tex, bg_uv );		// Color
+	//out_color		= bg_color;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-	vec4 glit_hmap_px = texture( glitter_hmap_tex, frag_uv );
+	vec4 glit_hmap_px = texture( glit_hmap_tex, frag_uv );
 
 	const float _GlitterDepth 		= 0.1; // 0 > 1
 	const float _GlitterBaseDepth	= 1.0; // 0 > 3 
@@ -224,7 +225,7 @@ void main(void){
 	vec2 glitter_uv = (
 		vec3( frag_uv, 0.0 ) + 
 		(
-			( tangent_m3 * dir_cam ).xyz
+			( tbn * dir_cam ).xyz
 			*
 			( glit_hmap_px.r - _GlitterBaseDepth )
 			*
@@ -233,63 +234,22 @@ void main(void){
 	).rg;
 
 	vec3 glitter_norm_px	= texture( glitter_norm_tex, glitter_uv ).xyz * 255.0/127.0 - 128.0/127.0;
-	vec3 glitter_norm 		= normalize( tangent_m3 * glitter_norm_px );
+	vec3 glitter_norm 		= normalize( tbn * glitter_norm_px );
 	vec3 glitter_mask_px	= texture( glitter_mask_tex, glitter_uv ).xyz;
 
 	/**/
-	float _GlitterDensityFactor = -50.0;
-	float _GlitterFrequency = 2.6;
-	float _GlitterEdgesFalloff = 0.12;
-	vec4 _GlitterColor = vec4(1.0,1.0,1.0,1.0);
-	float node_8961 = (-1.0);
+	float _GlitterDensityFactor	= -50.0;
+	float _GlitterFrequency		= 2.6;
+	float _GlitterEdgesFalloff	= 0.12;
+	vec4 _GlitterColor			= vec4( 1.0, 1.0, 1.0, 1.0 );
 
-	vec3 Glitter = (
-		_GlitterColor.rgb
-		*
-		(
-			clamp
-			(
-				(
-					_GlitterDensityFactor + 
-					( 
-						(
-							sin(
-								(
-									abs(
-										dot(
-											(
-												glitter_norm * tangent_m3
-											).xyz.rgb
-											,dir_cam
-										)
-									)
-									*_GlitterFrequency
-								)
-							)
-							- node_8961
-						)
-						*
-						(1.0 - _GlitterDensityFactor)
-					) 
-					/ 
-					(1.0 - node_8961)
-				)
-				, 0.0, 1.0
-			) *
-			glitter_mask_px.r * 
-			pow(
-				abs(
-					dot( norm,dir_cam )
-				),
-				_GlitterEdgesFalloff
-			)
-		)* 
-		_GlitterColor.a
-	);
-	
+	float glitter_mask	= glitter_mask_px.r * pow( abs( dot( norm, dir_cam ) ), _GlitterEdgesFalloff );
+	float glitter_freq	= _GlitterFrequency * abs( dot( tbn * glitter_norm, dir_cam ) );
+	float glitter_fact	= _GlitterDensityFactor + ( sin( glitter_freq ) + 1.0 ) * ( 1.0 - _GlitterDensityFactor ) * 0.5;
+	vec3 Glitter		= _GlitterColor.rgb * clamp( glitter_fact , 0.0, 1.0 ) * glitter_mask * _GlitterColor.a;
 
-	out_color		= glit_hmap_px;
-	out_color.rgb	= Glitter;
+	//out_color		= glit_hmap_px;
+	out_color.rgb	= Glitter.rgb;
 
 	/*
 	_GlitterHighmap ("GlitterHighmap", 2D) = "white" {} // caustic.png

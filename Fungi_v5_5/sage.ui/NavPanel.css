@@ -1,0 +1,32 @@
+nav-panel{ position:fixed; display:flex; }
+nav-panel.top{ top:0px; left:0px; right:0px; height:30px; flex-direction:row; }
+nav-panel.bot{ bottom:0px; left:0px; right:0px; height:30px; flex-direction:row; }
+
+nav-panel > header { flex:1 1 33%; display:flex; }
+nav-panel > main { flex:1 1 33%; display:flex; justify-content: center;  }
+nav-panel > footer { flex:1 1 33%; display:flex; justify-content: flex-end; }
+
+/* ============================================================== 
+BTNS THEME */
+nav-panel.Btns{ background-color:#303030dd; }
+nav-panel.Btns button{ border-style:solid; border-color:transparent; 
+	color:#858585; background-color:transparent; 
+	text-align:center; font-size:18px;
+	cursor:pointer; user-select: none; }
+nav-panel.Btns button:hover{ color:#CCCCCC; }
+nav-panel.Btns button:focus{ outline:0; }
+
+
+nav-panel.bot.Btns button.on { border-top-color:lime; }
+nav-panel.bot.Btns button:hover{ border-top-color:#999999; }
+
+nav-panel.top.Btns button.on { border-bottom-color:lime; }
+nav-panel.top.Btns button:hover{ border-bottom-color:#999999; }
+nav-panel.top.Btns{ box-shadow:0px 1px 3px #00000077; }
+
+/* ============================================================== 
+FOOTER THEME */
+nav-panel.Footer{ background-color:#007ACCbb; box-shadow: 0px 0px 3px #00000066;
+	bottom:0px; left:0px; right:0px; height:24px; flex-direction:row; }
+nav-panel.Footer label{ font-size:12px; color:#eeeeee; padding:3px 8px 0px 8px; cursor:pointer; }
+nav-panel.Footer label:hover{ background-color:#008DED; }
