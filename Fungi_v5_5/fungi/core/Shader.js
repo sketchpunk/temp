@@ -1,4 +1,5 @@
-import Colour from "./Colour.js";
+import Colour		from "./Colour.js";
+import { Texture }	from "./Texture.js";
 
 //#######################################################################################################
 
@@ -23,19 +24,23 @@ class Uniform{
 
 	parse( value ){
 		switch( this.type ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			case "rgb"	: 
 			case "rgba"	:
 				value = new Colour( value );
 			break;
 
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			/*
 			case "sampler2D"	: 
 			case "samplerCube"	:
-				let tmp = ( value instanceof WebGLTexture )? value : Cache.get_tex( value ); 
+				let tmp = ( value instanceof Texture )? value : Cache.get( value ); 
 				if( tmp == null ){
 					console.error( "Uniform.parse: Texture not found", value );
 					return this;
 				}else value = tmp;
 			break;
+			*/
 		}
 	
 		return ( Array.isArray( value ) && value.length == 0 )? null : value;
@@ -77,9 +82,11 @@ class ShaderFactory{
 	SKIN_IDX_LOC	= 8;
 	SKIN_WGT_LOC	= 9;
 
-    constructor( gl ){
+    constructor( gl, tex ){
 		this.gl		= gl;
 		this.cache	= new Map();
+
+		this.tex 	= tex; // TODO, may need to remove this if never using texture cache.
     }
 
 	// #region METHODS
@@ -156,9 +163,13 @@ class ShaderFactory{
 		
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				case "sampler2D":
-					//console.log( this.tex_slot, u_value._name_ );
+					//if( !(itm.data instanceof Texture) ){
+					//	let tmp = this.tex.get( itm.data );
+					//	if( !tmp )	console.error( "Shader.load_uniforms: Texture not found", itm.data );
+					//	else		itm.data = tmp;
+					//}
 					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + tex_slot );
-					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D, itm.data );
+					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D, itm.data.id );
 					gl.ctx.uniform1i(		itm.loc, tex_slot );
 					tex_slot++;
 					break;

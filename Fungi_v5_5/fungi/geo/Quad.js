@@ -24,7 +24,8 @@ function Quad( name, mat ){
 		//MESH = App.mesh.from_data( "FungiQuad", new Float32Array(geo.vert), 3, new Uint16Array(geo.idx), new Float32Array(geo.norm), new Float32Array(geo.uv) );
 	}
 
-	return App.ecs.new_entity( name, "Node", new Draw( MESH, mat, App.mesh.TRI ) );
+	return App.mesh_entity( name, MESH, mat, App.mesh.TRI );
+	//return App.ecs.new_entity( name, "Node", new Draw( MESH, mat, App.mesh.TRI ) );
 }
 
 Quad.geo = function(){

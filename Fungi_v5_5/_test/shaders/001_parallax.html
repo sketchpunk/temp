@@ -1,0 +1,475 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }		from "../../fungi/App.js";
+import XhrQueue				from "../../fungi/lib/XhrQueue.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+
+//#####################################################
+App
+	.init()
+	//.load_shaders( "Texture.js" )
+	.set_camera( 0, 5, 1.5, 0, 0.6, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init( x ){
+	let img	= await XhrQueue.url( "../../files/textures/", 
+		"noise_clouds_01.png", 
+		"caustic_01.png",
+		"rnd_rgb.png",
+		"rnd_bw.png",
+	).then();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	//let mat = App.shader.new_material( "TESTER" );
+	//let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 0, 0.5, -2 );
+	*/
+
+	let tex0	= App.texture.new( "noise_cloud", img[0] );
+	let tex1	= App.texture.new( "glit_hmap", img[1] );
+	let tex2	= App.texture.new( "glit_norm", img[2] );
+	let tex3	= App.texture.new( "glit_mask", img[3] );
+
+	let mat		= App.shader.new_material( "TESTER", { 
+		base_tex			: tex0,
+		glitter_hmap_tex	: tex1,
+		glitter_norm_tex	: tex2,
+		glitter_mask_tex	: tex3,
+	} ).set_cullface( false );
+
+	let e	= Quad( "quad", mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"base_tex",			type:"sampler2D", value:"null" },
+		{ name:"glitter_hmap_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_norm_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_mask_tex",	type:"sampler2D", value:"null" },
+		{ name:"scale", type:"vec2", value:new Float32Array([1,1]), },
+	], App.ubo.get_array( "Global", "Model" ) );
+}
+
+// https://github.com/LadTy/ParallaxGlitter
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+uniform vec2 scale;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec3 frag_cam;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_uv		= a_uv * scale;
+	frag_wpos	= world_pos.xyz;
+	frag_cam	= global.camera_pos;
+	frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position	= global.proj_view * world_pos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+uniform sampler2D base_tex;
+uniform sampler2D glitter_hmap_tex;
+uniform sampler2D glitter_norm_tex;
+uniform sampler2D glitter_mask_tex;
+
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec3 frag_cam;
+in vec2 frag_uv;
+
+//-------------------------
+
+const vec3 light_pos = vec3( 4, 2.0, 5.0 );
+
+//-------------------------
+
+// https://www.geeks3d.com/20130122/normal-mapping-without-precomputed-tangent-space-vectors/
+// http://www.thetenthplanet.de/archives/1180
+mat3 cotangent_frame( vec3 n, vec3 p, vec2 uv){ // Normal, Vert to Cam, Vert UV
+    // get edge vectors of the pixel triangle
+    vec3 dp1	= dFdx( p );
+    vec3 dp2	= dFdy( p );
+    vec2 duv1	= dFdx( uv );
+    vec2 duv2	= dFdy( uv );
+ 
+    // solve the linear system
+    vec3 dp2perp	= cross( dp2, n );
+    vec3 dp1perp	= cross( n, dp1 );
+    vec3 T			= dp2perp * duv1.x + dp1perp * duv2.x;	// Tangent
+    vec3 B			= dp2perp * duv1.y + dp1perp * duv2.y;	// BiTangent
+ 
+    // construct a scale-invariant frame 
+    float invmax = inversesqrt( max( dot(T,T), dot(B,B) ) );
+    return mat3( T * invmax, B * invmax, n );
+}
+
+/*
+// This is for using Normal Bump Texture
+vec3 perturb_normal( vec3 N, vec3 V, vec2 texcoord ){
+    // assume N, the interpolated vertex normal and 
+    // V, the view vector (vertex to eye)
+    vec3 map = texture2D( mapBump, texcoord ).xyz;
+	
+	//#ifdef WITH_NORMALMAP_UNSIGNED
+		map = map * 255./127. - 128./127.;
+	//#endif
+	//#ifdef WITH_NORMALMAP_2CHANNEL
+	//	map.z = sqrt( 1. - dot( map.xy, map.xy ) );
+	//#endif
+	//#ifdef WITH_NORMALMAP_GREEN_UP
+	//	map.y = -map.y;
+	//#endif
+
+    mat3 TBN = cotangent_frame( N, -V, texcoord );
+    return normalize( TBN * map );
+}
+*/
+
+
+void main(void){
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	vec3 norm 		= normalize( frag_norm );	
+	vec3 dir_cam	= normalize( frag_cam - frag_wpos );
+	vec3 dir_light	= normalize( light_pos - frag_wpos );
+	
+	vec4 px_main	= texture( base_tex, frag_uv ); //float4 _MainHeighmap_var = tex2D(_MainHeighmap,(i.uv0, _MainHeighmap));
+
+	
+	mat3 tangent_m3 = cotangent_frame( norm, -dir_cam, frag_uv );
+	const float DEPTH		= 0.4; // 0 > 1
+	const float BASE_DEPTH	= 1.0; // 0 > 3 
+
+	/**/
+	vec4 hightmap_px = px_main; // no height map, so using main texture in its place
+
+	vec2 parallax_uv = 
+	(
+		vec3( frag_uv, 0.0 ) +
+		(
+			( tangent_m3 * dir_cam ).xyz
+			*
+			( hightmap_px.r - BASE_DEPTH )
+			* 
+			DEPTH	
+		)
+	).rg;
+
+	vec4 main_color	= texture( base_tex, parallax_uv );
+	out_color		= main_color;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	vec4 glit_hmap_px = texture( glitter_hmap_tex, frag_uv );
+
+	const float _GlitterDepth 		= 0.1; // 0 > 1
+	const float _GlitterBaseDepth	= 1.0; // 0 > 3 
+
+	vec2 glitter_uv = (
+		vec3( frag_uv, 0.0 ) + 
+		(
+			( tangent_m3 * dir_cam ).xyz
+			*
+			( glit_hmap_px.r - _GlitterBaseDepth )
+			*
+			_GlitterDepth
+		)
+	).rg;
+
+	vec3 glitter_norm_px	= texture( glitter_norm_tex, glitter_uv ).xyz * 255.0/127.0 - 128.0/127.0;
+	vec3 glitter_norm 		= normalize( tangent_m3 * glitter_norm_px );
+	vec3 glitter_mask_px	= texture( glitter_mask_tex, glitter_uv ).xyz;
+
+	/*
+	float _GlitterDensityFactor = -50;
+	float _GlitterFrequency = 2.6;
+	float _GlitterEdgesFalloff = 0.12;
+	vec4 _GlitterColor = vec4(1.0,1.0,1.0,1.0);
+	float node_8961 = (-1.0);
+
+	vec3 Glitter = (
+		_GlitterColor.rgb
+		*
+		(
+			saturate
+			(
+				(
+					_GlitterDensityFactor + 
+					( 
+						(
+							sin(
+								(
+									abs(
+										dot(
+											(
+												glitter_norm * tangent_m3
+											).xyz.rgb
+											,dir_cam
+										)
+									)
+									*_GlitterFrequency
+								)
+							)
+							- node_8961
+						)
+						*
+						(1.0 - _GlitterDensityFactor)
+					) 
+					/ 
+					(1.0 - node_8961)
+				)
+			) *
+			_GlitterMask_var.r * 
+			pow(
+				abs(
+					dot( norm,dir_cam )
+				),
+				_GlitterEdgesFalloff
+			)
+		)* 
+		_GlitterColor.a
+	);
+	*/
+
+	out_color		= glit_hmap_px;
+	out_color.rgb	= glitter_mask_px.rgb;
+
+	/*
+	_GlitterHighmap ("GlitterHighmap", 2D) = "white" {} // caustic.png
+	_GlitterNormals ("GlitterNormals", 2D) = "bump" {} randomRgb.png
+	_GlitterMask ("GlitterMask", 2D) = "white" {} //randomBW.png
+	
+	float4 _GlitterHighmap_var = tex2D(_GlitterHighmap,TRANSFORM_TEX(i.uv0, _GlitterHighmap));
+	float2 GlitterParallaxUVOffset = (float3(i.uv0,0.0)+(mul( tangentTransform, viewDirection ).xyz.rgb*(_GlitterHighmap_var.r-_GlitterBaseDepth)*_GlitterDepth)).rg;
+	float2 node_6329 = GlitterParallaxUVOffset;
+	
+	float3 _GlitterNormals_var = UnpackNormal(tex2D(_GlitterNormals,TRANSFORM_TEX(node_6329, _GlitterNormals)));
+	float node_8961 = (-1.0);
+	float2 node_9970 = GlitterParallaxUVOffset;
+	float4 _GlitterMask_var = tex2D(_GlitterMask,TRANSFORM_TEX(node_9970, _GlitterMask));
+	float3 Glitter = (_GlitterColor.rgb*(saturate((_GlitterDensityFactor + ( (sin((abs(dot(mul( _GlitterNormals_var.rgb, tangentTransform ).xyz.rgb,viewDirection))*_GlitterFrequency)) - node_8961) * (1.0 - _GlitterDensityFactor) ) / (1.0 - node_8961)))*_GlitterMask_var.r*pow(abs(dot(i.normalDir,viewDirection)),_GlitterEdgesFalloff))*_GlitterColor.a);
+	float3 emissive = (MainColor+Glitter);
+	*/
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//out_color = px_main;
+}`;
+
+/*
+float2 ParallaxOffset( half h, half height, half3 viewDir ){
+	h = h * height * height / 2.0
+	float3 v = normalize( viewDir );
+	v.z += 0.42;
+	return h * ( v.xy / v.z );
+}
+*/
+
+/*
+Shader "LadTy/Experiments/ParallaxGlitter" {
+    Properties {
+        _BaseDepth ("BaseDepth", Range(0, 3)) = 1
+        _Depth ("Depth", Range(0, 1)) = 0.4
+        _MainTex ("MainTex", 2D) = "black" {}  NoiseCloud
+        _MainHeighmap ("MainHeighmap", 2D) = "white" {} NoiseCloud
+        _GlitterBaseDepth ("GlitterBaseDepth", Range(0, 3)) = 1
+        _GlitterDepth ("GlitterDepth", Range(0, 1)) = 0.1
+        _GlitterDensityFactor ("GlitterDensityFactor", Range(-50, -2)) = -50
+        _GlitterFrequency ("GlitterFrequency", Range(0, 16)) = 2.6
+        _GlitterEdgesFalloff ("GlitterEdgesFalloff", Range(0, 5)) = 0.12
+        _GlitterColor ("GlitterColor", Color) = (1,1,1,1)
+        _GlitterNormals ("GlitterNormals", 2D) = "bump" {} randomRgb.png
+        _GlitterMask ("GlitterMask", 2D) = "white" {} //randomBW.png
+        _GlitterHighmap ("GlitterHighmap", 2D) = "white" {} // caustic.png
+    }
+    SubShader {
+        Tags {
+            "RenderType"="Opaque"
+        }
+        Pass {
+            Name "FORWARD"
+            Tags {
+                "LightMode"="ForwardBase"
+            }
+            Cull Off
+            
+            
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #define UNITY_PASS_FORWARDBASE
+            #include "UnityCG.cginc"
+            #pragma multi_compile_fwdbase_fullshadows
+            #pragma only_renderers d3d9 d3d11 glcore gles 
+            #pragma target 3.0
+            uniform sampler2D _GlitterNormals; uniform float4 _GlitterNormals_ST;
+            uniform float _GlitterEdgesFalloff;
+            uniform float4 _GlitterColor;
+            uniform float _GlitterFrequency;
+            uniform sampler2D _GlitterMask; uniform float4 _GlitterMask_ST;
+            uniform float _GlitterDensityFactor;
+            uniform sampler2D _MainTex; uniform float4 _MainTex_ST;
+            uniform sampler2D _MainHeighmap; uniform float4 _MainHeighmap_ST;
+            uniform float _Depth;
+            uniform float _BaseDepth;
+            uniform sampler2D _GlitterHighmap; uniform float4 _GlitterHighmap_ST;
+            uniform float _GlitterDepth;
+            uniform float _GlitterBaseDepth;
+            struct VertexInput {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                float4 tangent : TANGENT;
+                float2 texcoord0 : TEXCOORD0;
+                float4 vertexColor : COLOR;
+            };
+            struct VertexOutput {
+                float4 pos : SV_POSITION;
+                float2 uv0 : TEXCOORD0;
+                float4 posWorld : TEXCOORD1;
+                float3 normalDir : TEXCOORD2;
+                float3 tangentDir : TEXCOORD3;
+                float3 bitangentDir : TEXCOORD4;
+                float4 vertexColor : COLOR;
+            };
+            VertexOutput vert (VertexInput v) {
+                VertexOutput o = (VertexOutput)0;
+                o.uv0 = v.texcoord0;
+                o.vertexColor = v.vertexColor;
+                o.normalDir = UnityObjectToWorldNormal(v.normal);
+                o.tangentDir = normalize( mul( unity_ObjectToWorld, float4( v.tangent.xyz, 0.0 ) ).xyz );
+                o.bitangentDir = normalize(cross(o.normalDir, o.tangentDir) * v.tangent.w);
+                o.posWorld = mul(unity_ObjectToWorld, v.vertex);
+                o.pos = UnityObjectToClipPos( v.vertex );
+                return o;
+            }
+            float4 frag(VertexOutput i, float facing : VFACE) : COLOR {
+                float isFrontFace = ( facing >= 0 ? 1 : 0 );
+                float faceSign = ( facing >= 0 ? 1 : -1 );
+                i.normalDir = normalize(i.normalDir);
+                i.normalDir *= faceSign;
+                float3x3 tangentTransform = float3x3( i.tangentDir, i.bitangentDir, i.normalDir);
+                float3 viewDirection = normalize(_WorldSpaceCameraPos.xyz - i.posWorld.xyz);
+                float3 normalDirection = i.normalDir;
+////// Lighting:
+////// Emissive:
+                float4 _MainHeighmap_var = tex2D(_MainHeighmap,TRANSFORM_TEX(i.uv0, _MainHeighmap));
+                float2 node_6090 = (float3(i.uv0,0.0)+(mul( tangentTransform, viewDirection ).xyz.rgb*(_MainHeighmap_var.r-_BaseDepth)*_Depth)).rg;
+                float4 _MainTex_var = tex2D(_MainTex,TRANSFORM_TEX(node_6090, _MainTex));
+                float3 MainColor = (_MainTex_var.rgb*i.vertexColor.rgb);
+                float4 _GlitterHighmap_var = tex2D(_GlitterHighmap,TRANSFORM_TEX(i.uv0, _GlitterHighmap));
+                float2 GlitterParallaxUVOffset = (float3(i.uv0,0.0)+(mul( tangentTransform, viewDirection ).xyz.rgb*(_GlitterHighmap_var.r-_GlitterBaseDepth)*_GlitterDepth)).rg;
+                float2 node_6329 = GlitterParallaxUVOffset;
+                float3 _GlitterNormals_var = UnpackNormal(tex2D(_GlitterNormals,TRANSFORM_TEX(node_6329, _GlitterNormals)));
+                float node_8961 = (-1.0);
+                float2 node_9970 = GlitterParallaxUVOffset;
+                float4 _GlitterMask_var = tex2D(_GlitterMask,TRANSFORM_TEX(node_9970, _GlitterMask));
+                float3 Glitter = (_GlitterColor.rgb*(saturate((_GlitterDensityFactor + ( (sin((abs(dot(mul( _GlitterNormals_var.rgb, tangentTransform ).xyz.rgb,viewDirection))*_GlitterFrequency)) - node_8961) * (1.0 - _GlitterDensityFactor) ) / (1.0 - node_8961)))*_GlitterMask_var.r*pow(abs(dot(i.normalDir,viewDirection)),_GlitterEdgesFalloff))*_GlitterColor.a);
+                float3 emissive = (MainColor+Glitter);
+                float3 finalColor = emissive;
+                return fixed4(finalColor,1);
+            }
+            ENDCG
+        }
+        Pass {
+            Name "ShadowCaster"
+            Tags {
+                "LightMode"="ShadowCaster"
+            }
+            Offset 1, 1
+            Cull Off
+            
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #define UNITY_PASS_SHADOWCASTER
+            #include "UnityCG.cginc"
+            #include "Lighting.cginc"
+            #pragma fragmentoption ARB_precision_hint_fastest
+            #pragma multi_compile_shadowcaster
+            #pragma only_renderers d3d9 d3d11 glcore gles 
+            #pragma target 3.0
+            struct VertexInput {
+                float4 vertex : POSITION;
+            };
+            struct VertexOutput {
+                V2F_SHADOW_CASTER;
+            };
+            VertexOutput vert (VertexInput v) {
+                VertexOutput o = (VertexOutput)0;
+                o.pos = UnityObjectToClipPos( v.vertex );
+                TRANSFER_SHADOW_CASTER(o)
+                return o;
+            }
+            float4 frag(VertexOutput i, float facing : VFACE) : COLOR {
+                float isFrontFace = ( facing >= 0 ? 1 : 0 );
+                float faceSign = ( facing >= 0 ? 1 : -1 );
+                SHADOW_CASTER_FRAGMENT(i)
+            }
+            ENDCG
+        }
+    }
+    FallBack "Diffuse"
+    CustomEditor "ShaderForgeMaterialInspector"
+}
+*/
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

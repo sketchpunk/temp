@@ -9,6 +9,7 @@ import Shader 		from "./core/Shader.js";
 import Vao			from "./core/Vao.js";
 import Mesh			from "./core/Mesh.js";
 import Colour		from "./core/Colour.js";
+import Texture		from "./core/Texture.js";
 
 import Node,{ NodeSys, NodeCleanupSys } from "./ecs/Node.js";
 import Camera,{ CameraSys }				from "./ecs/Camera.js";
@@ -29,6 +30,7 @@ let App = {
     shader		: null,
     vao			: null,
 	mesh		: null,
+	texture		: null,
 	ecs 		: new Ecs(),
 	input		: null,
 	cam_com		: null,
@@ -108,8 +110,9 @@ class Launcher{
 		// CORE
         App.buffer		= new Buffer( App.gl );
         App.ubo 		= new Ubo( App.gl );
-        App.shader		= new Shader( App.gl );
-        App.vao			= new Vao( App.gl );
+		App.texture		= new Texture( App.gl );
+		App.vao			= new Vao( App.gl );
+		App.shader		= new Shader( App.gl, App.texture );
 		App.mesh		= new Mesh( App.gl, App.vao, App.buffer, App.shader );
 		App.input		= new InputTracker( App.gl.canvas );
 
@@ -163,9 +166,10 @@ class Launcher{
 		]);
 
 		let mat = App.shader.new_material( "GridFloor" );
-		let eid	= mods[1].default( "GridFloor", mat );
-		App.ecs.get_com( eid, "Node" ).rot_by( -90, "x" ).set_scl( 40 );
-		App.ecs.get_com( eid, "Draw" ).priority = 900;
+		let e	= mods[1].default( "GridFloor", mat );
+
+		e.node.rot_by( -90, "x" ).set_scl( 40 );
+		e.draw.priority = 900;
 		return true;
 	}
 	// #endregion ///////////////////////////////////////////////////////////////
