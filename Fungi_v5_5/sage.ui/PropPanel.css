@@ -90,7 +90,7 @@ prop-panel.Theme input[type=range]:focus::-webkit-slider-runnable-track{ backgro
 /* PROP NODE */
 prop-panel.Theme prop-node{ border-top: 1px solid #373737; align-items:center; }
 prop-panel.ThemeX prop-node:last-of-type{ border-bottom: 1px solid #373737; }
-prop-panel.Theme prop-node > label{ padding:4px 8px 4px 8px; flex:0 0 30%; }
+prop-panel.Theme prop-node > label{ padding:4px 8px 4px 8px; flex:0 0 30%; line-height:1.2em; }
 prop-panel.Theme prop-node > main{ padding:4px 6px 4px 0px; }
 
 /* PROP GROUP */

@@ -165,7 +165,7 @@ class PropGroup extends HTMLElement{
 	// Observed Attribute
 	static observedAttributes = [ "open" ];
 	attributeChangedCallback( name, old_value, new_value ){
-		console.log( "attributeChangedCallback : name - %s : old value - %s : new value - %s", name, old_value, new_value );
+		//console.log( "attributeChangedCallback : name - %s : old value - %s : new value - %s", name, old_value, new_value );
 		switch( name ){
 			case "open":
 				if( new_value == "true" )	this.open();

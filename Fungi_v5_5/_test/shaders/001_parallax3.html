@@ -55,6 +55,8 @@ async function init( x ){
 	let e	= Quad( "quad", $mat );
 	e.node.set_pos( 0, 0.6, 0 );
 
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	init_ui();
 	//App.render_by( 1, on_render );
 	return true;
 }
@@ -62,23 +64,35 @@ async function init( x ){
 //#####################################################
 
 function init_ui(){
+	elm_on_input( "bg_depth" );
+	elm_on_input( "bg_base_depth" );
+	elm_on_input( "glit_depth" );
+	elm_on_input( "glit_base_depth" );
+	elm_on_input( "glit_density_factor" );
+	elm_on_input( "glit_freq" );
+	elm_on_input( "glit_edges_falloff" );
+}
 
-
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, e.srcElement.value );
+	});
 }
 
 //#####################################################
 
 function init_shader(){
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"bg_color",		type:"rgb", value:"#ff00ff" },
-		{ name:"bg_tex",		type:"sampler2D", value:"null" },
-		{ name:"bg_depth",		type:"float", value:0.4 },
-		{ name:"bg_base_depth",		type:"float", value:1.0 },
+		{ name:"bg_color",				type:"rgb", value:"#ff00ff" },
+		{ name:"bg_tex",				type:"sampler2D", value:"null" },
+		{ name:"bg_depth",				type:"float", value:0.4 },
+		{ name:"bg_base_depth",			type:"float", value:1.0 },
 
-		{ name:"glit_color",	type:"rgb", value:"#ffffff" },
-		{ name:"glit_hmap_tex",	type:"sampler2D", value:"null" },
-		{ name:"glit_norm_tex",	type:"sampler2D", value:"null" },
-		{ name:"glit_mask_tex",	type:"sampler2D", value:"null" },
+		{ name:"glit_color",			type:"rgb", value:"#ffffff" },
+		{ name:"glit_hmap_tex",			type:"sampler2D", value:"null" },
+		{ name:"glit_norm_tex",			type:"sampler2D", value:"null" },
+		{ name:"glit_mask_tex",			type:"sampler2D", value:"null" },
 
 		{ name:"glit_depth",			type:"float", value:0.1 },
 		{ name:"glit_base_depth",		type:"float", value:1.0 },
@@ -455,12 +469,16 @@ Shader "LadTy/Experiments/ParallaxGlitter" {
 
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
 		<prop-group label="Background" open="true">
-			<prop-range label="Depth" value="0.4" min="0" max="1" step="0.1"></prop-range>
-			<prop-range label="Base Depth" value="1" min="0" max="3" step="0.1"></prop-range>
+			<prop-range label="Depth" id="bg_depth" value="0.4" min="0" max="1" step="0.1"></prop-range>
+			<prop-range label="Base Depth" id="bg_base_depth" value="1" min="0" max="3" step="0.1"></prop-range>
 		</prop-group>
 
 		<prop-group label="Glitter" open="true">
-			<input type="range" name="range" value="30" min="10" max="50" step="10" onChange="console.log('done',this.value);" onInput="console.log('imp',this.value);">	
+			<prop-range label="Depth" id="glit_depth" value="0.1" min="0" max="1" step="0.1"></prop-range>
+			<prop-range label="Base Depth" id="glit_base_depth" value="1" min="0" max="3" step="0.1"></prop-range>
+			<prop-range label="Density Factor" id="glit_density_factor" value="-50" min="-50" max="-2" step="1"></prop-range>
+			<prop-range label="Frequency" id="glit_freq" value="2.6" min="0" max="16" step="0.1"></prop-range>
+			<prop-range label="Edge Fallout" id="glit_edges_falloff" value="0.12" min="0" max="5" step="0.1"></prop-range>
 		</prop-group>
 		<!--
 		<input type="text" name="var_1" label="Text"/>

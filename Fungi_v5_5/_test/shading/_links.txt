@@ -1,6 +1,7 @@
 https://ciechanow.ski/lights-and-shadows/ INSANE VISUALS
 
 
+
 https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading
 https://www.scratchapixel.com/lessons/3d-basic-rendering/phong-shader-BRDF
 
@@ -71,3 +72,19 @@ https://alexanderameye.github.io/simple-toon.html
 https://twitter.com/csims314/status/1244391593127424002
 
 https://www.patreon.com/posts/quick-game-art-21398935  toon metal
+
+//--------------------------------------
+// Halftone CrossHatching
+https://forum.unity.com/threads/shader-forge-a-visual-node-based-shader-editor.222049/page-42#post-1774760
+http://weber.itn.liu.se/~stegu/webglshadertutorial/shadertutorial.html
+https://codepen.io/cmalven/pen/mMrEbV
+http://www.karlsims.com/rd.html
+https://www.ronja-tutorials.com/2019/03/02/halftone-shading.html
+https://www.clicktorelease.com/code/cross-hatching/
+https://www.shadertoy.com/view/Xs2XDD //Cross Hatch
+https://www.shadertoy.com/view/Xd2yWz
+https://www.geeks3d.com/20110219/shader-library-crosshatching-glsl-filter/
+http://kylehalladay.com/blog/tutorial/2017/02/21/Pencil-Sketch-Effect.html
+http://allaboutthreed.blogspot.com/2017/08/cross-hatch-shader-in-unity3d.html
+https://blendernpr.org/cross-hatch-shader/ (HAS TEXTURES)
+https://www.radicalforge.com/games/half-tone-shaders/ TRY TO REPLICATE THIS, UNITY DEMO IS AWESOME

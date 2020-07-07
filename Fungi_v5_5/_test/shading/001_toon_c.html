@@ -9,7 +9,7 @@ import XhrQueue	from "../../fungi/lib/XhrQueue.js";
 //#####################################################
 App
 	.init()
-	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.set_camera( 0, 5, 2, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
@@ -40,9 +40,10 @@ async function init( x ){
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Load Capsule
-	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
 	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
-	e.node.set_pos( 0, 0.5, -2 ); */
+	e.node.set_pos( 0.5, 0.5, 0 ); 
+	*/
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Show Light Location
@@ -56,7 +57,7 @@ async function init( x ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	on_render();
-	//App.render_by( 1, on_render );
+	App.render_by( 1, on_render );
 	return true;
 }
 
@@ -85,8 +86,8 @@ function init_shader(){
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
-// https://www.patreon.com/posts/21398935
 // https://www.pinterest.com/pin/295900638011647083/
+// https://www.patreon.com/posts/21398935
 
 const VERT_SRC = `#version 300 es
 	layout(location=0) in vec3 a_pos;
@@ -394,9 +395,9 @@ ENDCG
 */
 
 </script>
-<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
-</head><body><canvas id="pg_canvas"></canvas></body></html>
-
-<!--
-
--->
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<a href="https://www.patreon.com/posts/21398935" class="lnk">Ported From : https://www.patreon.com/posts/21398935</a>
+</body></html>
