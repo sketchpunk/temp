@@ -1,5 +1,6 @@
 <!DOCTYPE html><script type="module">
 import App, { Colour } from "../../fungi/App.js";
+import XhrQueue				from "../../fungi/lib/XhrQueue.js";
 //import Capsule	from "../../fungi/geo/Capsule.js";
 //import Points 	from "../../fungi/geo/Points.js";
 //import Motion 	from "../../fungi.test/Motion.js";
@@ -24,11 +25,23 @@ function on_render( dt, ss ){
 }
 
 async function init( ){
+	let img	= await XhrQueue.url( "../../files/textures/", 
+		"noise_clouds_01.png",
+		//"ft-sonyred6400hi.jpg",
+	).then();
+
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Shader */
 	init_shader();
 
-	let mat = App.shader.new_material( "TESTER" );
+	let tex0	= App.texture.new( "noise_cloud", img );
+	let mat		= App.shader.new_material( "TESTER", { 
+		heightmap_tex : tex0,
+	});
+
+	//let mat = App.shader.new_material( "TESTER" );
+	//
+
 	let e	= UVSphere( "Eye", mat, 18, 25, 0.5, true, true );
 
 	e.node.set_pos( 0, 0.6, 0 );
@@ -70,9 +83,12 @@ function init_shader(){
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
 		{ name:"eye_color", type:"rgb", value:"#ffffff" },
+		{ name:"iris_color_a", type:"rgb", value:"#fae125" },
+		{ name:"iris_color_b", type:"rgb", value:"#ff6f00" },
 		{ name:"specular_color", type:"rgb", value:"#CC7233" },
-		{ name:"edge_color", type:"rgb", value:"#0000ff" },
+		{ name:"edge_color", type:"rgb", value:"#000000" },
 		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+		{ name:"heightmap_tex",	type:"sampler2D", value:"null" },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -138,6 +154,11 @@ const FRAG_SRC = `#version 300 es
 		vec3 color;
 	} light;
 
+	uniform sampler2D heightmap_tex;
+
+	uniform vec3 iris_color_a;
+	uniform vec3 iris_color_b;
+
 	uniform vec3 eye_color;
 	uniform vec3 edge_color;
 
@@ -148,6 +169,24 @@ const FRAG_SRC = `#version 300 es
 	in vec3 frag_cam;
 	in vec3 frag_wpos;
 	in vec3 frag_lpos;
+
+	//-------------------------
+	// h = parallaxStrength, height from Height Map.
+	vec2 ParallaxOffset( float h, float height, vec3 viewDir ){
+		h 		= h * height * height / 2.0;
+		vec3 v	= normalize( viewDir );
+		v.z		+= 0.42;
+		return h * ( v.xy / v.z );
+	}
+
+	/**/
+	vec2 parallax_uv( float p_strength, float height, vec3 view_dir, vec2 uv ){
+		float a	= ((p_strength + 0.5) * height) - ( height / 2.0 );
+		vec3 v	= normalize( view_dir );
+		v.z		+= 0.42;
+		return a * ( v.xy / v.z ) + uv;
+	}
+	
 
 	//-------------------------
 
@@ -161,11 +200,13 @@ const FRAG_SRC = `#version 300 es
 		// New Fragment local position, shifting closer to origin on Z Axis
 		// This way frags that are z=0.5 will have a length of 0, moving closer
 		// to 1 when world space z == 0.
-        vec3 fpos = vec3( frag_lpos.xy, frag_lpos.z - 0.5 );
+		vec3 fpos = vec3( frag_lpos.xy, frag_lpos.z - 0.5 );
+		
+		float diff = clamp( dot( norm, dir_light ) * 0.5 + 0.5, 0.0, 1.0 ); 
         
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// IRIS
-		const float iris_radius = 0.3;
+		const float iris_radius = 0.35;
 		
 		float iris_len	= length( fpos ); // w->b
 		float iris_rng	= iris_len / iris_radius; // w->b
@@ -176,10 +217,10 @@ const FRAG_SRC = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// IRIS EDGE
-		const float edge_size = 0.1;
+		const float edge_size = 0.15;
 
 		float edge_grad			= 1.0 - clamp( iris_rng - edge_size, 0.0, 1.0 );
-		float edge_mask			= clamp( edge_grad * 20.0, 0.0, 1.0 );
+		float edge_mask			= clamp( edge_grad * 30.0, 0.0, 1.0 );
 		//float edge_ring_mask	= edge_mask * ( 1.0 - iris_mask );
 		float edge_ring_mask	= edge_mask - iris_mask;
 
@@ -187,30 +228,52 @@ const FRAG_SRC = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// PUPIL
-		const float pupil_radius = 0.11;
+		const float pupil_radius = 0.2;
 
-		float pupil_rng		= iris_len / pupil_radius;
+		float pupil_len		= length( fpos * vec3( 6.0, 1.0, 1.0 ) ); // w->b
+		float pupil_rng		= pupil_len / pupil_radius;
 		float pupil_grad	= 1.0 - clamp( pupil_rng, 0.0, 1.0 );
-		float pupil_mask	=  clamp( pupil_grad * 20.0, 0.0, 1.0 );
+		float pupil_mask	= clamp( pupil_grad * 20.0, 0.0, 1.0 );
 
 		//out_color.rgb = vec3( iris_mask );
 		//out_color.rgb = vec3( pupil_mask );
 		//out_color.rgb = vec3( iris_mask - pupil_mask );
 
+		vec2 uv			= vec2( -frag_lpos.x , -frag_lpos.y );
+		/*
+		//Radial UV
+		float u = sqrt(dot(uv, uv))*2.0; 
+		float v =  (atan(uv.x,uv.y)/-3.14) * 0.5 + 0.5; 
+		uv.x = u;
+		uv.y = v;
+		*/
+
+		vec2 iris_uv	= ( uv / 0.8 ) + 0.5;
+		vec4 hmap_px	= texture( heightmap_tex, iris_uv );	// Height Map
+		//vec2 para_uv	= ParallaxOffset( 1.1, hmap_px.r, dir_cam );
+		//vec4 iris_px	= texture( heightmap_tex, para_uv+iris_uv );	// Height Map
+
+		vec2 para_uv	= parallax_uv( 0.6, hmap_px.r, dir_cam, iris_uv );
+		vec4 iris_px	= texture( heightmap_tex, para_uv );	// Height Map
+
+		//vec2 parallax_uv( float p_strength, float height, vec3 view_dir, vec2 uv ){
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// COLORING
 		vec3 eye_c	= eye_color * ( 1.0 - edge_mask );
 
-		vec3 iris_c	= mix( vec3( 1.0, 0.0, 0.0), vec3( 0.0, 1.0, 0.0), iris_grad );
-		iris_c *= iris_mask - pupil_mask;
+		//vec3 iris_c	= mix( iris_color_a, iris_color_b, iris_grad ) ;
+		vec3 iris_c	= mix( iris_color_a, iris_color_b, hmap_px.r * 1.0 );
+		iris_c *= (iris_mask - pupil_mask) * ( iris_px.rgb * 1.7 ) ;
 
 		vec3 edge_c = edge_color * edge_ring_mask;
 
-		vec3 pupil_c = mix( vec3( .4, 0.0, 0.0), vec3( 0.0, 0.0, 0.0), pupil_grad );
+		vec3 pupil_c = mix( vec3( .25, 0.0, 0.0 ), vec3( 0.0, 0.0, 0.0), pupil_grad );
 		pupil_c *= pupil_mask;
 
 		out_color.rgb = eye_c + iris_c + pupil_c + edge_c;
+		
+		out_color.rgb *= floor( (diff * 10.0) / 1.0 ) / 10.0; //clamp( , 0.3, 1.0 );
 
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
