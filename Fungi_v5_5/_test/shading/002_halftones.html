@@ -1,0 +1,241 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( -20, 5, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 0.5, 0.5, 0 ); 
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 1.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"base_color", type:"rgb", value:"#CC6626" },
+		{ name:"specular_color", type:"rgb", value:"#CC7233" },
+		{ name:"hilite_color", type:"rgb", value:"#999999" },
+		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+// https://forum.unity.com/threads/shader-forge-a-visual-node-based-shader-editor.222049/page-42#post-1774760
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	out vec4 screen_pos;
+
+	
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Save Screen Ratio in Z to fix X Stretching.
+		// Only XYW is needed for screen space uv, so z can be replaced.
+		screen_pos		= gl_Position;
+		screen_pos.z	= global.screen_size.x / global.screen_size.y;
+	}`;
+
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec3 base_color;
+	uniform vec3 specular_color;
+	uniform vec3 hilite_color;
+	uniform vec3 rim_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	in vec4 screen_pos;
+
+	//-------------------------
+
+	float ramp_step( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
+		if( grad >= ramp_pos[ cnt-1 ] ) return ramp[ cnt-1 ]; // Greater ten final check.
+
+		for( int i=1; i < cnt; i++ ){
+			if( ramp_pos[ i ] > grad ) return ramp[ i-1 ];
+		}
+		return ramp[ 0 ];
+	}
+	float remap(float value, float inMin, float inMax, float outMin, float outMax) {
+		return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+	}
+
+	vec2 remap(vec2 value, vec2 inMin, vec2 inMax, vec2 outMin, vec2 outMax) {
+  		return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+	}
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 		= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light	= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		float brightness	= 1.1; // 0 > 2
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPECULAR COLOR
+		float spec			= dot( normalize( dir_cam + dir_light ), norm );
+		float spec_cutoff	= smoothstep( 0.78, 0.8, spec ); // step( spec, 0.8 );
+		vec3 c_spec			= specular_color * ( 1.0 - spec_cutoff ) * brightness;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BASE COLOR
+		vec3 c_base = base_color * spec_cutoff;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// HIGHLIGHT
+		float hlite			= clamp( dot( dir_light, norm ), 0.0, 1.0 );	// Unity saturate = clamp( x, 0, 1 );
+		float hlite_cutoff	= smoothstep( 0.940, 0.96, hlite ); 			// step( 0.95, hlite );
+		vec3 c_hlite		= hilite_color * hlite_cutoff;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// RIM LIGHT
+		float rim	= 1.0 - clamp( dot( dir_cam, norm  ), 0.1, 1.0 );
+		vec3 c_rim	= rim_color * pow( rim, 6.0 ); // 0 > 20.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		/* Blend Colors Together, Original Way */
+		out_color = vec4( c_base + c_spec + c_hlite + c_rim, 1.0 );
+
+		/* Experimenting with Lerping Colors 
+		out_color.rgb = mix( base_color, specular_color, 1.0-spec_cutoff );
+		out_color.rgb = mix( out_color.rgb, hilite_color, hlite_cutoff );
+		out_color.rgb = mix( out_color.rgb, vec3(1.0), pow( rim, 6.0 ) );
+		*/
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Half Tones
+		vec2 screen_uv	= (screen_pos.xy / screen_pos.w) * 0.5 + 0.5;
+		screen_uv.x *= screen_pos.z;
+
+		vec2 scl_uv = fract( screen_uv * 100.0 );
+		vec2 rm_uv	= scl_uv - 0.5; // remap(scl_uv, vec2(0.0), vec2(1.0), vec2(-0.5), vec2(0.5) );
+		float uv_len = length( rm_uv );
+
+		float p = remap( dot( dir_light, norm ) , 1.0, 0.0, -0.5, 2.0 );
+		float v = round( pow( uv_len, p ) );
+
+		out_color.rgb *= vec3( clamp( v, 0.4, 1.0 ) );
+		
+		//out_color.rg = screen_uv.rg;
+		//out_color.b = 0.0;
+
+	}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<a href="https://www.patreon.com/posts/21398935" class="lnk">Ported From : https://www.patreon.com/posts/21398935</a>
+</body></html>

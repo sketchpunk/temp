@@ -211,8 +211,7 @@ const vert_src = `#version 300 es
 		//frag_uv		= a_uv;
 		frag_wpos		= wpos.xyz;
 
-		frag_norm 		= quat_mul_vec3( qmul( a_cfg_rot, a_ins_rot ), a_norm );
-		// TODO, Maybe possible fix is to turn rotation to matrix, mul with viewmat then do the inverse-tranpose
+		frag_norm 		= quat_mul_vec3( qmul( a_ins_rot, a_cfg_rot ), a_norm );
 		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * frag_norm;
 		
 		//frag_cam_pos	= global.camera_pos;
@@ -236,7 +235,7 @@ const frag_src = `#version 300 es
 	in vec3 frag_wpos;
 
 	const vec3 color 				= vec3( 1.0, 1.0, 1.0 );
-	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
+	const vec3 lightPosition 		= vec3( 0.0, 5.0, 0.0 );
 	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
 	const float uAmbientStrength	= 0.5;
 	const float uDiffuseStrength	= 0.5;

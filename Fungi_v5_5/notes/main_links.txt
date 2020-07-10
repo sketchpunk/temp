@@ -6,3 +6,6 @@ https://pastebin.com/vUryskVt
 Really awesome, RAW WebGL stuff, Lots of amazing effects like bloom, etc.
 https://paveldogreat.github.io/WebGL-Fluid-Simulation/
 https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/master/script.js
+
+// Really cool pattern effects
+https://christophercarlson.com/portfolio/multi-scale-truchet-patterns/

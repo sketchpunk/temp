@@ -84,7 +84,14 @@ https://www.clicktorelease.com/code/cross-hatching/
 https://www.shadertoy.com/view/Xs2XDD //Cross Hatch
 https://www.shadertoy.com/view/Xd2yWz
 https://www.geeks3d.com/20110219/shader-library-crosshatching-glsl-filter/
-http://kylehalladay.com/blog/tutorial/2017/02/21/Pencil-Sketch-Effect.html
+http://kylehalladay.com/blog/tutorial/2017/02/21/Pencil-Sketch-Effect.html  Has all the code/Tex
 http://allaboutthreed.blogspot.com/2017/08/cross-hatch-shader-in-unity3d.html
 https://blendernpr.org/cross-hatch-shader/ (HAS TEXTURES)
+
 https://www.radicalforge.com/games/half-tone-shaders/ TRY TO REPLICATE THIS, UNITY DEMO IS AWESOME
+https://blendermarket.com/products/komikaze
+http://weber.itn.liu.se/~stegu/webglshadertutorial/shadertutorial.html
+https://greyscalegorilla.com/tutorials/spiderverse-shader-arnold-tutorial/
+https://www.artstation.com/artwork/YaJdKq
+
+https://ompuco.wordpress.com/2018/04/25/dithering-part-i/

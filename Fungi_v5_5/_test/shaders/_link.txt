@@ -1,3 +1,24 @@
 https://www.shadertoy.com/view/MslGWN  galaxy shader
 
 https://github.com/LadTy/ParallaxGlitter
+
+
+https://learnopengl.com/Advanced-Lighting/Parallax-Mapping
+vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
+{ 
+    // number of depth layers
+    const float numLayers = 10;
+    // calculate the size of each layer
+    float layerDepth = 1.0 / numLayers;
+    // depth of current layer
+    float currentLayerDepth = 0.0;
+    // the amount to shift the texture coordinates per layer (from vector P)
+    vec2 P = viewDir.xy * height_scale; 
+    vec2 deltaTexCoords = P / numLayers;
+} 
+
+https://www.habrador.com/tutorials/shaders/3-parallax-mapping/
+
+https://www.alanzucconi.com/2019/01/01/parallax-shader/
+
+https://halisavakis.com/my-take-on-shaders-parallax-effect-part-i/
