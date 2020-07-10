@@ -1,12 +1,12 @@
 <!DOCTYPE html><script type="module">
 import App, { Colour } from "../../fungi/App.js";
 import Ease  from "../../fungi/maths/Easing.js";
-import XhrQueue				from "../../fungi/lib/XhrQueue.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
 //import Capsule	from "../../fungi/geo/Capsule.js";
 //import Points 	from "../../fungi/geo/Points.js";
 //import Motion 	from "../../fungi.test/Motion.js";
 import UVSphere		from "../../fungi/geo/UVSphere.js";
-
+import PropPanel	from "../../sage.ui/PropPanel.js";
 
 //#####################################################
 App
@@ -16,7 +16,7 @@ App
 	.task( init )
 	.then();
 
-let gPnt, gMotion, gUbo;
+let gPnt, gMotion, gUbo, $mat;
 
 //#####################################################
 
@@ -25,92 +25,24 @@ function on_render( dt, ss ){
 	//App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
 }
 
-function triangle_wave( t ){
-	t -= Math.floor( t * 0.5 ) * 2;
-	t = Math.min( Math.max( t, 0 ), 2 );
-	return 1 - Math.abs( t - 1 );
-}
-
-function cheapParabola(x) {
-    return 1.0 - Math.abs(x * 2.0 - 1.0);
-}
-
-async function init( ){
-	let fn = ( t, band_cnt=7 )=>{
-		let i, num, cnt=0;
-		let last = band_cnt - 1;
-		let half = (band_cnt+1) / 2;
-		let step = Math.floor(t * last);
-		let step_num = 0;
-
-		for( i=0; i <= last; i++ ){
-			num = Math.ceil( triangle_wave( (i+1)/half ) * half );
-			cnt += num;
-			console.log( i, step, half, num );
-			if( i == step ) step_num = cnt;
-		}
-
-		console.log( cnt, step_num / cnt );
-	};
-
-	fn( 0.6, 5 );
-	//return false;
-	
-	
+async function init( ){	
 	let img	= await XhrQueue.url( "../../files/textures/", 
 		"noise_clouds_01.png",
 		//"ft-sonyred6400hi.jpg",
 	).then();
-
-	/*
-	for( let i=0; i <= 10; i++){
-
-		let a = i / 5;
-		let b = triangle_wave( a );
-		let c = b * 3;
-		console.log( 
-			i, 
-			Math.ceil( triangle_wave( i/5 ) * 3 ),
-
-			//"a", a,
-			//"b", b,
-			//"c", c,
-			//"d", Math.ceil( c ),
-		);
-		
-		//Triangle Wave : 0 1 2 3 2 1 0
-		Start Pattern : 0 1 2 3 4 5 6 7 8 9 10
-		Triangle Wave : 0 1 2 2 3 3 3 2 2 1 0
-					  : 0 0 1 1 3 3 3 6 6 8 10
-		Final Pattern : 0 1 3 3 6 6 6 8 8 9 10
-					
-		0 1 2 3 4
-		1 2 3 2 1 = 9
-		1 3 6 8 9
-
-		1/9, 3/9, 6/9, 8/9, 9/9
-
-		0 1 2 3 4 5 6
-		1 2 3 4 3 2 1 
-		1 3 6 10 13 15 16
-
-		
-	}*/
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Shader */
 	init_shader();
 
 	let tex0	= App.texture.new( "noise_cloud", img );
-	let mat		= App.shader.new_material( "TESTER", { 
+	$mat		= App.shader.new_material( "TESTER", { 
 		heightmap_tex : tex0,
 	});
 
 	//let mat = App.shader.new_material( "TESTER" );
-	//
 
-	let e	= UVSphere( "Eye", mat, 18, 25, 0.5, true, true );
-
+	let e = UVSphere( "Eye", $mat, 18, 25, 0.5, true, true );
 	e.node.set_pos( 0, 0.6, 0 );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -126,6 +58,7 @@ async function init( ){
 	*/
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	init_ui();
 	on_render();
 	//App.render_by( 1, on_render );
 	return true;
@@ -150,12 +83,18 @@ function init_shader(){
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
 		{ name:"eye_color", type:"rgb", value:"#ffffff" },
+		{ name:"eye_shadow", type:"rgb", value:"#6666CB" },
 		{ name:"iris_color_a", type:"rgb", value:"#fae125" },
 		{ name:"iris_color_b", type:"rgb", value:"#ff6f00" },
 		{ name:"specular_color", type:"rgb", value:"#CC7233" },
 		{ name:"edge_color", type:"rgb", value:"#000000" },
 		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
 		{ name:"heightmap_tex",	type:"sampler2D", value:"null" },
+		{ name:"iris_radius", type:"float", value:0.35 },
+		{ name:"edge_size", type:"float", value:0.15 },
+		{ name:"pupil_radius", type:"float", value:0.2 },
+		{ name:"pupil_scl", type:"vec2", value:new Float32Array( [6.0, 1.0] ) },
+		{ name:"iris_scl", type:"vec2", value:new Float32Array( [1.0, 1.0] ) },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -226,7 +165,14 @@ const FRAG_SRC = `#version 300 es
 	uniform vec3 iris_color_a;
 	uniform vec3 iris_color_b;
 
+	uniform float iris_radius; // 0.35;
+	uniform float edge_size; // 0.15;
+	uniform float pupil_radius; // 0.2;
+	uniform vec2 pupil_scl;	//vec2( 6.0, 1.0 );
+	uniform vec2 iris_scl;	//vec2( 1.0, 1.0 );
+
 	uniform vec3 eye_color;
+	uniform vec3 eye_shadow;
 	uniform vec3 edge_color;
 
 	uniform vec3 specular_color;
@@ -238,47 +184,35 @@ const FRAG_SRC = `#version 300 es
 	in vec3 frag_lpos;
 
 	//-------------------------
+	// Parallax Code Provided : Doesn't Seem to work Well
 	// h = parallaxStrength, height from Height Map.
-	vec2 ParallaxOffset( float h, float height, vec3 viewDir ){
+	vec2 parallax_offset( float h, float height, vec3 viewDir ){
 		h 		= h * height * height / 2.0;
 		vec3 v	= normalize( viewDir );
 		v.z		+= 0.42;
 		return h * ( v.xy / v.z );
 	}
 
-	/**/
+	// Parallax from Shader Nodes, Ported to Code : Works much better
 	vec2 parallax_uv( float p_strength, float height, vec3 view_dir, vec2 uv ){
 		float a	= ((p_strength + 0.5) * height) - ( height / 2.0 );
 		vec3 v	= normalize( view_dir );
 		v.z		+= 0.42;
 		return a * ( v.xy / v.z ) + uv;
 	}
-	
 
-	float triangle_wave( float t ){
-		t -= floor( t * 0.5 ) * 2.0;
-		t = min( max( t, 0.0 ), 2.0 );
-		return 1.0 - abs( t - 1.0 );
-	}
-
-
-	float band( float t, int band_cnt ){
-		int last		= band_cnt - 1; // How Far to loop
-		float num		= 0.0;	// Weight at a step
-		float cnt		= 0.0;	// Total Weight
-		float h			= float( band_cnt + 1 ) / 2.0;	// HALF of Band
-		int step		= int( floor( t * float(last) ) ); // Step at T
-		float step_num	= 0.0;	// What the Weight is at Step
-
-		for( int i=0; i <= last; i++ ){
-			num = ceil( triangle_wave( ( float(i)+1.0) / h ) * h );
-			cnt += num;
-			if( i == step ) step_num = cnt;
+	float step_ramp( float t, float step_val[5], float step_pos[5], float feather, int i ){
+		for( i; i > 0; i-- ){
+			if( (step_pos[ i ]-feather) <= t ){
+				return mix( 
+					step_val[ i-1 ], 
+					step_val[ i ],
+					smoothstep( step_pos[ i ] - feather, step_pos[ i ] + feather, t )
+				);
+			}
 		}
-
-		return step_num / cnt;
+		return step_val[ 0 ];
 	}
-
 
 	//-------------------------
 
@@ -292,27 +226,39 @@ const FRAG_SRC = `#version 300 es
 		// New Fragment local position, shifting closer to origin on Z Axis
 		// This way frags that are z=0.5 will have a length of 0, moving closer
 		// to 1 when world space z == 0.
-		vec3 fpos = vec3( frag_lpos.xy, frag_lpos.z - 0.5 );
-		
-		float diff = clamp( dot( norm, dir_light ) * 0.5 + 0.5, 0.0, 1.0 ); 
+
+		vec3 fpos			= vec3( frag_lpos.xy, frag_lpos.z - 0.5 );
+		vec2 uv				= vec2( -frag_lpos.x , -frag_lpos.y );
+		float lite_ratio	= clamp( dot( norm, dir_light ) * 0.5 + 0.5, 0.0, 1.0 ); 
         
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// IRIS
-		const float iris_radius = 0.35;
+		//const float iris_radius		= 0.35;
+		//const vec2	iris_scl		= vec2( 1.0, 1.0 );
 		
-		float iris_len	= length( fpos ); // w->b
+		float iris_len	= length( fpos * vec3( iris_scl, 1.0 ) ); // w->b
 		float iris_rng	= iris_len / iris_radius; // w->b
 		float iris_grad	= 1.0 - clamp( iris_rng, 0.0, 1.0 ); // b->w
 		float iris_mask	= clamp( iris_grad * 20.0, 0.0, 1.0 );
 
 		//out_color.rgb = vec3( iris_mask );
 
+		// Parallax Texture
+		vec2 iris_uv	= ( uv / 0.8 ) + 0.5;					// Center UV					
+		vec4 hmap_px	= texture( heightmap_tex, iris_uv );	// Height Map
+		
+		//vec2 para_uv	= parallax_offset( 2.0, hmap_px.r, dir_cam ) + iris_uv;	// From Code
+		vec2 para_uv	= parallax_uv( 0.6, hmap_px.r, dir_cam, iris_uv );		// From Shader Nodes
+		vec4 iris_px	= texture( heightmap_tex, para_uv );	// Reuse as Texure Map
+
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// IRIS EDGE
-		const float edge_size = 0.15;
+		//const float edge_size	= 0.15;
 
 		float edge_grad			= 1.0 - clamp( iris_rng - edge_size, 0.0, 1.0 );
 		float edge_mask			= clamp( edge_grad * 30.0, 0.0, 1.0 );
+
+		// Cut Hole in Edge Circle, Both does the same thing but second one simpler
 		//float edge_ring_mask	= edge_mask * ( 1.0 - iris_mask );
 		float edge_ring_mask	= edge_mask - iris_mask;
 
@@ -320,9 +266,11 @@ const FRAG_SRC = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// PUPIL
-		const float pupil_radius = 0.2;
 
-		float pupil_len		= length( fpos * vec3( 6.0, 1.0, 1.0 ) ); // w->b
+		//const float pupil_radius	= 0.2;
+		//const vec2	pupil_scl		= vec2( 6.0, 1.0 );
+
+		float pupil_len		= length( fpos * vec3( pupil_scl, 1.0 ) ); // w->b
 		float pupil_rng		= pupil_len / pupil_radius;
 		float pupil_grad	= 1.0 - clamp( pupil_rng, 0.0, 1.0 );
 		float pupil_mask	= clamp( pupil_grad * 20.0, 0.0, 1.0 );
@@ -331,158 +279,56 @@ const FRAG_SRC = `#version 300 es
 		//out_color.rgb = vec3( pupil_mask );
 		//out_color.rgb = vec3( iris_mask - pupil_mask );
 
-		vec2 uv			= vec2( -frag_lpos.x , -frag_lpos.y );
-		/*
-		//Radial UV
-		float u = sqrt(dot(uv, uv))*2.0; 
-		float v =  (atan(uv.x,uv.y)/-3.14) * 0.5 + 0.5; 
-		uv.x = u;
-		uv.y = v;
-		*/
-
-		vec2 iris_uv	= ( uv / 0.8 ) + 0.5;
-		vec4 hmap_px	= texture( heightmap_tex, iris_uv );	// Height Map
-		//vec2 para_uv	= ParallaxOffset( 1.1, hmap_px.r, dir_cam );
-		//vec4 iris_px	= texture( heightmap_tex, para_uv+iris_uv );	// Height Map
-
-		vec2 para_uv	= parallax_uv( 0.6, hmap_px.r, dir_cam, iris_uv );
-		vec4 iris_px	= texture( heightmap_tex, para_uv );	// Height Map
-
-		//vec2 parallax_uv( float p_strength, float height, vec3 view_dir, vec2 uv ){
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// COLORING
-		vec3 eye_c	= eye_color * ( 1.0 - edge_mask );
-
-		//vec3 iris_c	= mix( iris_color_a, iris_color_b, iris_grad ) ;
-		vec3 iris_c	= mix( iris_color_a, iris_color_b, hmap_px.r * 1.0 );
-		iris_c *= (iris_mask - pupil_mask) * ( iris_px.rgb * 1.7 ) ;
-
-		vec3 edge_c = edge_color * edge_ring_mask;
-
-		vec3 pupil_c = mix( vec3( .25, 0.0, 0.0 ), vec3( 0.0, 0.0, 0.0), pupil_grad );
-		pupil_c *= pupil_mask;
-
-		out_color.rgb = eye_c + iris_c + pupil_c + edge_c;
-		
-		//Diff = 0 > 1
-		//Shift it out of decimal
-		/*
-		for( let i=0; i <= 10; i++){
-		console.log( i, Math.round( triangle_wave( i/5 ) * 5 ) );
-		*/
-
-		//float tmp		= floor( diff * 10.0 );
-		//float tri		= round( triangle_wave( tmp / 5.0 ) * 5.0 );
-
-		/*
-		Start Pattern : 0 1 2 3 4 5 6 7 8 9 10
-		Triangle Wave : 0 1 2 2 3 3 3 2 2 1 0
-		Triangle Wave : 0 1 2 3 2 1 0
-		Final Pattern : 0 1 3 3 6 6 6 8 8 9 10
-		*/
-		//float b		= (floor( diff * 10.0 )) / 10.0;
-		//float b =  band( diff, 5 );
-		
-
-		float k		= diff;
-		float cnt	= 9.0;
-		float bands[9] = float[]( 0.0, 0.1,0.1, 0.5,0.5,0.5, 0.9,0.9, 1.0 );
-		//int i = int( (1.0 - abs(k * 2.0 - 1.0)) * cnt ); //Parabola
-		int i = int( k * cnt );	
-		out_color.rgb *= bands[ i ];
-
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Diffuse Eye Color
-		//float diff			= clamp( dot( norm, dir_light ) * 0.5 + 0.5, 0.0, 1.0 ); 
-		//vec3 eye_diffuse	= eye_color * ( 0.2 + diff );
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // IRIS
-        /*
-		const float iris_radius = 0.3;
-
-		// Distance the Frag is from Origin.
-		float iris_len	= length( fpos );
-
-		// Limit distance, norm + clamp
-		float iris_rng	= iris_len / iris_radius;
-		float iris_grad	= 1.0 - clamp( iris_rng, 0.0, 1.0 ); 
-		
-		// Use Gradient to mix the Iris Color
-		vec3 iris_color	= mix( vec3( 1.0, 0.0, 0.0), vec3( 0.0, 1.0, 0.0), iris_grad );
-
-		// Turn Gradient into a more solid circle
-		//float iris_mask	= clamp( iris_grad * 20.0, 0.0, 1.0 );	// Original Way
-		float iris_mask	= smoothstep( 0.00001, 0.01, iris_grad );	// For Pixel thinness use fwidth but overkill
-	
-		//out_color.rgb = iris_color * iris_mask; // Filter out Iris
-		//out_color.rgb = vec3( iris_mask );
-        //out_color.rgb = ( eye_color * (1.0 - iris_mask) ) + iris_color * iris_mask;
-        */
-		
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // IRIS EDGE
-        /*
-		const float edge_size = 0.1;
-
-		// Create a Larger Circle Circle
-		float edge_grad			= 1.0 - clamp( iris_rng - edge_size, 0.0, 1.0 );
-
-		// Make the Gradient a solid circle
-		//float edge_mask		= clamp( edge_grad * 20.0, 0.0, 1.0 );
-		float edge_mask			= smoothstep( 0.00001, 0.01, edge_grad );
-
-		// Using the Inverted Iris Mask, Cut a hole in the edge circle to make a ring.
-		float edge_ring_mask	= edge_mask * ( 1.0 - iris_mask );
-
-		//out_color.rgb = vec3( edge_ring_mask );
-		
-		out_color.rgb = 
-			( eye_color * ( 1.0 - edge_mask ) ) + 
-			edge_color * edge_ring_mask +
-			iris_color * iris_mask;
-		*/
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // PUPIL
-        /*
-		const float pupil_radius = 0.11;
-
-		// Limit distance, norm + clamp
-		float pupil_rng		= iris_len / pupil_radius;
-		float pupil_grad	= 1.0 - clamp( pupil_rng, 0.0, 1.0 );
-		float pupil_mask	= smoothstep( 0.00001, 0.01, pupil_grad );
-		// out_color.rgb = vec3( pupil_mask );
-		
-		// Use Gradient to mix the Iris Color
-		vec3 pupil_color = mix( vec3( .4, 0.0, 0.0), vec3( 0.0, 0.0, 0.0), pupil_grad );
-        //out_color.rgb =  pupil_color * pupil_mask;
-        */
-		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // SPECULAR
-        /*
-		// Original
-		//float specu = dot( norm, normalize( dir_light + dir_cam ) ) * 0.5;
-		//specu = step( 0.48, specu );
+		
+		/* Original
+		float specu = dot( norm, normalize( dir_light + dir_cam ) ) * 0.5;
+		specu = step( 0.48, specu );
+		*/
 
-		const float specular_strength	= 1.0;
+		/* Standard */
+		const float specular_strength	= 5.0;
 		const float shininess 			= 32.0;
 
 		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
 		vec3 dir_frag_cam	= normalize( frag_cam - frag_lpos );		// Dir from Fragment to Camera
         float specu 		= specular_strength * pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
 
-		out_color.rgb = 
-			( eye_diffuse * ( 1.0 - edge_mask ) ) +
-			edge_color * edge_ring_mask +
-			iris_color * ( iris_mask * ( 1.0 - pupil_mask )) +
-			pupil_color * pupil_mask +
-			vec3( 1.0 ) * specu;
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// COLORING
 
-		*/
+		// GRADIENT MAP
+		float step_val[5]	= float[]( 0.65, 0.70, 0.9, 0.0, 0.0 );
+		float step_pos[5]	= float[]( 0.0, 0.15, 0.4, 9.0, 9.0 );
+		float ramp			= step_ramp( lite_ratio, step_val, step_pos, 0.02, 2 );
+
+		//-------------------
+		// MAIN
+		vec3 eye_c	= mix( eye_shadow, eye_color, ramp ) * ( 1.0 - edge_mask );
+
+		//-------------------
+		// IRIS
+		//vec3 iris_c = mix( iris_color_a, iris_color_b, iris_grad ) ;	// Bled by Iris Gradient
+		vec3 iris_c	= mix( iris_color_a, iris_color_b, hmap_px.r * 1.1 ); // Blend color based on Hitemap
+		
+		// Cut pupil circle out of iris circle,  Then Apply Iris Texture
+		iris_c		*= (iris_mask - pupil_mask) * ( iris_px.rgb * 1.7 ) ;
+
+		//-------------------
+		// EDGE
+		vec3 edge_c = edge_color * edge_ring_mask;
+
+		//-------------------
+		// PUPIL
+		vec3 pupil_c = mix( vec3( .25, 0.0, 0.0 ), vec3( 0.0, 0.0, 0.0), pupil_grad );
+		pupil_c *= pupil_mask;
+
+		//-------------------
+		// MERGE
+		out_color.rgb = eye_c + 					// Eye color has ramp shading
+			( iris_c + pupil_c + edge_c ) * ramp + 	// Use ramp to Shadow the non-eye parts
+			vec3( 1.0 ) * specu;					// Throw in some specular glare
 	}`;
 
 
@@ -787,6 +633,59 @@ Shader "Custom/ProcEye Textured"
 }
 */
 
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "iris_radius" );
+	elm_on_input( "edge_size" );
+	elm_on_input( "pupil_radius" );
+	v2_on_input( "pupil_scl_x", "pupil_scl_y", "pupil_scl" );
+	v2_on_input( "iris_scl_x", "iris_scl_y", "iris_scl" );
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
+function v2_on_input( a, b, n ){
+	let aa = document.getElementById( a );
+	let bb = document.getElementById( b );
+
+	let fn = (e)=>{
+		let v = new Float32Array([
+			parseFloat( aa.value ),
+			parseFloat( bb.value ),
+		]);
+		update_mat( n, v );
+	}
+
+	aa.addEventListener( "input", fn );
+	bb.addEventListener( "input", fn );
+}
+
+
 </script>
-<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
-</head><body><canvas id="pg_canvas"></canvas></body></html>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style></head><body><canvas id="pg_canvas"></canvas>
+	<a href="https://www.patreon.com/posts/quick-game-art-29141036" class="lnk">Ported From MinionsArt : https://www.patreon.com/posts/quick-game-art-29141036</a>
+
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-group label="Iris" open="true">
+			<prop-range label="Radius" id="iris_radius" value="0.35" min="0.15" max=".5" step="0.01"></prop-range>
+			<prop-range label="Edge" id="edge_size" value="0.15" min="0.03" max=".5" step="0.01"></prop-range>
+
+			<prop-range label="XScale" id="iris_scl_x" value="1" min=".2" max="7" step="0.1"></prop-range>
+			<prop-range label="YScale" id="iris_scl_y" value="1" min=".2" max="7" step="0.1"></prop-range>
+		</prop-group>
+
+		<prop-group label="Pupil" open="true">
+			<prop-range label="Radius" id="pupil_radius" value="0.2" min="0.04" max=".4" step="0.01"></prop-range>
+			<prop-range label="XScale" id="pupil_scl_x" value="6" min=".5" max="7" step="0.1"></prop-range>
+			<prop-range label="YScale" id="pupil_scl_y" value="1" min=".5" max="7" step="0.1"></prop-range>
+		</prop-group>
+	</prop-panel>
+</body></html>
