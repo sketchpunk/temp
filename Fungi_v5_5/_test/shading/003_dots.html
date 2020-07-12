@@ -1,0 +1,302 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+//import Capsule		from "../../fungi/geo/Capsule.js";
+import Points 		from "../../fungi/geo/Points.js";
+//import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil 	from "../../fungi/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+
+import PropPanel	from "../../sage.ui/PropPanel.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( -20, 5, 1.8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo, $mat;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	$mat = App.shader.new_material( "TESTER" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	let e;
+	e = GltfUtil.get_entity( "Test", json, bin, $mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule 
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", $mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 1.0, 0.5, 0 ).set_scl( 0.6 )
+	*/
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 2.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	init_ui();
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"base_color", type:"rgb", value:"#CC6626" },
+		//{ name:"specular_color", type:"rgb", value:"#CC7233" },
+		//{ name:"hilite_color", type:"rgb", value:"#999999" },
+		//{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+		{ name:"uv_scale", type:"float", value:70.0 },
+		{ name:"dot_radius", type:"float", value:1.0 },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+	out vec4 screen_pos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Save Screen Ratio in Z to fix X Stretching.
+		// Only XYW is needed for screen space uv, so z can be replaced.
+		screen_pos		= gl_Position;
+		screen_pos.z	= global.screen_size.x / global.screen_size.y;
+	}`;
+
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	//uniform vec3 base_color;
+	//uniform vec3 specular_color;
+	//uniform vec3 hilite_color;
+	//uniform vec3 rim_color;
+
+	uniform float uv_scale;
+	uniform float dot_radius;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	in vec4 screen_pos;
+
+	//-------------------------
+
+	vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+	vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+	vec3 permute(vec3 x) { return mod289((( x * 34.0) + 1.0) * x); }
+	float snoise(vec2 v) {
+		const vec4 C = vec4(0.211324865405187,  // (3.0-sqrt(3.0))/6.0
+			0.366025403784439,  // 0.5*(sqrt(3.0)-1.0)
+			-0.577350269189626,  // -1.0 + 2.0 * C.x
+			0.024390243902439); // 1.0 / 41.0
+			
+		// First corner
+		vec2 i = floor(v + dot(v, C.yy) );
+		vec2 x0 = v - i + dot(i, C.xx);
+		// Other corners
+		vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+		vec4 x12 = x0.xyxy + C.xxzz;
+		x12.xy -= i1;
+		// Permutations
+		i = mod289(i); // Avoid truncation effects in permutation
+		vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 ))
+								+ i.x + vec3(0.0, i1.x, 1.0 ));
+		vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy),
+								dot(x12.zw,x12.zw)), 0.0);
+		m = m*m; m = m*m;
+		// Gradients
+		vec3 x = 2.0 * fract(p * C.www) - 1.0;
+		vec3 h = abs(x) - 0.5;
+		vec3 a0 = x - floor(x + 0.5);
+		// Normalise gradients implicitly by scaling m
+		m *= 1.792843 - 0.853735 * ( a0*a0 + h*h );
+		// Compute final noise value at P
+		vec3 g;
+		g.x = a0.x * x0.x + h.x * x0.y;
+		g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+		return 130.0 * dot(m, g);
+	}
+
+	/*
+	float ramp_step( float grad, float[4] ramp, float[4] ramp_pos, int cnt ){
+		if( grad >= ramp_pos[ cnt-1 ] ) return ramp[ cnt-1 ]; // Greater ten final check.
+
+		for( int i=1; i < cnt; i++ ){
+			if( ramp_pos[ i ] > grad ) return ramp[ i-1 ];
+		}
+		return ramp[ 0 ];
+    }
+    
+	float remap(float value, float inMin, float inMax, float outMin, float outMax) {
+		return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+	}
+
+	vec2 remap(vec2 value, vec2 inMin, vec2 inMax, vec2 outMin, vec2 outMax) {
+  		return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+	}
+	*/
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 		= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light	= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		float lite		= clamp( dot( dir_light, norm ), 0.0, 1.0 );// Light Ratio
+		
+        vec2 screen_uv	= (screen_pos.xy / screen_pos.w) * 0.5 + 0.5;	// Screen Space UV
+        screen_uv.x *= screen_pos.z;
+        
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Half Tones
+
+		// Divide Screen UV into a Grid,
+		// Then get the current position of the cell ( Fract )
+		// Then Remap the position of the cell from 0,1 to -1,1
+
+		vec2 rot_uv		= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;
+		vec2 cell_pos	= fract( uv_scale * rot_uv ) * 2.0 - 1.0;
+		
+		//---------------------------
+		float dist		= length( cell_pos ); // Distance from Cell Center
+		//float radius	= 0.9;
+		//float radius	= sqrt( 1.0 - lite );
+		//float radius	= 0.9 * ( 1.0 - lite ); 
+		float radius	= dot_radius * pow( 1.0 - lite, 2.0 );
+
+		//---------------------------
+		// Fractal noise - Optional for Splat like shape instead of circle
+		/*
+		float n =
+			0.1 	* snoise( rot_uv * 200.0 ) + 
+    		0.05	* snoise( rot_uv * 400.0 ) +
+			0.025	* snoise( rot_uv * 800.0 );
+		*/
+
+		//---------------------------
+		// Anti-Alias
+
+		// How long is a Pixel basicly
+		//float f_width = length( vec2( dFdx( dist ), dFdy( dist ) ) );
+		float f_width = fwidth( dist );
+		
+		// Transition between colors by the width of a pixel
+		float px_step = smoothstep( radius-f_width, radius+f_width, dist);
+		//float px_step = smoothstep( radius-f_width, radius+f_width, dist + n ); // with noise
+
+		//---------------------------
+		vec3 white		= vec3( 1.0 );
+		vec3 black		= vec3( 0.3 );
+
+		//vec3 fragcolor	= mix( black, white, step( radius, dist ) );
+		vec3 fragcolor	= mix( black, white, px_step );
+
+		out_color.rgb = fragcolor;
+	}`;
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "uv_scale" );
+	elm_on_input( "dot_radius" );
+	//elm_on_input( "pupil_radius" );
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<a href="http://weber.itn.liu.se/~stegu/webglshadertutorial/shadertutorial.html" class="lnk">Original From : http://weber.itn.liu.se/~stegu/webglshadertutorial/shadertutorial.html</a>
+
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="UV Scale" id="uv_scale" value="70" min="2" max="100" step="1"></prop-range>
+		<prop-range label="Dot Radius" id="dot_radius" value="1.0" min="0.01" max="1.0" step="0.01"></prop-range>
+	</prop-panel>
+
+</body></html>
