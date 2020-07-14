@@ -5,8 +5,12 @@ import Points 		from "../../fungi/geo/Points.js";
 //import Motion 	from "../../fungi.test/Motion.js";
 import GltfUtil 	from "../../fungi/lib/GltfUtil.js";
 import XhrQueue		from "../../fungi/lib/XhrQueue.js";
-
 import PropPanel	from "../../sage.ui/PropPanel.js";
+
+/*
+RESOURCES
+-- https://www.ronja-tutorials.com/2018/11/10/2d-sdf-basics.html
+*/
 
 //#####################################################
 App
@@ -65,7 +69,7 @@ async function init( x ){
 	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//init_ui();
+	init_ui();
 	on_render();
 	//App.render_by( 1, on_render );
 	return true;
@@ -89,8 +93,8 @@ function init_shader(){
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
 		{ name:"main_tex",	type:"sampler2D", value:"null" },
-		{ name:"pixel_scale", type:"float", value:0.8 },
-		{ name:"dith_power", type:"float", value:3.7 },
+		{ name:"uv_scale", type:"float", value:22 },
+		{ name:"depth_limit", type:"float", value:0.6 },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -149,8 +153,8 @@ const FRAG_SRC = `#version 300 es
 	} light;
 
 	uniform sampler2D main_tex;
-	uniform float pixel_scale;	// = 0.8;
-	uniform float dith_power;	// = 3.7;
+	uniform float uv_scale;	// = 22.0;
+	uniform float depth_limit;	// = 3.7;
 
 	in vec3 frag_norm;
 	in vec3 frag_cam_pos;
@@ -168,50 +172,43 @@ const FRAG_SRC = `#version 300 es
 		float lite		= clamp( dot( dir_light, norm ), 0.0, 1.0 );// Light Ratio		
         
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// 
-		float uv_scale = 27.0;
-		//vec2 uv = vec2( fract( screen_uv * uv_scale ) );
 		
-		//vec2 rot_uv		=  screen_uv;
+		// Rotate Global Texture by 45 Degrees
 		vec2 rot_uv		= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;
+
+		// Scale UV then Remap Value
 		vec2 cell_pos	= fract( uv_scale * rot_uv ) * 2.0 - 1.0; // 0,1 to -1,1
+		
+		// Get the Texture pixel from Rotated/Scaled UV.
 		float px 		= texture( main_tex, cell_pos ).r;
 
-		//out_color.rgb	= vec3( px );
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Cutoff of the SDF Height map, 0.0001, use original texture unchanged
+		// 0.9999, smallest possible version of the shape.
 
-		/*
-		float depth		= 0.1;
-		float feather	= 0.3;
-		px = smoothstep( depth, depth + feather, px );
-		*/
-
-		//float depth	= 0.9;
+		//float depth	= 1.0001;
 		//float depth 	= 0.1 + clamp( lite / 0.7, 0.0, 1.0 );
-		float depth 	= clamp( lite, 0.0, 1.0 );
-		float dist		= length( cell_pos );
+		//float depth 	= clamp( lite, 0.0, 1.0 );
+		float depth 	= lite / depth_limit;			
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// for anti-aliasing, use cell length with dxdy
+		float dist		= length( cell_pos );	
 		float f_width	= fwidth( dist );
-		px = 1.0 - smoothstep(
-			clamp( depth - f_width, 0.0, 1.0 ), 
-			clamp( depth + f_width, 0.0, 1.0 ),
-			px
-		);
-		/**/
-
-		//float tmp = smoothstep( 0.3, 0.1, lite );
-		//float tmp2 = smoothstep( 0.1, 0.3, lite );
-		//px = tmp - px + ( 1.0-tmp - px );
-
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step the SDF Gradient, which resizes the shape
+		//px = 1.0 - step( depth, px );
+		px = 1.0 - smoothstep( depth - f_width, depth + f_width, px );
 
         out_color.rgb = vec3( px );
 	}`;
 
-// https://www.ronja-tutorials.com/2018/11/10/2d-sdf-basics.html
-
 //#####################################################
 
 function init_ui(){
-	elm_on_input( "pixel_scale" );
-	elm_on_input( "dith_power" );
+	elm_on_input( "uv_scale" );
+	elm_on_input( "depth_limit" );
 }
 
 function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
@@ -225,11 +222,10 @@ function elm_on_input( name ){
 .lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
 </style>
 </head><body><canvas id="pg_canvas"></canvas>
-	<a href="https://ompuco.wordpress.com/2018/04/25/dithering-part-i/" class="lnk">Original From : https://ompuco.wordpress.com/2018/04/25/dithering-part-i/</a>
 
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
-		<prop-range label="Pixel Scale" id="pixel_scale" value="0.8" min="0.1" max="2" step="0.1"></prop-range>
-		<prop-range label="Dith Pow" id="dith_power" value="3.7" min="1.0" max="13.0" step="0.1"></prop-range>
+		<prop-range label="UV Scale" id="uv_scale" value="22" min="2" max="60" step="1"></prop-range>
+		<prop-range label="Depth Limit" id="depth_limit" value="0.6" min="0.0" max="1.1" step="0.01"></prop-range>
 	</prop-panel>
 
 </body></html>

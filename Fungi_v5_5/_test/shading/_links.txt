@@ -66,12 +66,23 @@ https://www.clicktorelease.com/code/spherical-normal-mapping/#
 
 https://www.clicktorelease.com/code/cross-hatching/
 
+https://minionsart.github.io/tutorials
+https://www.patreon.com/posts/11304399  Toon Dissolve
+https://www.patreon.com/posts/12135718 Toon Ice
+https://www.patreon.com/posts/13059579 Toon Specular
+https://www.patreon.com/posts/15705239 Direction Rim
 
 // TOON SHADING
 https://alexanderameye.github.io/simple-toon.html
 https://twitter.com/csims314/status/1244391593127424002
 
 https://www.patreon.com/posts/quick-game-art-21398935  toon metal
+
+
+https://www.ronja-tutorials.com/2018/10/27/improved-toon.html  // Has Various things and lots of Comments
+https://www.ronja-tutorials.com/2018/05/26/fresnel.html
+https://roystan.net/articles/toon-shader.html has directional Rim
+
 
 //--------------------------------------
 // Halftone CrossHatching

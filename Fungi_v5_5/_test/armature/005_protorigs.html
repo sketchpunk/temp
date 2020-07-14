@@ -44,6 +44,7 @@ async function init(){
 	e.draw.items.push( prig.get_draw_item() );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/*
     arm.get_node( "RightUpLeg" ).rot_by( 65, "x" );
 	arm.get_node( "RightLeg" ).rot_by( -90, "x" );
 	arm.get_node( "LeftUpLeg" ).rot_by( -10, "x" );
@@ -58,6 +59,16 @@ async function init(){
 	arm.get_node( "RightForeArm" ).rot_by( 40, "x" );
 	arm.get_node( "RightFoot" ).rot_by( -40, "x" );
 	arm.get_node( "LeftFoot" ).rot_by( -20, "x" );
+	*/
+    arm.get_node( "RightUpLeg" ).rot_by( 65, "x" );
+	arm.get_node( "RightLeg" ).rot_by( -90, "x" );
+	arm.get_node( "LeftUpLeg" ).rot_by( -10, "x" );
+	arm.get_node( "LeftLeg" ).rot_by( -20, "x" );
+    arm.get_node( "Spine" ).rot_by( -40, "x" );
+    arm.get_node( "Spine1" ).rot_by( -40, "x" );
+	arm.get_node( "Neck" ).rot_by( 40, "x" );
+	arm.get_node( "Head" ).rot_by( 30, "x" );
+	arm.get_node( "Hips" ).rot_by( -60, "x" );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//App.render_by( 1, on_render );

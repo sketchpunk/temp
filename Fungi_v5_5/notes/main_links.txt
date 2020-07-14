@@ -9,3 +9,22 @@ https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/master/script.js
 
 // Really cool pattern effects
 https://christophercarlson.com/portfolio/multi-scale-truchet-patterns/
+
+//---------------------------------------
+// Planet Generator. Amazing Math Samples of how to create crator, like SmoothMin and SmoothMax
+
+https://www.youtube.com/watch?v=lctXaT9pxA0
+
+https://medium.com/@bgolus/normal-mapping-for-a-triplanar-shader-10bf39dca05a
+
+https://www.iquilezles.org/www/articles/smin/smin.htm
+float SmoothMin( float a, float b, float k ){
+	float h = Clamp01( (b-a+k) / (2*k) );
+	return a * h + b * (1-h) - k * h * (1-h);
+}
+
+// Creates a controllable curve, X = T, bias = 0->1
+float BiasFunction( float x, float bias ){
+	float k = Pow( 1 - bias, 3 );
+	return ( x * k ) / ( x * k - x + 1 );
+}
