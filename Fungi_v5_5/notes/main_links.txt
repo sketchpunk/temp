@@ -28,3 +28,10 @@ float BiasFunction( float x, float bias ){
 	float k = Pow( 1 - bias, 3 );
 	return ( x * k ) / ( x * k - x + 1 );
 }
+
+
+//---------------------------------------
+Alternatives to Marching Cubes
+https://swiftcoder.wordpress.com/planets/isosurface-extraction/
+https://wordsandbuttons.online/interactive_explanation_of_marching_cubes_and_dual_contouring.html
+http://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
