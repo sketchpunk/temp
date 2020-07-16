@@ -1,0 +1,254 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+//import Capsule		from "../../fungi/geo/Capsule.js";
+import Points 		from "../../fungi/geo/Points.js";
+//import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil 	from "../../fungi/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+//import PropPanel	from "../../sage.ui/PropPanel.js";
+
+/*
+RESOURCES
+-- https://blenderartists.org/t/black-and-white-comic-book-materials-cycles/645066
+*/
+
+//#####################################################
+App
+	.init()
+	.set_camera( -20, 5, 1.8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo, $mat;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin, img ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    $mat = App.shader.new_material( "TESTER" );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let e;
+	e = GltfUtil.get_entity( "Test", json, bin, $mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule 
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", $mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 1.0, 0.5, 0 ).set_scl( 0.6 )
+	*/
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 2.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//init_ui();
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"main_tex",	type:"sampler2D", value:"null" },
+		//{ name:"uv_scale", type:"float", value:22 },
+		//{ name:"depth_limit", type:"float", value:0.6 },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+	out vec2 screen_uv;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		screen_uv.xy	= gl_Position.xy / gl_Position.w;
+		screen_uv.x 	*= global.screen_size.x / global.screen_size.y; // Fix X Stretch
+		screen_uv.xy	= screen_uv.xy * 0.5 + 0.5;
+	}`;
+//https://blenderartists.org/t/black-and-white-comic-book-materials-cycles/645066
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	//uniform sampler2D main_tex;
+	//uniform float uv_scale;	// = 22.0;
+	//uniform float depth_limit;	// = 3.7;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	in vec2 screen_uv;
+
+	//-------------------------
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 		= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light	= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		float lite		= clamp( dot( dir_light, norm ), 0.0, 1.0 );// Light Ratio		
+        
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		const float uv_scale = 100.0;
+		
+		// Rotate Global Texture by 45 Degrees
+		//vec2 rot_uv		= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;
+		//vec2 rot_uv		= mat2( -0.707, 0.707, -0.707, -0.707 ) * screen_uv;
+		vec2 rot_uv		= screen_uv;
+
+		// Scale UV then Remap Value
+		vec2 cell_pos	= fract( uv_scale * rot_uv ) * 2.0 - 1.0; // 0,1 to -1,1
+		//vec2 cell_pos	= fract( uv_scale * rot_uv );
+		
+		float cell_y	= 1.0 - abs( cell_pos.y );
+		//float f_width	= fwidth( cell_pos.y );
+
+		//float depth		= 1.0 - lite / 0.5;
+		float depth = 1.0 - lite / 0.55;
+
+		float f_width = fwidth( cell_y );
+
+		
+		//out_color.rgb = vec3( cell_y );
+		out_color.rgb = vec3( step( depth, cell_y )  );
+		
+
+		//out_color.rgb = vec3( step( 1.0 - abs( cell_pos.y ), 0.05 ) );
+
+		float tmp = 1.0 - smoothstep( depth + f_width, depth - f_width, cell_y );
+		
+		//out_color.rgb = vec3( tmp * smoothstep( 0.05, 0.10, lite ) );
+		out_color.rgb = vec3( tmp * smoothstep( 0.2, 0.5, lite ) );
+		
+
+
+		/*
+		// Get the Texture pixel from Rotated/Scaled UV.
+		float px 		= texture( main_tex, cell_pos ).r;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Cutoff of the SDF Height map, 0.0001, use original texture unchanged
+		// 0.9999, smallest possible version of the shape.
+
+		//float depth	= 1.0001;
+		//float depth 	= 0.1 + clamp( lite / 0.7, 0.0, 1.0 );
+		//float depth 	= clamp( lite, 0.0, 1.0 );
+		float depth 	= lite / depth_limit;			
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// for anti-aliasing, use cell length with dxdy
+		float dist		= length( cell_pos );	
+		float f_width	= fwidth( dist );
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Step the SDF Gradient, which resizes the shape
+		//px = 1.0 - step( depth, px );
+		px = 1.0 - smoothstep( depth - f_width, depth + f_width, px );
+
+		out_color.rgb = vec3( px );
+		*/
+	}`;
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "uv_scale" );
+	elm_on_input( "depth_limit" );
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<!--
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="UV Scale" id="uv_scale" value="22" min="2" max="60" step="1"></prop-range>
+		<prop-range label="Depth Limit" id="depth_limit" value="0.6" min="0.0" max="1.1" step="0.01"></prop-range>
+	</prop-panel>
+	-->
+</body></html>
