@@ -5,11 +5,12 @@ import Points 		from "../../fungi/geo/Points.js";
 //import Motion 	from "../../fungi.test/Motion.js";
 import GltfUtil 	from "../../fungi/lib/GltfUtil.js";
 import XhrQueue		from "../../fungi/lib/XhrQueue.js";
-//import PropPanel	from "../../sage.ui/PropPanel.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
 
 /*
 RESOURCES
 -- https://blenderartists.org/t/black-and-white-comic-book-materials-cycles/645066
+
 */
 
 //#####################################################
@@ -64,7 +65,7 @@ async function init( x ){
 	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//init_ui();
+	init_ui();
 	on_render();
 	//App.render_by( 1, on_render );
 	return true;
@@ -87,9 +88,10 @@ function init_shader(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		//{ name:"main_tex",	type:"sampler2D", value:"null" },
-		//{ name:"uv_scale", type:"float", value:22 },
-		//{ name:"depth_limit", type:"float", value:0.6 },
+		{ name:"uv_scale", type:"float", value:100 },
+		{ name:"depth_limit", type:"float", value:0.55 },
+		{ name:"mask_min", type:"float", value:0.2 },
+		{ name:"mask_max", type:"float", value:0.5 },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -134,7 +136,7 @@ const VERT_SRC = `#version 300 es
 		screen_uv.x 	*= global.screen_size.x / global.screen_size.y; // Fix X Stretch
 		screen_uv.xy	= screen_uv.xy * 0.5 + 0.5;
 	}`;
-//https://blenderartists.org/t/black-and-white-comic-book-materials-cycles/645066
+
 const FRAG_SRC = `#version 300 es
 	precision mediump float;
 	
@@ -148,8 +150,10 @@ const FRAG_SRC = `#version 300 es
 	} light;
 
 	//uniform sampler2D main_tex;
-	//uniform float uv_scale;	// = 22.0;
-	//uniform float depth_limit;	// = 3.7;
+	uniform float uv_scale;	// = 100.0;
+	uniform float depth_limit;	// = 0.55;
+	uniform float mask_min; // 0.2
+	uniform float mask_max; // 0.5 
 
 	in vec3 frag_norm;
 	in vec3 frag_cam_pos;
@@ -167,64 +171,16 @@ const FRAG_SRC = `#version 300 es
 		float lite		= clamp( dot( dir_light, norm ), 0.0, 1.0 );// Light Ratio		
         
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		const float uv_scale = 100.0;
-		
-		// Rotate Global Texture by 45 Degrees
-		//vec2 rot_uv		= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;
-		//vec2 rot_uv		= mat2( -0.707, 0.707, -0.707, -0.707 ) * screen_uv;
-		vec2 rot_uv		= screen_uv;
-
 		// Scale UV then Remap Value
-		vec2 cell_pos	= fract( uv_scale * rot_uv ) * 2.0 - 1.0; // 0,1 to -1,1
-		//vec2 cell_pos	= fract( uv_scale * rot_uv );
-		
-		float cell_y	= 1.0 - abs( cell_pos.y );
-		//float f_width	= fwidth( cell_pos.y );
+		vec2 cell_pos	= fract( uv_scale * screen_uv ) * 2.0 - 1.0; // 0,1 to -1,1
 
-		//float depth		= 1.0 - lite / 0.5;
-		float depth = 1.0 - lite / 0.55;
+		float cell_y	= 1.0 - abs( cell_pos.y );		// Black -> White -> Black Gradient
+		float depth		= 1.0 - lite / depth_limit;		// Use light to control Gradient Depth
+		float f_width	= fwidth( cell_y );				// Anti-Alias the Lines
 
-		float f_width = fwidth( cell_y );
+		float mask		= 1.0 - smoothstep( depth + f_width, depth - f_width, cell_y );
 
-		
-		//out_color.rgb = vec3( cell_y );
-		out_color.rgb = vec3( step( depth, cell_y )  );
-		
-
-		//out_color.rgb = vec3( step( 1.0 - abs( cell_pos.y ), 0.05 ) );
-
-		float tmp = 1.0 - smoothstep( depth + f_width, depth - f_width, cell_y );
-		
-		//out_color.rgb = vec3( tmp * smoothstep( 0.05, 0.10, lite ) );
-		out_color.rgb = vec3( tmp * smoothstep( 0.2, 0.5, lite ) );
-		
-
-
-		/*
-		// Get the Texture pixel from Rotated/Scaled UV.
-		float px 		= texture( main_tex, cell_pos ).r;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Cutoff of the SDF Height map, 0.0001, use original texture unchanged
-		// 0.9999, smallest possible version of the shape.
-
-		//float depth	= 1.0001;
-		//float depth 	= 0.1 + clamp( lite / 0.7, 0.0, 1.0 );
-		//float depth 	= clamp( lite, 0.0, 1.0 );
-		float depth 	= lite / depth_limit;			
-		
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// for anti-aliasing, use cell length with dxdy
-		float dist		= length( cell_pos );	
-		float f_width	= fwidth( dist );
-	
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Step the SDF Gradient, which resizes the shape
-		//px = 1.0 - step( depth, px );
-		px = 1.0 - smoothstep( depth - f_width, depth + f_width, px );
-
-		out_color.rgb = vec3( px );
-		*/
+		out_color.rgb	= vec3( mask * smoothstep( mask_min, mask_max, lite ) ); 
 	}`;
 
 //#####################################################
@@ -232,6 +188,8 @@ const FRAG_SRC = `#version 300 es
 function init_ui(){
 	elm_on_input( "uv_scale" );
 	elm_on_input( "depth_limit" );
+	elm_on_input( "mask_min" );
+	elm_on_input( "mask_max" );
 }
 
 function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
@@ -245,10 +203,12 @@ function elm_on_input( name ){
 .lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
 </style>
 </head><body><canvas id="pg_canvas"></canvas>
-	<!--
+	<!---->
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
-		<prop-range label="UV Scale" id="uv_scale" value="22" min="2" max="60" step="1"></prop-range>
-		<prop-range label="Depth Limit" id="depth_limit" value="0.6" min="0.0" max="1.1" step="0.01"></prop-range>
+		<prop-range label="UV Scale" id="uv_scale" value="100" min="2" max="110" step="1"></prop-range>
+		<prop-range label="Depth Limit" id="depth_limit" value="0.55" min="0.0" max="1.0" step="0.01"></prop-range>
+		<prop-range label="Mask Min" id="mask_min" value="0.2" min="0.0" max="1.0" step="0.01"></prop-range>
+		<prop-range label="Mask Max" id="mask_max" value="0.5" min="0.0" max="1.0" step="0.01"></prop-range>
 	</prop-panel>
-	-->
+	
 </body></html>

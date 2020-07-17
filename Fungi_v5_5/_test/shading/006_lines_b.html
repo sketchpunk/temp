@@ -1,0 +1,340 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+//import Capsule		from "../../fungi/geo/Capsule.js";
+import Points 		from "../../fungi/geo/Points.js";
+//import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil 	from "../../fungi/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+//import PropPanel	from "../../sage.ui/PropPanel.js";
+
+/*
+RESOURCES
+-- https://blenderartists.org/t/black-and-white-comic-book-materials-cycles/645066
+*/
+
+//#####################################################
+App
+	.init()
+	.set_camera( -20, 5, 1.8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo, $mat;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin, img ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    $mat = App.shader.new_material( "TESTER" );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let e;
+	e = GltfUtil.get_entity( "Test", json, bin, $mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule 
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", $mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 1.0, 0.5, 0 ).set_scl( 0.6 )
+	*/
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 2.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//init_ui();
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"main_tex",	type:"sampler2D", value:"null" },
+		//{ name:"uv_scale", type:"float", value:22 },
+		//{ name:"depth_limit", type:"float", value:0.6 },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+	out vec2 screen_uv;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		screen_uv.xy	= gl_Position.xy / gl_Position.w;
+		screen_uv.x 	*= global.screen_size.x / global.screen_size.y; // Fix X Stretch
+		screen_uv.xy	= screen_uv.xy * 0.5 + 0.5;
+	}`;
+
+
+//https://blenderartists.org/t/black-and-white-comic-book-materials-cycles/645066
+
+// https://andreashackel.de/tech-art/stripes-shader-1/ FOLLOW, NICE WAYS YO MAKE STRIPES IN ANY DIRECTIOn, PLUS WARP
+
+// https://github.com/cacheflowe/haxademic/blob/master/data/haxademic/shaders/textures/cacheflowe-halftone-lines.glsl
+
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	//uniform sampler2D main_tex;
+	//uniform float uv_scale;	// = 22.0;
+	//uniform float depth_limit;	// = 3.7;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+	in vec2 screen_uv;
+
+	//-------------------------
+
+
+	const float PI=3.14159265358979323846;
+
+	float round( float x ) {
+		float val = mod( x, x );
+		return ( val >= 0.5 )? ceil( x ) : floor( x );
+	}
+
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 		= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light	= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_cam	= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		float lite		= clamp( dot( dir_light, norm ), 0.0, 1.0 );// Light Ratio		
+        
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		const float uv_scale = 100.0;
+		
+		// Rotate Global Texture by 45 Degrees
+		//vec2 rot_uv		= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;
+		vec2 rot_uv		= mat2( -0.707, 0.707, -0.707, -0.707 ) * screen_uv;
+		//vec2 rot_uv		= screen_uv;
+
+		/* draw vertical lines
+		float stripeVal = floor( mod(gl_FragCoord.x, 7.0) ) == 0.0  ? 1.0 : 0.0;
+		out_color = vec4( stripeVal );
+		*/
+
+		/* draw horizontal lines 
+		float stripeVal = floor( mod( gl_FragCoord.y, 7.0 ) ) == 0.0  ? 1.0 : 0.0;
+		out_color = vec4( stripeVal );
+		*/
+
+		/* draw large round checkerboard  REALLY NICE PATTERN
+		float scl = 0.1;
+		float stripeVal = cos( gl_FragCoord.x * scl ) + sin( gl_FragCoord.y * scl );
+		//out_color = vec4( smoothstep( 0.3, 0.4, stripeVal ) ) * 0.5;
+		out_color = vec4( stripeVal ) * 1.0;
+		*/
+
+		// perfectly diagonal
+		float t = PI / 4.0;	
+		float w = 1.5; // width (larger value = smaller width)
+		float stripeVal = cos( ( gl_FragCoord.x * cos( t ) * w ) + ( gl_FragCoord.y * sin( t ) * w ) ); 
+		stripeVal = abs( clamp( round( stripeVal ), -1.0, 0.0 ) );   // clamping gets rid of the random white lines	
+	
+		vec4 col = vec4( stripeVal ) * 1.0;	// contrast
+		out_color = col;
+
+	}`;
+
+/*
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPECULAR COLOR
+		float spec			= dot( normalize( dir_cam + dir_light ), norm );
+		float spec_cutoff	= smoothstep( 0.78, 0.8, spec ); // step( spec, 0.8 );
+		vec3 c_spec			= specular_color * ( 1.0 - spec_cutoff ) * brightness;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BASE COLOR
+		vec3 c_base = base_color * spec_cutoff;
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// HIGHLIGHT
+		float hlite			= clamp( dot( dir_light, norm ), 0.0, 1.0 );	// Unity saturate = clamp( x, 0, 1 );
+		float hlite_cutoff	= smoothstep( 0.940, 0.96, hlite ); 			// step( 0.95, hlite );
+		vec3 c_hlite		= hilite_color * hlite_cutoff;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// RIM LIGHT
+		float rim	= 1.0 - clamp( dot( dir_cam, norm  ), 0.1, 1.0 );
+		vec3 c_rim	= rim_color * pow( rim, 6.0 ); // 0 > 20.		
+*/
+
+/*
+https://www.shadertoy.com/view/MsBfzm
+#define linesRows 5.0
+#define thickness 0.25
+#define invert 0
+
+vec2 rotateCoord(vec2 uv, float rads) {
+    uv *= mat2(cos(rads), sin(rads), -sin(rads), cos(rads));
+	return uv;
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    // update layout params
+    float rows = linesRows * 0.5;//linesRows + 3. * sin(iTime);
+    float curThickness = 0.25 + 0.22 * cos(iTime);
+  	float curRotation = 0.8 * sin(iTime);
+    // get original coordinate, translate & rotate
+	vec2 uv = (2. * fragCoord - iResolution.xy) / iResolution.y;
+    //uv += curCenter;
+    uv = rotateCoord(uv, curRotation);
+    // create grid coords
+    vec2 uvRepeat = fract(uv * rows);		
+    // adaptive antialiasing, draw, invert
+    float aa = iResolution.y * 0.00003; 	
+    float col = smoothstep(curThickness - aa, curThickness + aa, length(uvRepeat.y - 0.5));
+    if(invert == 1) col = 1. - col;			
+	fragColor = vec4(vec3(col),1.0);
+}
+*/
+
+
+/*
+http://glslsandbox.com/e#39654.0
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+
+uniform float time;
+uniform vec2 resolution;
+
+float swirl(vec2 coord)
+{
+    float l = length(coord) / resolution.x;
+    float phi = atan(coord.y, coord.x + 1e-6);
+    return sin(l * 10.0 + phi - time * 4.0) * 0.5 + 0.5;
+}
+
+float halftone(vec2 coord)
+{
+    coord -= resolution * 0.5;
+    float size = resolution.x / (60.0 + sin(time * 0.5) * 50.0);
+    vec2 uv = coord / size; 
+    vec2 ip = floor(uv); // column, row
+    vec2 odd = vec2(0.5 * mod(ip.y, 2.0), 0.0); // odd line offset
+    vec2 cp = floor(uv - odd) + odd; // dot center
+    float d = length(uv - cp - 0.5) * size; // distance
+    float r = swirl(cp * size) * (size - 2.0) * 0.5; // dot radius
+    return clamp(d - r, 0.0, 1.0);
+}
+
+void main(void)
+{
+    gl_FragColor = vec4(vec3(1.0, 1.0, 0.0) * halftone(gl_FragCoord.xy), 1.0);
+}
+
+*/
+
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "uv_scale" );
+	elm_on_input( "depth_limit" );
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<!--
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="UV Scale" id="uv_scale" value="22" min="2" max="60" step="1"></prop-range>
+		<prop-range label="Depth Limit" id="depth_limit" value="0.6" min="0.0" max="1.1" step="0.01"></prop-range>
+	</prop-panel>
+	-->
+</body></html>

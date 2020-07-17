@@ -10,6 +10,11 @@ https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/master/script.js
 // Really cool pattern effects
 https://christophercarlson.com/portfolio/multi-scale-truchet-patterns/
 
+
+
+https://github.com/cacheflowe/haxademic/blob/master/src/com/haxademic/core/draw/shapes/Icosahedron.java
+
+
 //---------------------------------------
 // Planet Generator. Amazing Math Samples of how to create crator, like SmoothMin and SmoothMax
 
