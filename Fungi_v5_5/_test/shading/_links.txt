@@ -84,6 +84,11 @@ https://www.ronja-tutorials.com/2018/05/26/fresnel.html
 https://roystan.net/articles/toon-shader.html has directional Rim
 
 
+VERY NICE TOON TEXTURE SHADING
+https://www.pinterest.com/pin/294493263137496625/?utm_campaign=rtpinrecs&e_t=9d05db3495b6433aa0e55f79264f24be&utm_source=31&utm_medium=2004&utm_content=294493263137496625&news_hub_id=5110852357541906234
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+
 //--------------------------------------
 // Halftone CrossHatching
 https://forum.unity.com/threads/shader-forge-a-visual-node-based-shader-editor.222049/page-42#post-1774760
