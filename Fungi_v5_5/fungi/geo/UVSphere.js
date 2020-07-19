@@ -1,7 +1,7 @@
 import App, { Vec3 } from "../App.js";
 
 function Sphere( name, mat, y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false ){
-	let geo 	= Sphere.geo();
+	let geo 	= Sphere.geo( y_len, x_len, radius, close_loop, pole_fwd );
 	let mesh	= App.mesh.from_data( name, geo.vert, 3, geo.idx, geo.norm, geo.uv );
 	return App.mesh_entity( "Sphere", mesh, mat, App.mesh.TRI_STRIP ); //TRI_STRIP
 }

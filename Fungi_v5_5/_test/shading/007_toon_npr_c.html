@@ -1,0 +1,404 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
+import Sphere	from "../../fungi/geo/UVSphere.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 5, 2, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo;
+
+
+/*
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+*/
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Mesh */
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule 
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 0.5, 0.5, 0 ); 
+	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Sphere 
+	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false*/
+	//e = Sphere( "Sphere", mat, 18, 25, 0.5, true, false );
+	//e.node.set_pos( 0.0, 0.5, 0 ); 
+	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 1.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#C9ACFF" ) ); //C9ACFF
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"base_color", type:"rgb", value:"#1E1E1E" },
+		{ name:"specular_color", type:"rgb", value:"#EEE2BD" },
+		{ name:"hilite_color", type:"rgb", value:"#999999" },
+		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+		gl_PointSize = 8.0;
+	}`;
+
+const FRAG_SRC = `#version 300 es
+	precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	uniform vec3 base_color;
+	uniform vec3 specular_color;
+	uniform vec3 hilite_color;
+	uniform vec3 rim_color;
+
+	in vec3 frag_norm;
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+
+	//-------------------------
+
+	vec3 rgb( int c ){
+		return vec3(
+			float( ( c >> 16 ) & 0xff ) * 0.00392156863,
+			float( ( c >> 8 ) & 0xff ) * 0.00392156863,
+			float( c & 0xff ) * 0.00392156863
+		);
+	}
+
+	// https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Posterize-Node.html
+	// Posterization or posterisation of an image entails conversion of a continuous gradation of 
+	// tone to several regions of fewer tones, with abrupt changes from one tone to another.
+	float Posterize( float In, float Steps ){
+		//return floor( In / ( 1.0 / Steps ) ) * ( 1.0 / Steps ); // WHY UNITY??? To much divisions.
+		return floor( In * Steps ) / Steps;
+	}
+
+	float posterization_plus( float grad, float steps ){
+		float raw			= round( grad * steps ) / steps;
+		float first_step	= 1.0 / steps;
+		float is_raw_less	= ( raw < 0.001 )? 1.0 : 0.0;
+		return raw + first_step * is_raw_less ;
+    }
+    
+    float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+	vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+	vec4 perm(vec4 x){return mod289(((x * 34.0) + 1.0) * x);}
+
+	float noise(vec3 p){
+		vec3 a = floor(p);
+		vec3 d = p - a;
+		d = d * d * (3.0 - 2.0 * d);
+
+		vec4 b = a.xxyy + vec4(0.0, 1.0, 0.0, 1.0);
+		vec4 k1 = perm(b.xyxy);
+		vec4 k2 = perm(k1.xyxy + b.zzww);
+
+		vec4 c = k2 + a.zzzz;
+		vec4 k3 = perm(c);
+		vec4 k4 = perm(c + 1.0);
+
+		vec4 o1 = fract(k3 * (1.0 / 41.0));
+		vec4 o2 = fract(k4 * (1.0 / 41.0));
+
+		vec4 o3 = o2 * d.z + o1 * (1.0 - d.z);
+		vec2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
+
+		return o4.y * d.y + o4.x * (1.0 - d.y);
+	}
+
+
+	//-----------------------------------------
+	vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+float snoise(vec3 v){ 
+  const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+  const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+// First corner
+  vec3 i  = floor(v + dot(v, C.yyy) );
+  vec3 x0 =   v - i + dot(i, C.xxx) ;
+
+// Other corners
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min( g.xyz, l.zxy );
+  vec3 i2 = max( g.xyz, l.zxy );
+
+  //  x0 = x0 - 0. + 0.0 * C 
+  vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+  vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+  vec3 x3 = x0 - 1. + 3.0 * C.xxx;
+
+// Permutations
+  i = mod(i, 289.0 ); 
+  vec4 p = permute( permute( permute( 
+             i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+           + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+// Gradients
+// ( N*N points uniformly over a square, mapped onto an octahedron.)
+  float n_ = 1.0/7.0; // N=7
+  vec3  ns = n_ * D.wyz - D.xzx;
+
+  vec4 j = p - 49.0 * floor(p * ns.z *ns.z);  //  mod(p,N*N)
+
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)
+
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+
+  vec4 b0 = vec4( x.xy, y.xy );
+  vec4 b1 = vec4( x.zw, y.zw );
+
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+  vec3 p0 = vec3(a0.xy,h.x);
+  vec3 p1 = vec3(a0.zw,h.y);
+  vec3 p2 = vec3(a1.xy,h.z);
+  vec3 p3 = vec3(a1.zw,h.w);
+
+//Normalise gradients
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  p0 *= norm.x;
+  p1 *= norm.y;
+  p2 *= norm.z;
+  p3 *= norm.w;
+
+// Mix final noise value
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), 
+                                dot(p2,x2), dot(p3,x3) ) );
+}
+//--------------------------------------------
+
+	float fbm( in vec3 x, float H, int oct ){ 
+		float G = exp2( -H );
+		float f = 1.0;
+		float a = 1.0;
+		float t = 0.0;
+		for( int i=0; i < oct; i++ ){
+			t += a * snoise( f * x );
+			f *= 2.0;	// Increase Freq
+			a *= G;		// Decrease Amp
+		}
+		return t;
+	}
+
+	float fbm_distort( vec3 p, float D, float H, int oct ){
+		vec3 q = vec3(
+			fbm( p, H, oct ),
+			fbm( p + vec3(5.2,1.3,2.2), H, oct ),
+			fbm( p + vec3(8.7,3.2,5.6), H, oct )
+		);
+
+		return fbm( p + D * q, H, oct );
+	}
+
+	float fbm_distort2( vec3 p, float D, float H, int oct ){
+		vec3 q = vec3(
+			fbm( p, H, oct ),
+			fbm( p + vec3(5.2,1.3,2.2), H, oct ),
+			fbm( p + vec3(8.7,3.2,5.6), H, oct )
+		);
+
+		vec3 r = vec3(
+			fbm( p + D*q + vec3(1.7,9.2,1.2), H, oct ),
+			fbm( p + D*q + vec3(8.3,2.8,4.5), H, oct ),
+			fbm( p + D*q + vec3(14.3,0.2,9.1), H, oct )
+		);
+
+		return fbm( p + D*r, H, oct );
+	}
+
+// 1D212A, 0, 2A4B53, 0.427386, 81FFE9, 0.576764
+float step_val[5]	= float[]( 0.65, 0.70, 0.9, 0.0, 0.0 );
+float step_pos[5]	= float[]( 0.0, 0.15, 0.4, 9.0, 9.0 );
+
+
+
+float step_ramp( float t, float step_val[5], float step_pos[5], float feather, int i ){
+	for( i; i > 0; i-- ){
+	if( (step_pos[ i ]-feather) <= t ){
+		return mix( 
+		step_val[ i-1 ], 
+		step_val[ i ],
+		smoothstep( step_pos[ i ] - feather, step_pos[ i ] + feather, t )
+		);
+	}
+	}
+	return step_val[ 0 ];
+}
+
+vec3 color_step_ramp( vec3[3] color, float[3] wgt, float t ){
+	for( int i=2; i > 0; i-- ){
+		if( wgt[ i ] <= t ) return color[ i ];
+	}
+	return color[ 0 ];
+}
+
+	void main( void ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+		vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+		vec3 dir_cam		= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+		float diffuse_lite	= clamp( dot( dir_light, norm ), 0.0, 1.0 );
+		//float diffuse_lite	= dot( dir_light, norm ) * 0.5 + 0.5;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//out_color.rgb = vec3( diffuse_lite );
+		//out_color.rgb = vec3( pow( diffuse_lite, 0.5 ) );
+
+		// Switching the different Diffuse Light changes the over all look, the Clamped one also looks good.
+
+        float lite		= pow( diffuse_lite, 0.5 );
+        float lite2		= clamp( lite * 0.95, 0.0, 1.0 );
+		//float poster = posterization_plus( lite2, 6.0 );
+		
+		//float n = snoise( frag_lpos * 9.0 ) * 0.5 + 0.5;
+		//float n = fbm( frag_lpos * 8.0, 0.9, 3 ) * 0.5 + 0.5;
+		
+		//float n = fbm_distort( frag_lpos * 3.0, 2.5, 0.3, 1 ) * 0.5 + 0.5;
+		
+		//float n = fbm_distort2( frag_lpos * 2.9, 1.1, 0.2, 1 ) * 0.5 + 0.5;
+
+		
+		float n = fbm_distort( frag_lpos * 3.0, 5.5, 0.9, 1 ) * 0.5 + 0.5;
+
+		n *= 0.5;
+		n += lite;
+		n -= 0.1;
+
+		vec3 ramp_col[3]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9) );
+		float ramp_wgt[3]	= float[]( 0.0, 0.427386, 0.78 );
+		
+		out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, n );
+
+
+		//out_color.rgb = vec3( n );
+		//out_color.rgb = vec3( step(0.5, n) );
+		//out_color.rgb = vec3( n );
+		
+	}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<a href="" class="lnk">Ported From : </a>
+</body></html>
