@@ -1,5 +1,7 @@
 https://ciechanow.ski/lights-and-shadows/ INSANE VISUALS
 
+https://observablehq.com/@mbostock/gray-scott-reaction-diffusion AMAZING PATTERNS
+https://www.karlsims.com/rd.html
 
 
 https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading

@@ -10,7 +10,8 @@ https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/master/script.js
 // Really cool pattern effects
 https://christophercarlson.com/portfolio/multi-scale-truchet-patterns/
 
-
+Curve Fitting / Simplifing / Smoothing
+https://github.com/paperjs/paper.js/blob/develop/src/path/PathFitter.js
 
 https://github.com/cacheflowe/haxademic/blob/master/src/com/haxademic/core/draw/shapes/Icosahedron.java
 
@@ -40,3 +41,15 @@ Alternatives to Marching Cubes
 https://swiftcoder.wordpress.com/planets/isosurface-extraction/
 https://wordsandbuttons.online/interactive_explanation_of_marching_cubes_and_dual_contouring.html
 http://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
+
+
+//---------------------------------------
+SHADERS
+
+https://observablehq.com/@mbostock/gray-scott-reaction-diffusion
+https://www.karlsims.com/rd.html
+
+
+//---------------------------------------
+// DEFORMERS
+https://github.com/keenanwoodall/Deform/tree/develop  Even has elastic
