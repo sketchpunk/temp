@@ -208,7 +208,7 @@ class Canvas{
 		this.height 				= h;
 
 		/* FIXES BLURRYNESS ON HIGHER DPI SCREENS.
-		let dpi					= window.devicePixelRatio;
+		let dpi					= window.devicePixelRatio  * 2.0; // Times to kinda helps
 		this.elm.width			= w * dpi;
 		this.elm.height			= h * dpi;
 		this.elm.style.width	= w + "px";
