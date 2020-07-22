@@ -1,22 +1,21 @@
 <!DOCTYPE html><script type="module">
 import App, { Colour } from "../../fungi/App.js";
-import Capsule	from "../../fungi/geo/Capsule.js";
-import Sphere	from "../../fungi/geo/UVSphere.js";
-import Points 	from "../../fungi/geo/Points.js";
-import Motion 	from "../../fungi.test/Motion.js";
-import GltfUtil from "../../fungi/lib/GltfUtil.js";
-import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+import Capsule		from "../../fungi/geo/Capsule.js";
+import Sphere		from "../../fungi/geo/UVSphere.js";
+import Points 		from "../../fungi/geo/Points.js";
+import Motion 		from "../../fungi.test/Motion.js";
+import GltfUtil		from "../../fungi/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
 
 //#####################################################
 App
 	.init()
-	.set_camera( 0, 5, 2, 0, 0.5, 0 )
+	.set_camera( 0, 5, 2.0, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
-let gPnt, gMotion, gUbo;
-
-
+let gPnt, gMotion, gUbo, $mat, $a, $b;
 /*
 https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
 
@@ -56,7 +55,7 @@ https://github.com/imageworks/OpenShadingLanguage/blob/master/src/include/OSL/os
 //#####################################################
 
 function on_render( dt, ss ){
-	if( dt ) gMotion( dt ); // Move Point
+	if( dt && App.render_loop.active ) gMotion( dt ); // Move Point
 	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
 }
 
@@ -64,18 +63,20 @@ async function init( x ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Shader
 	init_shader();
-	let mat = App.shader.new_material( "TESTER" );
+	$mat = App.shader.new_material( "TESTER" );
 	let e;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	/* Load Mesh 
+	/* Load Mesh */
 	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
         .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
 		.then();
 
-	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e 	= GltfUtil.get_entity( "Test", json, bin, $mat );
 	e.node.set_pos( 0, 0.5, 0 );
-	*/
+	e.active = false;
+	$b = e.id;
+	App.ecs.set_entity_active( $b, false );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Load Capsule 
@@ -86,9 +87,10 @@ async function init( x ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Load Sphere 
-	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false*/
-	e = Sphere( "Sphere", mat, 18, 25, 0.5, true, false );
-	e.node.set_pos( 0.0, 0.5, 0 ); 
+	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false*/ 
+	e = Sphere( "Sphere", $mat, 18, 25, 0.5, true, false );
+	e.node.set_pos( 0.0, 0.5, 0 );
+	$a = e.id;
 	
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,9 +101,10 @@ async function init( x ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Motion Closure for Point
-	//gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
+	init_ui();
 	on_render();
 	//App.render_by( 1, on_render );
 	return true;
@@ -125,10 +128,9 @@ function init_shader(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"base_color", type:"rgb", value:"#1E1E1E" },
-		{ name:"specular_color", type:"rgb", value:"#EEE2BD" },
-		{ name:"hilite_color", type:"rgb", value:"#999999" },
-		{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+		{ name:"coord_scale", type:"float", value:12.0 },
+		{ name:"randomness", type:"float", value:1 },
+		{ name:"light_strength", type:"float", value:0.66 },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -180,10 +182,9 @@ uniform Light{
 	vec3 color;
 } light;
 
-uniform vec3 base_color;
-uniform vec3 specular_color;
-uniform vec3 hilite_color;
-uniform vec3 rim_color;
+uniform float coord_scale;
+uniform float randomness;
+uniform float light_strength;
 
 in vec3 frag_norm;
 in vec3 frag_cam_pos;
@@ -230,6 +231,9 @@ vec3 color_step_ramp( vec3[3] color, float[3] wgt, float t ){
 //-------------------------
 
 // https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
+// NOTES, Decent Standin for OSL's HashNoise. Doesn't generate the same values, so 
+// voronoi does not render with the same 0,1 range, This one tends to be darker but
+// blenders tends to be brighter.
 uint hash( uint x ) {
     x += ( x << 10u );
     x ^= ( x >>  6u );
@@ -262,7 +266,6 @@ float random( vec4  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
 //-------------------------
 // https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_hash.h
 // https://github.com/imageworks/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h
-
 // Note: Can not port OSL's HashNoise, but managed to find a decent substitute 
 
 //float hash_vector3_to_float(vec3 k){ return hashnoise(k); }
@@ -333,28 +336,77 @@ void main( void ){
 	//float diffuse_lite	= dot( dir_light, norm ) * 0.5 + 0.5;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//vec3 v = voronoi3d( frag_lpos * 10.0 );
-	//out_color.rgb = vec3( v.r );
-	//out_color.rgb = vec3( step( 0.5, v.r ) );
-
 	//out_color.rgb = vec3( diffuse_lite );
-
-	out_color.rgb = vec3( random( frag_lpos) );
-
+	//out_color.rgb = vec3( random( frag_lpos) );
+	
 	float dist = 0.0;
-	voronoi_distance_to_edge_3d( frag_lpos * 5.0, 1.0, dist );
+	voronoi_distance_to_edge_3d( frag_lpos * coord_scale, randomness, dist );
+
+	//float lite = pow( diffuse_lite, 2.0 );
+	//float x = ( dist * 1.5 + lite) - 0.1;
+
+	float x = dist * 1.0 + diffuse_lite * light_strength;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// COLOR RAMP
+	vec3 ramp_col[3]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9) );
+	float ramp_wgt[3]	= float[]( 0.0, 0.427386, 0.65 );
+		
+	out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, x );
+
+
 	//out_color.rgb = vec3( step( 0.04, abs( dist ) ) );
 	//out_color.rgb = vec3( step( 0.02, dist ) );
-	out_color.rgb = vec3( dist );
+	//out_color.rgb = vec3( x );
 
-	if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+	//if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
 	
 }`;
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "coord_scale" );
+	elm_on_input( "randomness" );
+	elm_on_input( "light_strength" );
+	
+	document.getElementById("btn_tog_motion").addEventListener("click", ()=>{
+		if( !App.render_loop.active )	App.render_by( 1, on_render );
+		else 							App.render_by( 0 );
+	});
+
+	document.getElementById("btn_tog_mesh").addEventListener("click", ()=>{
+		if( App.ecs.is_entity_active( $a ) ){
+			App.ecs.set_entity_active( $a, false );
+			App.ecs.set_entity_active( $b, true );
+		}else{
+			App.ecs.set_entity_active( $a, true );
+			App.ecs.set_entity_active( $b, false );
+		}
+		App.render();
+	});
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
 
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
 .lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
 </style>
 </head><body><canvas id="pg_canvas"></canvas>
-	<a href="" class="lnk">Ported From : </a>
+	<a href="https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213" class="lnk">Blender File From : https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213</a>
+
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="Coord Scale" id="coord_scale" value="12" min=".01" max="50" step="0.01"></prop-range>
+		<prop-range label="Randomness" id="randomness" value="1.0" min="0.0" max="1.0" step="0.01"></prop-range>
+		<prop-range label="Light Strength" id="light_strength" value="0.66" min="0.0" max="1.0" step="0.01"></prop-range>
+		<button id="btn_tog_motion">Animate Light Motion</button>
+		<button id="btn_tog_mesh">Sphere / Suzanne</button>
+	</prop-panel>
+
 </body></html>

@@ -361,6 +361,9 @@ class Ecs{
 		return this;
 	}
 
+	is_entity_active( id ){ return this.entities.instances[ id ].active; }
+	set_entity_active( id, b ){ this.entities.instances[ id ].active = b; return this; }
+
 	debug_entity( id ){
 		let e = this.entities.instances[ id ];
 		console.log( e );
