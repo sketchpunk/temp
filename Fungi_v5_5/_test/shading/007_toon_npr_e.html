@@ -1,0 +1,422 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule		from "../../fungi/geo/Capsule.js";
+import Sphere		from "../../fungi/geo/UVSphere.js";
+import Points 		from "../../fungi/geo/Points.js";
+import Motion 		from "../../fungi.test/Motion.js";
+import GltfUtil		from "../../fungi/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 5, 2.0, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo, $mat, $a, $b;
+/*
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+
+https://github.com/MaxBittker/glsl-voronoi-noise/blob/master/3d.glsl
+
+https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_voronoi_texture.osl
+https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_noise_texture.osl
+https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_noise.h
+
+https://github.com/imageworks/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h
+
+https://docs.chaosgroup.com/display/OSLShaders/Additional+procedural+noises
+
+https://docs.blender.org/manual/en/latest/render/shader_nodes/textures/noise.html
+
+https://twitter.com/Bookyakuno/status/1258800013804634112
+https://pbs.twimg.com/media/EXgnicGU4AAA2vd?format=jpg&name=large
+Color Ramp #B85408, 0 #D1891D, 0.15 #F6FE57, 0.305
+    hashFloat (ListT... floatList) const {
+        return bits_to_01(inthash(DerivedT::transformToUint(floatList)...));
+    }
+
+
+	inthash (const unsigned int k0) {
+		// now hash the data!
+		unsigned int start_val = 0xdeadbeef + (1 << 2) + 13;
+
+		unsigned int a = start_val + k0;
+		unsigned int c = OIIO::bjhash::bjfinal(a, start_val, start_val);
+		return c;
+	}
+
+	inthash (const unsigned int k0, const unsigned int k1, const unsigned int k2, const unsigned int k3) {
+		// now hash the data!
+		unsigned int start_val = 0xdeadbeef + (4 << 2) + 13;
+
+		unsigned int a = start_val + k0;
+		unsigned int b = start_val + k1;
+		unsigned int c = start_val + k2;
+		OIIO::bjhash::bjmix(a, b, c);
+		a += k3;
+		c = OIIO::bjhash::bjfinal(a, b, c);
+		return c;
+	}
+*/
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt && App.render_loop.active ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	$mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Mesh */
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, $mat );
+	e.node.set_pos( 0, 0.5, 0 );
+	e.active = false;
+	$b = e.id;
+	App.ecs.set_entity_active( $b, false );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule 
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 0.5, 0.5, 0 ); 
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Sphere 
+	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false*/ 
+	e = Sphere( "Sphere", $mat, 18, 25, 0.5, true, false );
+	e.node.set_pos( 0.0, 0.5, 0 );
+	$a = e.id;
+	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 1.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
+	init_ui();
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#C9ACFF" ) ); //C9ACFF
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"coord_scale", type:"float", value:12.0 },
+		{ name:"randomness", type:"float", value:1 },
+		{ name:"light_strength", type:"float", value:0.66 },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+	vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_lpos 		= a_pos.xyz;
+	frag_wpos		= wpos.xyz;
+	frag_cam_pos	= global.camera_pos;
+	frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position = global.proj_view * wpos;
+	gl_PointSize = 8.0;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+uniform Light{ 
+	vec3 pos;
+	vec3 color;
+} light;
+
+uniform float coord_scale;
+uniform float randomness;
+uniform float light_strength;
+
+in vec3 frag_norm;
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+vec3 rgb( int c ){
+	return vec3(
+		float( ( c >> 16 ) & 0xff ) * 0.00392156863,
+		float( ( c >> 8 ) & 0xff ) * 0.00392156863,
+		float( c & 0xff ) * 0.00392156863
+	);
+}
+
+//float step_val[5]	= float[]( 0.65, 0.70, 0.9, 0.0, 0.0 );
+//float step_pos[5]	= float[]( 0.0, 0.15, 0.4, 9.0, 9.0 );
+float step_ramp( float t, float step_val[5], float step_pos[5], float feather, int i ){
+	for( i; i > 0; i-- ){
+		if( (step_pos[ i ]-feather) <= t ){
+			return mix( 
+			step_val[ i-1 ], 
+			step_val[ i ],
+			smoothstep( step_pos[ i ] - feather, step_pos[ i ] + feather, t )
+			);
+		}
+	}
+	return step_val[ 0 ];
+}
+
+vec3 color_step_ramp( vec3[3] color, float[3] wgt, float t ){
+	for( int i=2; i > 0; i-- ){
+		if( wgt[ i ] <= t ) return color[ i ];
+	}
+	return color[ 0 ];
+}
+
+//-------------------------
+
+//float hash(float n) { return fract(sin(n) * 1e4); }
+//float hash(vec2 p) { return fract(1e4 * sin(17.0 * p.x + p.y * 0.1) * (0.1 + abs(sin(p.y * 13.0 + p.x)))); }
+
+//-------------------------
+
+// https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
+// NOTES, Decent Standin for OSL's HashNoise. Doesn't generate the same values, so 
+// voronoi does not render with the same 0,1 range, This one tends to be darker but
+// blenders tends to be brighter.
+uint hash( uint x ) {
+    x += ( x << 10u );
+    x ^= ( x >>  6u );
+    x += ( x <<  3u );
+    x ^= ( x >> 11u );
+    x += ( x << 15u );
+    return x;
+}
+
+uint hash( uvec2 v ) { return hash( v.x ^ hash(v.y)                         ); }
+uint hash( uvec3 v ) { return hash( v.x ^ hash(v.y) ^ hash(v.z)             ); }
+uint hash( uvec4 v ) { return hash( v.x ^ hash(v.y) ^ hash(v.z) ^ hash(v.w) ); }
+
+// Construct a float with half-open range [0:1] using low 23 bits.
+// All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
+float floatConstruct( uint m ) {
+    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    m |= ieeeOne;                          // Add fractional part to 1.0
+    float  f = uintBitsToFloat( m );       // Range [1:2]
+    return f - 1.0;                        // Range [0:1]
+}
+
+float random( float x ) { return floatConstruct(hash(floatBitsToUint(x))); }
+float random( vec2  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
+float random( vec3  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
+float random( vec4  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
+
+//-------------------------
+// https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_hash.h
+// https://github.com/imageworks/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h
+// Note: Can not port OSL's HashNoise, but managed to find a decent substitute 
+
+//float hash_vector3_to_float(vec3 k){ return hashnoise(k); }
+//float hash_vector4_to_float(vec4 k){ return hashnoise(vec3(k.x, k.y, k.z), k.w); }
+float hash_vector3_to_float(vec3 k){ return random( k ); }
+float hash_vector4_to_float(vec4 k){ return random( k ); }
+
+vec3 hash_vector3_to_vector3( vec3 k ){
+  return vec3( hash_vector3_to_float( k ),
+                 hash_vector4_to_float(vec4(k[0], k[1], k[2], 1.0)),
+				 hash_vector4_to_float(vec4(k[0], k[1], k[2], 2.0)) );
+}
+
+//-------------------------
+// https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_voronoi_texture.osl
+void voronoi_distance_to_edge_3d(vec3 coord, float randomness, out float outDistance)
+{
+  vec3 cellPosition = floor(coord);
+  vec3 localPosition = coord - cellPosition;
+
+  vec3 vectorToClosest;
+  float minDistance = 8.0;
+  for (int k = -1; k <= 1; k++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        vec3 cellOffset = vec3(i, j, k);
+        vec3 vectorToPoint = cellOffset +
+                                hash_vector3_to_vector3(cellPosition + cellOffset) * randomness -
+                                localPosition;
+        float distanceToPoint = dot(vectorToPoint, vectorToPoint);
+        if (distanceToPoint < minDistance) {
+          minDistance = distanceToPoint;
+          vectorToClosest = vectorToPoint;
+        }
+      }
+    }
+  }
+
+  minDistance = 8.0;
+  for (int k = -1; k <= 1; k++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        vec3 cellOffset = vec3(i, j, k);
+        vec3 vectorToPoint = cellOffset +
+                                hash_vector3_to_vector3(cellPosition + cellOffset) * randomness -
+                                localPosition;
+        vec3 perpendicularToEdge = vectorToPoint - vectorToClosest;
+        if (dot(perpendicularToEdge, perpendicularToEdge) > 0.0001) {
+          float distanceToEdge = dot((vectorToClosest + vectorToPoint) / 2.0,
+                                     normalize(perpendicularToEdge));
+          minDistance = min(minDistance, distanceToEdge);
+        }
+      }
+    }
+  }
+  outDistance = minDistance;
+}
+/**/
+
+//-------------------------
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+	vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+	vec3 dir_cam		= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+	float diffuse_lite	= clamp( dot( dir_light, norm ), 0.0, 1.0 );
+	//float diffuse_lite	= dot( dir_light, norm ) * 0.5 + 0.5;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//out_color.rgb = vec3( diffuse_lite );
+	//out_color.rgb = vec3( random( frag_lpos) );
+	
+	float dist = 0.0;
+	voronoi_distance_to_edge_3d( frag_lpos * coord_scale, randomness, dist );
+
+	//float lite = pow( diffuse_lite, 2.0 );
+	//float x = ( dist * 1.5 + lite) - 0.1;
+
+	float x = dist * 1.0 + diffuse_lite * light_strength;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// COLOR RAMP
+	vec3 ramp_col[3]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9) );
+	float ramp_wgt[3]	= float[]( 0.0, 0.427386, 0.65 );
+		
+	out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, x );
+
+
+	//out_color.rgb = vec3( step( 0.04, abs( dist ) ) );
+	//out_color.rgb = vec3( step( 0.02, dist ) );
+	//out_color.rgb = vec3( x );
+
+	//if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+	
+}`;
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "coord_scale" );
+	elm_on_input( "randomness" );
+	elm_on_input( "light_strength" );
+	
+	document.getElementById("btn_tog_motion").addEventListener("click", ()=>{
+		if( !App.render_loop.active )	App.render_by( 1, on_render );
+		else 							App.render_by( 0 );
+	});
+
+	document.getElementById("btn_tog_mesh").addEventListener("click", ()=>{
+		if( App.ecs.is_entity_active( $a ) ){
+			App.ecs.set_entity_active( $a, false );
+			App.ecs.set_entity_active( $b, true );
+		}else{
+			App.ecs.set_entity_active( $a, true );
+			App.ecs.set_entity_active( $b, false );
+		}
+		App.render();
+	});
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+	<a href="https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213" class="lnk">Blender File From : https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213</a>
+
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="Coord Scale" id="coord_scale" value="12" min=".01" max="50" step="0.01"></prop-range>
+		<prop-range label="Randomness" id="randomness" value="1.0" min="0.0" max="1.0" step="0.01"></prop-range>
+		<prop-range label="Light Strength" id="light_strength" value="0.66" min="0.0" max="1.0" step="0.01"></prop-range>
+		<button id="btn_tog_motion">Animate Light Motion</button>
+		<button id="btn_tog_mesh">Sphere / Suzanne</button>
+	</prop-panel>
+
+</body></html>

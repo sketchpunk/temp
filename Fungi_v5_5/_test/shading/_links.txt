@@ -89,7 +89,8 @@ https://roystan.net/articles/toon-shader.html has directional Rim
 VERY NICE TOON TEXTURE SHADING
 https://www.pinterest.com/pin/294493263137496625/?utm_campaign=rtpinrecs&e_t=9d05db3495b6433aa0e55f79264f24be&utm_source=31&utm_medium=2004&utm_content=294493263137496625&news_hub_id=5110852357541906234
 https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
-https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+https://bookyakuno.com/npr-shader/#%E3%83%8F%E3%83%BC%E3%83%95%E3%83%88%E3%83%BC%E3%83%B3(%E7%B6%B2%E7%82%B9%E3%83%BB%E6%B0%B4%E7%8E%89%E3%82%B0%E3%83%A9%E3%83%87%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3)
+https://bookyakuno.com/annual-rings-shader/
 
 //--------------------------------------
 // Halftone CrossHatching
