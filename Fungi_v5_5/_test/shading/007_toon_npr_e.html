@@ -17,6 +17,8 @@ App
 
 let gPnt, gMotion, gUbo, $mat, $a, $b;
 /*
+https://github.com/ADN-DevTech/3dsMax-OSL-Shaders
+
 https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
 
 https://github.com/MaxBittker/glsl-voronoi-noise/blob/master/3d.glsl
@@ -291,10 +293,9 @@ vec3 hash_vector3_to_vector3( vec3 k ){
 
 //-------------------------
 // https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_voronoi_texture.osl
-void voronoi_distance_to_edge_3d(vec3 coord, float randomness, out float outDistance)
-{
-  vec3 cellPosition = floor(coord);
-  vec3 localPosition = coord - cellPosition;
+void voronoi_distance_to_edge_3d(vec3 coord, float randomness, out float outDistance){
+	vec3 cellPosition = floor(coord);
+	vec3 localPosition = coord - cellPosition;
 
   vec3 vectorToClosest;
   float minDistance = 8.0;
@@ -333,7 +334,240 @@ void voronoi_distance_to_edge_3d(vec3 coord, float randomness, out float outDist
   }
   outDistance = minDistance;
 }
+
+
+void voronoi_f1_3d_euclidean( vec3 coord, float exponent, float randomness, out float outDistance ) //output color outColor, output vec3 outPosition 
+{
+  vec3 cellPosition = floor(coord);
+  vec3 localPosition = coord - cellPosition;
+
+  float minDistance = 8.0;
+  vec3 targetOffset, targetPosition;
+  for (int k = -1; k <= 1; k++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        vec3 cellOffset = vec3(i, j, k);
+        vec3 pointPosition = cellOffset + hash_vector3_to_vector3(cellPosition + cellOffset) * randomness;
+		
+		//float distanceToPoint = voronoi_distance(pointPosition, localPosition, metric, exponent);
+		float distanceToPoint = distance( pointPosition, localPosition );
+		
+        if (distanceToPoint < minDistance) {
+          targetOffset = cellOffset;
+          minDistance = distanceToPoint;
+          targetPosition = pointPosition;
+        }
+      }
+    }
+  }
+  outDistance = minDistance;
+  //outColor = hash_vector3_to_color(cellPosition + targetOffset);
+  //outPosition = targetPosition + cellPosition;
+}
+
+
 /**/
+
+//-------------------------
+
+//1D Perlin noise implementation 
+//https://www.shadertoy.com/view/lt3BWM
+#define HASHSCALE 0.1031
+
+float hash(float p)
+{
+	vec3 p3  = fract(vec3(p) * HASHSCALE);
+    p3 += dot(p3, p3.yzx + 19.19);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float fade(float t) { return t*t*t*(t*(6.*t-15.)+10.); }
+
+float grad(float hash, float p)
+{
+    int i = int(1e4*hash);
+	return (i & 1) == 0 ? p : -p;
+}
+
+float perlinNoise1D(float p)
+{
+	float pi = floor(p), pf = p - pi, w = fade(pf);
+    return mix(grad(hash(pi), pf), grad(hash(pi + 1.0), pf - 1.0), w) * 2.0;
+}
+
+float fbm(float pos, int octaves, float persistence) 
+{
+    float total = 0., frequency = 1., amplitude = 1., maxValue = 0.;
+    for(int i = 0; i < octaves; ++i) 
+    {
+        total += perlinNoise1D(pos * frequency) * amplitude;
+        maxValue += amplitude;
+        amplitude *= persistence;
+        frequency *= 2.;
+    }
+    return total / maxValue;
+}
+
+
+//	Classic Perlin 3D Noise 
+//	by Stefan Gustavson
+// https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+vec3 fade(vec3 t) {return t*t*t*(t*(t*6.0-15.0)+10.0);}
+
+float cnoise(vec3 P){
+  vec3 Pi0 = floor(P); // Integer part for indexing
+  vec3 Pi1 = Pi0 + vec3(1.0); // Integer part + 1
+  Pi0 = mod(Pi0, 289.0);
+  Pi1 = mod(Pi1, 289.0);
+  vec3 Pf0 = fract(P); // Fractional part for interpolation
+  vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+  vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+  vec4 iy = vec4(Pi0.yy, Pi1.yy);
+  vec4 iz0 = Pi0.zzzz;
+  vec4 iz1 = Pi1.zzzz;
+
+  vec4 ixy = permute(permute(ix) + iy);
+  vec4 ixy0 = permute(ixy + iz0);
+  vec4 ixy1 = permute(ixy + iz1);
+
+  vec4 gx0 = ixy0 / 7.0;
+  vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+  gx0 = fract(gx0);
+  vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+  vec4 sz0 = step(gz0, vec4(0.0));
+  gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+  gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+
+  vec4 gx1 = ixy1 / 7.0;
+  vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+  gx1 = fract(gx1);
+  vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+  vec4 sz1 = step(gz1, vec4(0.0));
+  gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+  gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+
+  vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+  vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+  vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+  vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+  vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+  vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+  vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+  vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+  vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+  g000 *= norm0.x;
+  g010 *= norm0.y;
+  g100 *= norm0.z;
+  g110 *= norm0.w;
+  vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+  g001 *= norm1.x;
+  g011 *= norm1.y;
+  g101 *= norm1.z;
+  g111 *= norm1.w;
+
+  float n000 = dot(g000, Pf0);
+  float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+  float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+  float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+  float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+  float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+  float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+  float n111 = dot(g111, Pf1);
+
+  vec3 fade_xyz = fade(Pf0);
+  vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+  vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+  float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x); 
+  return 2.2 * n_xyz;
+}
+
+//-------------------------
+
+//https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_noise.h
+vec3 random_vector3_offset( float seed ){
+  //return vec3(100.0 + noise(hash, seed, 0.0) * 100.0,
+  //               100.0 + noise(hash, seed, 1.0) * 100.0,
+  //			 100.0 + noise(hash, seed, 2.0) * 100.0);
+	return vec3(
+		100.0 + random( seed + 0.0 ) * 100.0,
+		100.0 + random( seed + 1.0 ) * 100.0,
+		100.0 + random( seed + 2.0 ) * 100.0
+	);
+}
+
+// Signed Perlin-like noise range [-1,1].
+float safe_snoise( vec3 p){
+  //float f = noise( "snoise", p);
+  float f = cnoise( p );
+
+  if (isinf(f)) return 0.0;
+  return f;
+}
+
+// Unsigned Perlin-like noise range [0,1].
+float safe_noise( float p ){
+  //float f = noise("noise", p);
+  float f = perlinNoise1D( p );
+  if (isinf(f)) return 0.5;
+  return f;
+}
+
+float safe_noise( vec3 p){
+  //float f = noise("noise", p);
+  float f = cnoise( p ) * 0.5 + 0.5;
+  if (isinf(f))
+    return 0.5;
+  return f;
+}
+
+/* The fractal_noise functions are all exactly the same except for the input type. */
+float fractal_noise(vec3 p, float details, float roughness)
+{
+  float fscale = 1.0;
+  float amp = 1.0;
+  float maxamp = 0.0;
+  float sum = 0.0;
+  float octaves = clamp(details, 0.0, 16.0);
+  int n = int(octaves);
+  for (int i = 0; i <= n; i++) {
+    float t = safe_noise(fscale * p);
+    sum += t * amp;
+    maxamp += amp;
+    amp *= clamp(roughness, 0.0, 1.0);
+    fscale *= 2.0;
+  }
+  float rmd = octaves - floor(octaves);
+  if (rmd != 0.0) {
+    float t = safe_noise( fscale * p );
+    float sum2 = sum + t * amp;
+    sum /= maxamp;
+    sum2 /= maxamp + amp;
+    return (1.0 - rmd) * sum + rmd * sum2;
+  }
+  else {
+    return sum / maxamp;
+  }
+}
+
+
+//https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_noise_texture.osl
+float noise_texture( vec3 co, float detail, float roughness, float distortion ){ //output color Color
+  vec3 p = co;
+  if (distortion != 0.0) {
+    p += vec3( safe_snoise(p + random_vector3_offset(0.0)) * distortion,
+               safe_snoise(p + random_vector3_offset(1.0)) * distortion,
+               safe_snoise(p + random_vector3_offset(2.0)) * distortion);
+  }
+
+  float value = fractal_noise( p, detail, roughness );
+  //Color = color(value,
+  //           fractal_noise(p + random_vector3_offset(3.0), detail, roughness),
+  //           fractal_noise(p + random_vector3_offset(4.0), detail, roughness));
+  return value;
+}
 
 //-------------------------
 
@@ -350,7 +584,8 @@ void main( void ){
 	//out_color.rgb = vec3( random( frag_lpos) );
 	
 	float dist = 0.0;
-	voronoi_distance_to_edge_3d( frag_lpos * coord_scale, randomness, dist );
+	//voronoi_distance_to_edge_3d( frag_lpos * coord_scale, randomness, dist );
+	voronoi_f1_3d_euclidean( frag_lpos * 5.0, 1.0, 1.0, dist ); 
 
 	//float lite = pow( diffuse_lite, 2.0 );
 	//float x = ( dist * 1.5 + lite) - 0.1;
@@ -364,12 +599,14 @@ void main( void ){
 		
 	out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, x );
 
+	//float xx = noise_texture( frag_lpos * 5.0,  0.0, 1.0, 3.55 );
+	float xx = noise_texture( vec3(dist) * 7.0,  0.0, 2.0, 3.55 ) * 0.5 + 0.5 ;
 
 	//out_color.rgb = vec3( step( 0.04, abs( dist ) ) );
 	//out_color.rgb = vec3( step( 0.02, dist ) );
-	//out_color.rgb = vec3( x );
+	out_color.rgb = vec3( xx );
 
-	//if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+	if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
 	
 }`;
 
