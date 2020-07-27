@@ -11,7 +11,7 @@ import PropPanel	from "../../sage.ui/PropPanel.js";
 //#####################################################
 App
 	.init()
-	.set_camera( 0, 5, 2.0, 0, 0.5, 0 )
+	.set_camera( 0, 5, 6.0, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
@@ -32,14 +32,14 @@ async function init( x ){
 	let e;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	/* Load Mesh 
+	/* Load Mesh */
 	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
         .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
 		.then();
 
 	e 	= GltfUtil.get_entity( "Test", json, bin, $mat );
     e.node.set_pos( 0, 0.5, 0 );
-    */
+    
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Load Capsule 
@@ -50,9 +50,9 @@ async function init( x ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Load Sphere 
-	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false*/ 
+	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false */
 	e = Sphere( "Sphere", $mat, 18, 25, 0.5, true, false );
-	e.node.set_pos( 0.0, 0.5, 0 );	
+	e.node.set_pos( -2.0, 0.5, 0 );	
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Show Light Location
@@ -217,6 +217,22 @@ void color_dot_ramp( vec3[5] color, float[5] wgt, float t, float feather, int i,
 	dr.t		= 0.0;
 }
 
+void color_dot_ramp2( vec3[5] color, float[5] wgt, float t, float feather, int i, out DotRamp dr ){
+	for( i; i > 0; i-- ){
+		if( ( wgt[ i ] ) <= t ){
+			dr.color_a	= color[ i-1 ];
+			dr.color_b	= color[ i ];
+			dr.t		= smoothstep( wgt[ i ], wgt[ i ] + feather, t );
+			return;
+		}
+	}
+
+	dr.color_a	= color[ 0 ];
+	dr.color_b	= color[ 0 ];
+	dr.t		= 0.0;
+}
+
+
 //-------------------------
 
 void main( void ){
@@ -232,18 +248,99 @@ void main( void ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// COLOR RAMP
-	vec3 ramp_col[5]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9), vec3(.0), vec3(.0) );
-	float ramp_wgt[5]	= float[]( 0.0, 0.427386, 0.65, .0, .0 );
-	
-	//out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, d_lite_c, 0.05, 2 );
+	vec3	ramp_col[5]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9), vec3(.0), vec3(.0) );	
+	float	ramp_wgt[5]	= float[]( 0.0, 0.35, 0.75, .0, .0 );
+	//vec3	ramp_col[5]	= vec3[]( rgb(0x1A1124), rgb(0x202537), rgb(0x51617D), rgb(0xB3FFB1), vec3(.0) );
+	//float	ramp_wgt[5]	= float[]( 0.0, 0.214, 0.427, .589, .0 );
 
 	DotRamp dotramp;
-	color_dot_ramp( ramp_col, ramp_wgt, d_lite_a, 0.05, 2, dotramp );
-	out_color.rgb = dotramp.color_b;
-    
-    
-}`;
+	color_dot_ramp2( ramp_col, ramp_wgt, d_lite_c, 0.3, 2, dotramp );
+	
+	//out_color.rgb = dotramp.color_b;
+	//out_color.rgb = mix( dotramp.color_a, dotramp.color_b, dotramp.t );
+	//out_color.rgb = vec3( pow(dotramp.t, 1.0) );
 
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// 6 Distance
+
+	float uv_scale	= 80.0;
+	vec2 rot_uv		= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;	// Rotate Screen UV by 45d
+	vec2 cell_pos	= fract( uv_scale * rot_uv ) * 2.0 - 1.0;			// Scale UV, Cell Pos, Remap to -1,1
+
+	float dot_radius	= 2.0;
+	float cell_pos_len	= length( cell_pos );							// Distance from Cell Center
+
+	//float t				= 1.0 - (dotramp.t * 1.1);
+	//float radius		= dot_radius * pow( 0.0, 1.0 );
+	//float t				= clamp( (1.0 - dotramp.t * 1.1), 0.0, 1.0 );
+	
+	//float t				= 1.0 - dotramp.t;
+	//float t				= smoothstep( 0.1, 0.9, 1.0 - dotramp.t );
+	float radius		= dot_radius * pow( 1.0 - dotramp.t, 3.0 ); // Feather Power
+	
+	
+	float f_width		= fwidth( cell_pos_len );
+	float px_step		= smoothstep( radius-f_width, radius+f_width, cell_pos_len );
+	//float px_step		= smoothstep( radius, radius+f_width, cell_pos_len );
+	//px_step = step( radius, cell_pos_len );
+	px_step = smoothstep( 0.0, 0.7, px_step );
+
+	//out_color.rgb = vec3( px_step );
+	out_color.rgb = mix( dotramp.color_a, dotramp.color_b, px_step );
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SPECULAR COLOR
+
+	/*
+	float brightness	= 1.1; // 0 > 2
+	float spec			= clamp( dot( normalize( dir_cam + dir_light ), norm ), 0.0, 1.0 );
+	float spec_cutoff	= smoothstep( 0.95, 0.97, spec ); // step( spec, 0.8 );
+	//vec3 c_spec			= vec3( 1.0 ) * ( 1.0 - spec_cutoff ) * brightness;
+	*/
+
+	vec3 half_dir		= normalize( dir_light + dir_cam );
+	float NdH			= clamp( dot( norm, half_dir ), 0.0, 1.0 );
+	float gloss			= 20.0;
+	float spec			= pow( NdH, gloss );
+	//float spec_cutoff	= smoothstep( 0.7,0.78, spec );
+	
+
+	//out_color.rgb += smoothstep( 0.4,0.8, spec_cutoff );
+	//out_color.rgb = mix( out_color.rgb, vec3(1.0), spec_cutoff );
+	//out_color.rgb = vec3( spec_cutoff );
+
+	float spec_cutoff	= smoothstep( 0.7,0.9, spec );
+	radius		= dot_radius * pow( 1.0-spec_cutoff, 1.0 ); // Feather Power
+	px_step		= smoothstep( radius-f_width, radius+f_width, cell_pos_len );
+	px_step		= smoothstep( 0.0, 0.7, px_step );
+	out_color.rgb = mix( out_color.rgb, vec3(1.0), px_step );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// RIM
+	float NdotL = dot( norm, dir_light ) * -1.0;
+	float rim_dot = 1.0 - dot( dir_cam, norm ) ;
+	float rim_rng = smoothstep( 0.5, 0.55, rim_dot * pow( NdotL, 0.05) ); //
+
+	//out_color.rgb += vec3( rim_rng * 0.2 );
+	//out_color.rgb = mix( out_color.rgb, vec3(0.0), rim_rng * 1.0 );
+	out_color.rgb *= 1.0 - rim_rng * 0.2; // mix( out_color.rgb, vec3(0.0), rim_rng * 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec2 suv = sin( ( screen_uv * 200.00 ) + 0.5 );
+	//float tt = sin( sqrt( pow(suv.x,2.0) * pow(suv.y,2.0) ) + 6.0 ) * 0.1;
+	float tt = sin( sqrt( length( suv ) ) + 6.0 ) * 0.1;
+	//out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, tt + pow( d_lite_c, 0.5 ), 0.001, 3 );
+
+	//if( tt < 0.1 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+}`;
+// https://www.radicalforge.com/games/half-tone-shaders/
+// http://demos.radicalforge.com/halftone/
+
+// Directional Rim https://www.patreon.com/posts/15705239
+// https://roystan.net/articles/toon-shader.html
+// https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
 //#####################################################
 
 function init_ui(){

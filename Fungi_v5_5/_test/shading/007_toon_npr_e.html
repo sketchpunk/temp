@@ -88,7 +88,7 @@ async function init( x ){
 	e.node.set_pos( 0, 0.5, 0 );
 	e.active = false;
 	$b = e.id;
-	App.ecs.set_entity_active( $b, false );
+	
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Load Capsule 
@@ -116,6 +116,8 @@ async function init( x ){
 	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
+	App.ecs.set_entity_active( $a, false );
+
 	init_ui();
 	on_render();
 	//App.render_by( 1, on_render );
@@ -140,9 +142,9 @@ function init_shader(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"coord_scale", type:"float", value:12.0 },
-		{ name:"randomness", type:"float", value:1 },
-		{ name:"light_strength", type:"float", value:0.66 },
+		//{ name:"coord_scale", type:"float", value:12.0 },
+		//{ name:"randomness", type:"float", value:1 },
+		//{ name:"light_strength", type:"float", value:0.66 },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -293,6 +295,8 @@ vec3 hash_vector3_to_vector3( vec3 k ){
 
 //-------------------------
 // https://developer.blender.org/diffusion/C/browse/master/src/kernel/shaders/node_voronoi_texture.osl
+
+/*
 void voronoi_distance_to_edge_3d(vec3 coord, float randomness, out float outDistance){
 	vec3 cellPosition = floor(coord);
 	vec3 localPosition = coord - cellPosition;
@@ -334,6 +338,7 @@ void voronoi_distance_to_edge_3d(vec3 coord, float randomness, out float outDist
   }
   outDistance = minDistance;
 }
+*/
 
 
 void voronoi_f1_3d_euclidean( vec3 coord, float exponent, float randomness, out float outDistance ) //output color outColor, output vec3 outPosition 
@@ -576,8 +581,8 @@ void main( void ){
 	vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
 	vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
 	vec3 dir_cam		= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
-	float diffuse_lite	= clamp( dot( dir_light, norm ), 0.0, 1.0 );
-	//float diffuse_lite	= dot( dir_light, norm ) * 0.5 + 0.5;
+	//float diffuse_lite	= clamp( dot( dir_light, norm ), 0.0, 1.0 );
+	float diffuse_lite	= dot( dir_light, norm ) * 0.5 + 0.5;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//out_color.rgb = vec3( diffuse_lite );
@@ -585,37 +590,40 @@ void main( void ){
 	
 	float dist = 0.0;
 	//voronoi_distance_to_edge_3d( frag_lpos * coord_scale, randomness, dist );
-	voronoi_f1_3d_euclidean( frag_lpos * 5.0, 1.0, 1.0, dist ); 
+	voronoi_f1_3d_euclidean( frag_lpos * 9.0, 1.0, 1.0, dist ); 
 
 	//float lite = pow( diffuse_lite, 2.0 );
 	//float x = ( dist * 1.5 + lite) - 0.1;
-
-	float x = dist * 1.0 + diffuse_lite * light_strength;
+	//float x = dist * 1.0 + diffuse_lite * light_strength;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// COLOR RAMP
-	vec3 ramp_col[3]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9) );
-	float ramp_wgt[3]	= float[]( 0.0, 0.427386, 0.65 );
+	//vec3 ramp_col[3]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9) );
+	//float ramp_wgt[3]	= float[]( 0.0, 0.427386, 0.65 );
+	vec3 ramp_col[3]	= vec3[]( rgb(0xB85408), rgb(0xD1891D), rgb(0xF6FE57) );
+	float ramp_wgt[3]	= float[]( 0.0, 0.40, 0.60 );
 		
-	out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, x );
+	//out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, x );
 
-	//float xx = noise_texture( frag_lpos * 5.0,  0.0, 1.0, 3.55 );
-	float xx = noise_texture( vec3(dist) * 7.0,  0.0, 2.0, 3.55 ) * 0.5 + 0.5 ;
+	float n = noise_texture( vec3(dist) * 8.0,  2.0, 0.0, 1.6 ) * 0.5 + 0.5 ;
 
-	//out_color.rgb = vec3( step( 0.04, abs( dist ) ) );
-	//out_color.rgb = vec3( step( 0.02, dist ) );
-	out_color.rgb = vec3( xx );
+	//n = n * 0.3 - 0.1 + diffuse_lite;
+	//n = n * 0.9 + diffuse_lite * 0.1;
+	n = n * diffuse_lite;
 
-	if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+	//out_color.rgb = vec3( n );
+	out_color.rgb = color_step_ramp( ramp_col, ramp_wgt, n );
+
+	//if( dist < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
 	
 }`;
 
 //#####################################################
 
 function init_ui(){
-	elm_on_input( "coord_scale" );
-	elm_on_input( "randomness" );
-	elm_on_input( "light_strength" );
+	//elm_on_input( "coord_scale" );
+	//elm_on_input( "randomness" );
+	//elm_on_input( "light_strength" );
 	
 	document.getElementById("btn_tog_motion").addEventListener("click", ()=>{
 		if( !App.render_loop.active )	App.render_by( 1, on_render );
@@ -646,14 +654,15 @@ function elm_on_input( name ){
 .lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
 </style>
 </head><body><canvas id="pg_canvas"></canvas>
-	<a href="https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213" class="lnk">Blender File From : https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213</a>
+	<a href="https://twitter.com/Bookyakuno/status/1258800013804634112" class="lnk">Blender Nodes From : https://twitter.com/Bookyakuno/status/1258800013804634112</a>
 
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<!--
 		<prop-range label="Coord Scale" id="coord_scale" value="12" min=".01" max="50" step="0.01"></prop-range>
 		<prop-range label="Randomness" id="randomness" value="1.0" min="0.0" max="1.0" step="0.01"></prop-range>
 		<prop-range label="Light Strength" id="light_strength" value="0.66" min="0.0" max="1.0" step="0.01"></prop-range>
+		-->
 		<button id="btn_tog_motion">Animate Light Motion</button>
 		<button id="btn_tog_mesh">Sphere / Suzanne</button>
 	</prop-panel>
-
 </body></html>
