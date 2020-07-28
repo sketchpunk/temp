@@ -15,6 +15,7 @@ https://github.com/paperjs/paper.js/blob/develop/src/path/PathFitter.js
 
 https://github.com/cacheflowe/haxademic/blob/master/src/com/haxademic/core/draw/shapes/Icosahedron.java
 
+https://mapbox.github.io/delaunator/ Voronoi triangular
 
 //---------------------------------------
 // Planet Generator. Amazing Math Samples of how to create crator, like SmoothMin and SmoothMax
