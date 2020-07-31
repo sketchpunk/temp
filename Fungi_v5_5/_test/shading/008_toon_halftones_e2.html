@@ -11,7 +11,7 @@ import PropPanel	from "../../sage.ui/PropPanel.js";
 //#####################################################
 App
 	.init()
-	.set_camera( 0, 5, 2.0, -2, 0.5, 0 )
+	.set_camera( -30, 5, 2.0, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
@@ -254,7 +254,7 @@ void main( void ){
 	//out_color.rgb = vec3( d_lite_c );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	float uv_scale		= 100.0;
+	float uv_scale		= 140.0;
 	vec2 rot_uv			= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;	// Rotate Screen UV by 45d
 	vec2 cell_pos		= fract( uv_scale * rot_uv ) * 2.0 - 1.0;			// Scale UV, Cell Pos, Remap to -1,1
 
@@ -276,7 +276,7 @@ void main( void ){
 	float dd = step( rr, cell_pos_len );
 
 	//out_color.rgb = vec3( dd );
-	//out_color.rgb = mix( dotramp.color_a, dotramp.color_b, dd );
+	out_color.rgb = mix( dotramp.color_a, dotramp.color_b, dd );
 
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -293,21 +293,23 @@ void main( void ){
 	float r = dot_radius * spec_t;
 	float d = step( r, cell_pos_len );
 
-	out_color.rgb = vec3( 1.0 - d );
+	out_color.rgb += vec3( 1.0 - d );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// RIM
 	float dot_nl = d_lite * -1.0;
 	float rim_dot = 1.0 - dot( dir_cam, norm ) ;
-	float rim_rng = smoothstep( 0.5, 0.9, rim_dot * pow( dot_nl, 0.05) ); //
+	float rim_rng = smoothstep( 0.5, 0.9, rim_dot * pow( dot_nl, 0.03) ); //
 
-	//out_color.rgb = vec3( rim_dot * pow( dot_nl, 0.05) );
+	//out_color.rgb = vec3( rim_dot * pow( dot_nl, 0.09) );
 	//out_color.rgb = vec3( 1.0 - rim_rng * 1.0 );
 
 	float rrr = dot_radius * rim_rng;
 	float ddd = step( rrr, cell_pos_len );
 
-	out_color.rgb += vec3( 1.0 - ddd );
+	//out_color.rgb += vec3( 1.0 - ddd );
+	
+	out_color.rgb = mix( out_color.rgb, out_color.rgb * 0.4, 1.0-ddd );
 
 	//out_color.rgb += vec3( rim_rng * 0.2 );
 	//out_color.rgb = mix( out_color.rgb, vec3(0.0), rim_rng * 1.0 );
