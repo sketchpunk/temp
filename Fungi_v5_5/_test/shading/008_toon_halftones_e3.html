@@ -1,0 +1,305 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+//import Capsule		from "../../fungi/geo/Capsule.js";
+import Sphere		from "../../fungi/geo/UVSphere.js";
+import Points 		from "../../fungi/geo/Points.js";
+import Motion 		from "../../fungi.test/Motion.js";
+import GltfUtil		from "../../fungi/lib/GltfUtil.js";
+import XhrQueue		from "../../fungi/lib/XhrQueue.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( -30, 5, 2.0, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gMotion, gUbo, $mat;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt && App.render_loop.active ) gMotion( dt ); // Move Point
+	App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	$mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Mesh */
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, $mat );
+    e.node.set_pos( 0, 0.5, 0 );
+    
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Capsule 
+	( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 ) 
+	e = Capsule( "capsule", mat, 10, 8, 0.5, 0.25 ); 
+	e.node.set_pos( 0.5, 0.5, 0 ); 
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* Load Sphere 
+	y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false */
+	e = Sphere( "Sphere", $mat, 18, 25, 0.5, true, false );
+	e.node.set_pos( -2.0, 0.5, 0 );	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Show Light Location
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+	gPnt.node.set_pos( 4, 1.8, 5 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
+	//init_ui();
+	on_render();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#C9ACFF" ) ); //C9ACFF
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"coord_scale", type:"float", value:12.0 },
+		//{ name:"randomness", type:"float", value:1 },
+		//{ name:"light_strength", type:"float", value:0.66 },
+	], App.ubo.get_array( "Global", "Model", "Light" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+out vec2 screen_uv;
+
+void main(void){
+	vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_lpos 		= a_pos.xyz;
+	frag_wpos		= wpos.xyz;
+	frag_cam_pos	= global.camera_pos;
+	frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position     = global.proj_view * wpos;
+	gl_PointSize    = 8.0;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SCREEN SPACE UV
+	screen_uv.xy	= gl_Position.xy / gl_Position.w;
+	screen_uv.x 	*= global.screen_size.x / global.screen_size.y;	// Fix X Stretch
+	screen_uv.xy	= screen_uv.xy * 0.5 + 0.5;						// To -1,1 to 0,1
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+uniform Light{ 
+	vec3 pos;
+	vec3 color;
+} light;
+
+in vec3 frag_norm;
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+in vec2 screen_uv;
+
+//-------------------------
+
+vec3 rgb( int c ){
+	return vec3(
+		float( ( c >> 16 ) & 0xff ) * 0.00392156863,
+		float( ( c >> 8 ) & 0xff ) * 0.00392156863,
+		float( c & 0xff ) * 0.00392156863
+	);
+}
+
+struct DotRamp{
+  vec3 color_a;
+  vec3 color_b;
+  float t;
+};
+
+void color_dot_ramp2( vec3[5] color, float[5] wgt, float t, float feather, int i, out DotRamp dr ){
+	for( i; i > 0; i-- ){
+		if( ( wgt[ i ] ) <= t ){
+			dr.color_a	= color[ i-1 ];
+			dr.color_b	= color[ i ];
+			dr.t		= clamp( ( t - wgt[i] ) / feather, 0.0, 1.0 );
+			return;
+		}
+	}
+	dr.color_a	= color[ 0 ];
+	dr.color_b	= color[ 0 ];
+	dr.t		= 0.0;
+}
+
+//-------------------------
+float ease( float x ){ return 3.0 * x * x - 2.0 * x * x * x; }
+//float ease2( float x ){ return x * x * x * (x * (x * 6.0 - 15.0) + 10.0); }
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec3 norm 			= normalize( frag_norm );					// Must normalized, Since it has been interpolated
+	vec3 dir_light		= normalize( light.pos - frag_wpos );		// Frag to Light Directiom
+	vec3 dir_cam		= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
+	float d_lite		= dot( dir_light, norm );
+	float d_lite_c	    = clamp( d_lite, 0.0, 1.0 );	// Clamp Light
+	float d_lite_a	    = d_lite * 0.5 + 0.5;			// Remap Light from -1,1 to 0,1
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	float uv_scale		= 140.0;
+	vec2 rot_uv			= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;	// Rotate Screen UV by 45d
+	vec2 cell_pos		= fract( uv_scale * rot_uv ) * 2.0 - 1.0;			// Scale UV, Cell Pos, Remap to -1,1
+
+	float radius_max	= 2.0;					// Total Radius for Halftone Dots.
+	float cell_pos_len	= length( cell_pos );	// Distance from Cell Center
+
+	float radius_rng	= 0.0;					// What the Radius Range is after some math
+	float radius_step	= 0.0;					// Define the inner or outer part of the halftone circle.
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// COLOR RAMP
+
+	vec3	ramp_col[5]	= vec3[]( rgb(0x1D212A), rgb(0x2A4B53), rgb(0x81FFE9), vec3(.0), vec3(.0) );	
+	float	ramp_wgt[5]	= float[]( 0.0, 0.35, 0.75, .0, .0 );
+
+	// Get the Color based on the Angle of the Light in relation to normal
+	DotRamp dotramp;
+	color_dot_ramp2( ramp_col, ramp_wgt, d_lite_c, 0.17, 2, dotramp );
+
+	radius_rng		= radius_max * pow( 1.0 - dotramp.t, 1.4 );
+	radius_step		= step( radius_rng, cell_pos_len );
+	out_color.rgb	= mix( dotramp.color_a, dotramp.color_b, radius_step );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SPECULAR COLOR
+
+	vec3 half_dir	= normalize( dir_light + dir_cam ); 		// Direction between Light and Camera
+	float NdH		= clamp( dot( norm, half_dir ), 0.0, 1.0 );	// Angle of Norm to Half
+	float gloss		= 50.0;										// How Much Power to Raise Specular Light angle
+	float spec		= pow( NdH, gloss );
+	
+	radius_rng		= radius_max * ease( spec );				// Use an ease function to curve the light results
+	radius_step		= step( radius_rng, cell_pos_len );
+	out_color.rgb	+= vec3( 1.0 - radius_step );				// Invert the step to make specular into white
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// DIRECTIONAL RIM
+	float dot_nl	= d_lite * -1.0;
+	float rim_dot	= 1.0 - dot( dir_cam, norm ) ;
+	float rim_rng	= smoothstep( 0.5, 0.9, rim_dot * pow( dot_nl, 0.03) );
+
+	float shadow_strength = 0.4;
+
+	radius_rng		= radius_max * rim_rng;
+	radius_step		= 1.0 - step( radius_rng, cell_pos_len );
+	out_color.rgb	= mix( out_color.rgb, out_color.rgb * shadow_strength, radius_step );
+}`;
+
+// https://www.radicalforge.com/games/half-tone-shaders/
+// http://demos.radicalforge.com/halftone/
+
+// Directional Rim https://www.patreon.com/posts/15705239
+// https://roystan.net/articles/toon-shader.html
+// https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "coord_scale" );
+	elm_on_input( "randomness" );
+	elm_on_input( "light_strength" );
+	
+	document.getElementById("btn_tog_motion").addEventListener("click", ()=>{
+		if( !App.render_loop.active )	App.render_by( 1, on_render );
+		else 							App.render_by( 0 );
+	});
+
+	document.getElementById("btn_tog_mesh").addEventListener("click", ()=>{
+		if( App.ecs.is_entity_active( $a ) ){
+			App.ecs.set_entity_active( $a, false );
+			App.ecs.set_entity_active( $b, true );
+		}else{
+			App.ecs.set_entity_active( $a, true );
+			App.ecs.set_entity_active( $b, false );
+		}
+		App.render();
+	});
+}
+
+function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
+	});
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+.lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style>
+</head><body><canvas id="pg_canvas"></canvas>
+    <!--
+    <a href="https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213" class="lnk">Blender File From : https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213</a>
+    <prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="Coord Scale" id="coord_scale" value="12" min=".01" max="50" step="0.01"></prop-range>
+		<prop-range label="Randomness" id="randomness" value="1.0" min="0.0" max="1.0" step="0.01"></prop-range>
+		<prop-range label="Light Strength" id="light_strength" value="0.66" min="0.0" max="1.0" step="0.01"></prop-range>
+		<button id="btn_tog_motion">Animate Light Motion</button>
+		<button id="btn_tog_mesh">Sphere / Suzanne</button>
+	</prop-panel>
+    -->
+</body></html>
