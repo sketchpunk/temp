@@ -65,7 +65,7 @@ async function init( x ){
 	gMotion = Motion.circle( gPnt, 0.5, 3, 2 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
-	//init_ui();
+	init_ui();
 	on_render();
 	//App.render_by( 1, on_render );
 	return true;
@@ -89,7 +89,7 @@ function init_shader(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		//{ name:"coord_scale", type:"float", value:12.0 },
+		{ name:"uv_scale", type:"float", value:140.0 },
 		//{ name:"randomness", type:"float", value:1 },
 		//{ name:"light_strength", type:"float", value:0.66 },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
@@ -151,6 +151,9 @@ uniform Light{
 	vec3 color;
 } light;
 
+uniform float uv_scale;
+uniform float specular_pow;
+
 in vec3 frag_norm;
 in vec3 frag_cam_pos;
 in vec3 frag_wpos;
@@ -201,7 +204,11 @@ void main( void ){
 	float d_lite_a	    = d_lite * 0.5 + 0.5;			// Remap Light from -1,1 to 0,1
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	float uv_scale		= 140.0;
+	//float uv_scale		= 140.0;
+
+	// Experiment with changing scale based on distance from camera
+	//uv_scale = mix( 100.0, 180.0, clamp( length( frag_cam_pos - frag_wpos ) / 6.0, 0.0, 1.0 ) );
+
 	vec2 rot_uv			= mat2( 0.707, -0.707, 0.707, 0.707 ) * screen_uv;	// Rotate Screen UV by 45d
 	vec2 cell_pos		= fract( uv_scale * rot_uv ) * 2.0 - 1.0;			// Scale UV, Cell Pos, Remap to -1,1
 
@@ -259,10 +266,11 @@ void main( void ){
 //#####################################################
 
 function init_ui(){
-	elm_on_input( "coord_scale" );
-	elm_on_input( "randomness" );
-	elm_on_input( "light_strength" );
+	elm_on_input( "uv_scale" );
+	//elm_on_input( "randomness" );
+	//elm_on_input( "light_strength" );
 	
+	/*
 	document.getElementById("btn_tog_motion").addEventListener("click", ()=>{
 		if( !App.render_loop.active )	App.render_by( 1, on_render );
 		else 							App.render_by( 0 );
@@ -278,6 +286,7 @@ function init_ui(){
 		}
 		App.render();
 	});
+	*/
 }
 
 function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
@@ -286,20 +295,19 @@ function elm_on_input( name ){
 		update_mat( e.srcElement.id, parseFloat( e.srcElement.value ) );
 	});
 }
-
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
 .lnk{ position:absolute; bottom:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
 </style>
 </head><body><canvas id="pg_canvas"></canvas>
     <!--
-    <a href="https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213" class="lnk">Blender File From : https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213</a>
+    <a href="" class="lnk"></a>-->
     <prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
-		<prop-range label="Coord Scale" id="coord_scale" value="12" min=".01" max="50" step="0.01"></prop-range>
+		<prop-range label="UV Scale" id="uv_scale" value="140" min="10" max="200" step="0.01"></prop-range>
 		<prop-range label="Randomness" id="randomness" value="1.0" min="0.0" max="1.0" step="0.01"></prop-range>
 		<prop-range label="Light Strength" id="light_strength" value="0.66" min="0.0" max="1.0" step="0.01"></prop-range>
 		<button id="btn_tog_motion">Animate Light Motion</button>
 		<button id="btn_tog_mesh">Sphere / Suzanne</button>
 	</prop-panel>
-    -->
+
 </body></html>
