@@ -11,7 +11,7 @@ import PropPanel	from "../../sage.ui/PropPanel.js";
 //#####################################################
 App
 	.init()
-	.set_camera( -30, 5, 2.0, 0, 0.5, 0 )
+	.set_camera( -20, 5, 1.6, 0, 0.45, 0 )
 	.task( init )
 	.then();
 
@@ -90,8 +90,8 @@ function init_shader(){
 
 	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
 		{ name:"uv_scale", type:"float", value:140.0 },
-		//{ name:"randomness", type:"float", value:1 },
-		//{ name:"light_strength", type:"float", value:0.66 },
+		{ name:"specular_pow", type:"float", value:50.0 },
+		{ name:"shadow_strength", type:"float", value:0.4 },
 	], App.ubo.get_array( "Global", "Model", "Light" ) );
 }
 
@@ -153,6 +153,7 @@ uniform Light{
 
 uniform float uv_scale;
 uniform float specular_pow;
+uniform float shadow_strength;
 
 in vec3 frag_norm;
 in vec3 frag_cam_pos;
@@ -237,7 +238,7 @@ void main( void ){
 
 	vec3 half_dir	= normalize( dir_light + dir_cam ); 		// Direction between Light and Camera
 	float NdH		= clamp( dot( norm, half_dir ), 0.0, 1.0 );	// Angle of Norm to Half
-	float gloss		= 50.0;										// How Much Power to Raise Specular Light angle
+	float gloss		= specular_pow; //50.0;						// How Much Power to Raise Specular Light angle
 	float spec		= pow( NdH, gloss );
 	
 	radius_rng		= radius_max * ease( spec );				// Use an ease function to curve the light results
@@ -250,7 +251,7 @@ void main( void ){
 	float rim_dot	= 1.0 - dot( dir_cam, norm ) ;
 	float rim_rng	= smoothstep( 0.5, 0.9, rim_dot * pow( dot_nl, 0.03) );
 
-	float shadow_strength = 0.4;
+	//float shadow_strength = 0.4;
 
 	radius_rng		= radius_max * rim_rng;
 	radius_step		= 1.0 - step( radius_rng, cell_pos_len );
@@ -267,15 +268,14 @@ void main( void ){
 
 function init_ui(){
 	elm_on_input( "uv_scale" );
-	//elm_on_input( "randomness" );
-	//elm_on_input( "light_strength" );
+	elm_on_input( "specular_pow" );
+	elm_on_input( "shadow_strength" );
 	
-	/*
 	document.getElementById("btn_tog_motion").addEventListener("click", ()=>{
 		if( !App.render_loop.active )	App.render_by( 1, on_render );
 		else 							App.render_by( 0 );
 	});
-
+	/*
 	document.getElementById("btn_tog_mesh").addEventListener("click", ()=>{
 		if( App.ecs.is_entity_active( $a ) ){
 			App.ecs.set_entity_active( $a, false );
@@ -304,10 +304,8 @@ function elm_on_input( name ){
     <a href="" class="lnk"></a>-->
     <prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
 		<prop-range label="UV Scale" id="uv_scale" value="140" min="10" max="200" step="0.01"></prop-range>
-		<prop-range label="Randomness" id="randomness" value="1.0" min="0.0" max="1.0" step="0.01"></prop-range>
-		<prop-range label="Light Strength" id="light_strength" value="0.66" min="0.0" max="1.0" step="0.01"></prop-range>
+		<prop-range label="Specular Pow" id="specular_pow" value="50.0" min="1.0" max="80.0" step="0.1"></prop-range>
+		<prop-range label="Shadow Strength" id="shadow_strength" value="0.4" min="0.0" max="1.0" step="0.01"></prop-range>
 		<button id="btn_tog_motion">Animate Light Motion</button>
-		<button id="btn_tog_mesh">Sphere / Suzanne</button>
 	</prop-panel>
-
 </body></html>

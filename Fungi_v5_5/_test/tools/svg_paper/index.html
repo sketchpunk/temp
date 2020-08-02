@@ -1,6 +1,17 @@
 <!DOCTYPE html><script type="module">
 	//https://github.com/soswow/fit-curve
 
+/*
+var fitCurve = require('fit-curve');
+var points = [[0, 0], [10, 10], [10, 0], [20, 0]];
+var error = 50; // The smaller the number - the much closer spline should be
+
+var bezierCurves = fitCurve(points, error);
+// bezierCurves[0] === [[0, 0], [20.27317402, 20.27317402], [-1.24665147, 0], [20, 0]]
+// where each element is [x, y] and elements are [first-point, control-point-1, control-point-2, second-point]
+*/
+
+
 	let $svg;
 	window.addEventListener( "load", ()=>{
 		$svg = new Svg();

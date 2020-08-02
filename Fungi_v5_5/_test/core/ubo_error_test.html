@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+	html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+	body{ background-color:#404040; }
+	canvas{ border:0px solid green; }
+	div{ display:flex; width:100%; height:100%; align-items:center; justify-content:center; }
+</style>
+<script type="module">
+	window.addEventListener("load",function(){
+		matrix[0] = 1;
+		matrix[5] = 1;
+		matrix[10] = 1;
+		matrix[15] = 1;
+		matrix[12] = 0;
+		matrix[13] = 0;
+		matrix[14] = 0;
+
+		if(! init_gl() ) return;
+
+		init_ubo();
+		update_ubo();
+
+        if(! init_shader() ) return;
+		init_vao();
+		
+		gl.bindVertexArray( vao );
+
+		// DRAW
+		//gl.drawArrays( gl.POINTS, 0, 1 );
+		onDraw();
+	});
+
+	let time = 0;
+	function onDraw(){
+		time += 0.01;
+		matrix[12] = Math.sin( time );
+
+		update_ubo();
+		gl.drawArrays( gl.POINTS, 0, 1 );
+
+		requestAnimationFrame( onDraw );
+	}
+
+	//####################################################################
+	let gl, shader, vao, ubo,
+		bind_point	= 0,
+        matrix		= new Float32Array( 16 * 90 );
+
+	function init_gl(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Try to get the GL Context of the Canvas Object
+		let canvas	= document.getElementById("FungiCanvas"),
+			ctx		= canvas.getContext("webgl2");
+
+		if(! ctx){ console.error("WebGL Context is not available."); return false; }
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Load Extensions
+		// ctx.getExtension("EXT_color_buffer_float");	// Needed for Deferred Lighting
+		// ctx.getExtension("OES_texture_float_linear");
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup some Defaults for GL 
+		ctx.cullFace(	ctx.BACK );			// Back is also default
+		ctx.frontFace(	ctx.CCW );			// Dont really need to set it, its ccw by default.
+		ctx.enable( 	ctx.DEPTH_TEST );	// Shouldn't use this, use something else to add depth detection
+		ctx.enable( 	ctx.CULL_FACE );	// Cull back face, so only show triangles that are created clockwise
+		ctx.depthFunc( 	ctx.LEQUAL );		// Near things obscure far things
+		ctx.blendFunc( 	ctx.SRC_ALPHA,		// Setup default alpha blending
+						ctx.ONE_MINUS_SRC_ALPHA );
+
+		ctx.clearColor(	1.0, 1.0, 1.0, 1.0 );	// Set Background Color
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Set Canvas Size
+		let w = window.innerWidth,
+			h = window.innerHeight;
+
+		ctx.canvas.style.width	= w + "px";
+		ctx.canvas.style.height	= h + "px";
+		ctx.canvas.width		= w;
+		ctx.canvas.height		= h;
+
+		// when updating the canvas size, must reset the viewport of the canvas 
+		// else the resolution webgl renders at will not change
+		ctx.viewport( 0, 0, w, h );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl = ctx;
+		return true;
+	}
+
+	function init_shader(){
+		let vSrc = document.getElementById("sh_vertex").innerText.trim(),
+			fSrc = document.getElementById("sh_fragment").innerText.trim();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compile Vertex and Fragment Shaders
+		let vShader = gl.createShader( gl.VERTEX_SHADER );
+		gl.shaderSource( vShader, vSrc );
+		gl.compileShader( vShader );
+
+		if( !gl.getShaderParameter( vShader, gl.COMPILE_STATUS ) ){
+			console.error( "Error compiling shader : " + vSrc, gl.getShaderInfoLog( vShader ) );
+			gl.deleteShader( vShader );
+			return false;
+		}
+
+		let fShader = gl.createShader( gl.FRAGMENT_SHADER );
+		gl.shaderSource( fShader, fSrc );
+		gl.compileShader( fShader );
+		if( !gl.getShaderParameter( fShader, gl.COMPILE_STATUS ) ){
+			console.error( "Error compiling shader : " + fSrc, gl.getShaderInfoLog( fShader ) );
+			gl.deleteShader( vShader );
+			gl.deleteShader( fShader );
+			return false;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Link Shader Program
+		let prog = gl.createProgram();
+		gl.attachShader( prog, vShader );
+		gl.attachShader( prog, fShader );
+		gl.linkProgram( prog );
+
+		//Check if successfully linked.
+		if( !gl.getProgramParameter( prog, gl.LINK_STATUS ) ){
+			console.error( "Error linking shader program.", gl.getProgramInfoLog( prog ) );
+			gl.deleteProgram( prog );
+			gl.deleteShader( vShader );
+			gl.deleteShader( fShader );
+			return false;
+		}
+
+		// Only do extra validation if needed, this is optional
+		gl.validateProgram( prog );
+		if( !gl.getProgramParameter( prog, gl.VALIDATE_STATUS ) ){
+			console.error("Error validating program", gl.getProgramInfoLog( prog ) );
+			gl.deleteProgram( prog );
+			gl.deleteShader( vShader );
+			gl.deleteShader( fShader );
+			return false;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl.detachShader( prog, vShader ); 	// TODO, detaching might cause issues on some browsers, Might only need to delete.
+		gl.detachShader( prog, fShader );
+		gl.deleteShader( vShader );			// Can delete the shaders since the program has been made.
+		gl.deleteShader( fShader );
+		shader = prog;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl.useProgram( shader );
+
+		let u_color_loc = gl.getUniformLocation( shader, "u_color" );
+		gl.uniform3fv( u_color_loc, new Float32Array( [ 0, 1, 0 ] ) );
+
+		let ubo_loc = gl.getUniformBlockIndex( shader, "UBO" );
+		gl.uniformBlockBinding( shader, ubo_loc, bind_point );
+
+		return true;
+	}
+
+	function init_vao(){
+		const ATTRIB_POS = 0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vao = gl.createVertexArray();
+		gl.bindVertexArray( vao );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Vertex Data Buffer
+		let fAry 	= new Float32Array( [0, 0, 0] ),
+			vBuf 	= gl.createBuffer(),
+			compLen	= 3,
+			stride 	= 0,
+			offset	= 0;
+
+		gl.bindBuffer( gl.ARRAY_BUFFER, vBuf );											// Set as active buffer
+		gl.bufferData( gl.ARRAY_BUFFER, fAry, gl.STATIC_DRAW );							// Save data to buffer
+		gl.enableVertexAttribArray( ATTRIB_POS );										// Set which Attribute location for shaders
+		gl.vertexAttribPointer( ATTRIB_POS, compLen, gl.FLOAT, false, stride, offset );	// Define the Data in the Buffer
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl.bindVertexArray( null );
+		gl.bindBuffer( gl.ARRAY_BUFFER, null );
+	}
+
+    function init_ubo(){
+		ubo = gl.createBuffer();// Create Standard Buffer
+		gl.bindBuffer( gl.UNIFORM_BUFFER, ubo );								// Bind it for work
+		gl.bufferData( gl.UNIFORM_BUFFER, matrix.byteLength, gl.DYNAMIC_DRAW );	// Allocate Space in empty buf
+		gl.bindBuffer( gl.UNIFORM_BUFFER, null );								// Unbind
+		gl.bindBufferBase( gl.UNIFORM_BUFFER, bind_point, ubo );				// Save Buffer to Uniform Buffer Bind point
+    }
+
+	function update_ubo(){
+    	gl.bindBuffer(		gl.UNIFORM_BUFFER, ubo ); 
+		gl.bufferSubData(	gl.UNIFORM_BUFFER, 0, matrix, 0, 0 );
+		gl.bindBuffer(		gl.UNIFORM_BUFFER, null );
+	}
+</script></head><body>
+<div><canvas id="FungiCanvas"></canvas></div>
+
+<script id="sh_vertex" type="plain/text">
+#version 300 es
+layout(location=0) in vec3 a_position;
+
+uniform UBO{
+	mat4x4[90] mtx;
+} arm;
+
+vec4 test( mat4x4[90] mat, vec3 pos ){
+	return mat[ 0 ] * vec4( pos, 1.0 );
+}
+
+void main(void){
+	gl_PointSize = 30.0;
+
+	/* --------------------------------------
+	THIS USE TO WORK, PASSING MATRIX[] REFERENCE TO FUNCTION */
+	gl_Position = test( arm.mtx, a_position ); 
+
+	/* --------------------------------------
+	JUST MAKING A REFERENCE LOCALLY DOESN"T WORK EITHER 
+	mat4x4[ 90 ] tmp = arm.mtx;
+	gl_Position = tmp[ 0 ] * vec4( a_position, 1.0 ); */
+	
+	/* --------------------------------------
+	ONLY WAY IT WORKS NOW, USE VAR DIRECTLY 
+	gl_Position = arm.mtx[ 0 ] * vec4( a_position, 1.0 ); */
+
+	/* --------------------------------------
+	THIS ALSO WORKS 
+	mat4x4 tmp = arm.mtx[ 0 ];
+	gl_Position = tmp * vec4( a_position, 1.0 ); */
+}
+</script>
+
+<script id="sh_fragment" type="plain/text">
+#version 300 es
+precision mediump float;
+
+uniform vec3 u_color;
+out vec4 oFragColor;
+
+void main(void){ oFragColor = vec4( u_color, 1.0); }
+</script>
+
+</body>
+</html>
