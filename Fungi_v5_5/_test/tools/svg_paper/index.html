@@ -1,15 +1,328 @@
 <!DOCTYPE html><script type="module">
+import App from "./js/App.js";
+
+window.addEventListener( "load", ()=>{
+	globalThis.App = new App();
+});
+
 </script>
 <html>
 	<head>
+		<link href="lib/fontawesome/css/all.min.css" type="text/css" rel="stylesheet">
 		<style>
+			/* ////////////////////////////////////////////////////////////////////////////
+			GLOBAL
+			//////////////////////////////////////////////////////////////////////////// */
 			html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+			*{ font-family: monospace; }
+			a{ text-decoration:none; }
+			svg{ border:0px solid red; box-sizing: border-box; }
+
+			/* ////////////////////////////////////////////////////////////////////////////
+			MAIN UI
+			//////////////////////////////////////////////////////////////////////////// */
+
+			header{ border:0px solid blue; position:fixed; top:0px; width:100%; 
+				display:flex; flex-direction:row; justify-content:space-between;
+				align-items:center;
+			}
+
+			header > nav{ flex:0 1 auto;  margin:10px 10px 0px 10px; }
+
+			header > nav > a:hover{ background-color:#555555; }
+			header > nav > a{ font-size:16px; width:34px; height:34px; line-height:36px;
+				border-radius:50%; margin:0px 2px;
+				display:inline-block; box-sizing:border-box;
+				background-color:#333333; color: white;
+				text-align: center; text-decoration: none;
+				transition: background-color 0.3s ease-in;
+			}
+
+			footer{ position:fixed; bottom:0px; width:100%; color:black; font-size:11px; font-weight:900; margin:5px; }
+
+			/* ////////////////////////////////////////////////////////////////////////////
+			SVG BACKGROUNDS
+			//////////////////////////////////////////////////////////////////////////// */
+
+			.bg_grid{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23CFECFA' fill-opacity='1.00'%3E%3Cpath opacity='.5' d='M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9zm-1 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9z'/%3E%3Cpath d='M6 5V0H5v5H0v1h5v94h1V6h94V5H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+			}
+
+			.bg_hideout{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='0.09'%3E%3Cpath d='M0 38.59l2.83-2.83 1.41 1.41L1.41 40H0v-1.41zM0 1.4l2.83 2.83 1.41-1.41L1.41 0H0v1.41zM38.59 40l-2.83-2.83 1.41-1.41L40 38.59V40h-1.41zM40 1.41l-2.83 2.83-1.41-1.41L38.59 0H40v1.41zM20 18.6l2.83-2.83 1.41 1.41L21.41 20l2.83 2.83-1.41 1.41L20 21.41l-2.83 2.83-1.41-1.41L18.59 20l-2.83-2.83 1.41-1.41L20 18.59z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+			}
+
+			.bg_pnt_start{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg fill='%23000000' fill-opacity='0.1'%3E%3Cpolygon fill-rule='evenodd' points='8 4 12 6 8 8 6 12 4 8 0 6 4 4 6 0 8 4'/%3E%3C/g%3E%3C/svg%3E");
+			}
+
+			.bg_checkers{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cg fill='%23000000' fill-opacity='0.08'%3E%3Cpath fill-rule='evenodd' d='M0 0h4v4H0V0zm4 4h4v4H4V4z'/%3E%3C/g%3E%3C/svg%3E");
+			}
+
+			.bg_plus{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+			}
+
+			.bg_bubbles{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23000000' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E");
+			}
+
+			.bg_polka_dot{
+				background-color: #ffffff;
+				background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000000' fill-opacity='0.08' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='3'/%3E%3Ccircle cx='13' cy='13' r='3'/%3E%3C/g%3E%3C/svg%3E");
+			}
+
+			/* ////////////////////////////////////////////////////////////////////////////
+			HOVER LIST
+			//////////////////////////////////////////////////////////////////////////// */
+
+			.Hoverlist{ position:absolute; z-index:1000;
+				background: white; border-radius: 4px; box-shadow: 0px 0px 5px 0px #808080;
+				opacity:1.0; transition: opacity 0.3s ease-out; }
+
+			.Hoverlist.hide{ opacity:0.0; }
+
+			.Hoverlist > section{  }
+			.Hoverlist > section::-webkit-scrollbar{ width:8px }
+			.Hoverlist > section::-webkit-scrollbar-track{ background:#e0e0e0; border-radius:4px; }
+			.Hoverlist > section::-webkit-scrollbar-thumb{ background:#c0c0c0; border-radius:4px; }
+			
+			.Hoverlist > section > a{ text-decoration:none; }
+			.Hoverlist aX{ color:#888888; text-decoration:none; padding:5px 10px; transition: all 0.3s ease-out; }
+			.Hoverlist aX:hover{ background-color:#e0e0e0; color:black; }
+
+			/*Arrow -----------*/
+			.Hoverlist > div{ position:absolute; overflow: hidden;
+				width: 40px; height: 10px; top:-10px; left:50%;	transform:translate(-50%, 0px); } /* MASKS OUT AFTER STYLE */
+			.Hoverlist > div:after{ content:"";
+				position: absolute; width: 10px; height: 10px; left:15px; top: 5px;				
+				background: white; box-shadow: -1px -1px 3px #a0a0a0;
+				transform: rotate(45deg);
+			}
+
+
+
+
+			.Conn_Dash{ stroke-dasharray:20,5,5,5,5,5; stroke-width:10; stroke:#d0d0d0; animation: connDashOffset 30s linear infinite; }
+			@keyframes connDashOffset{
+				from{ stroke-dashoffset: 500; }
+				to{ stroke-dashoffset: 0; }
+			}
 		</style>
 	</head>
-<body>
-	<svg id="pg_canvas" width="500px" height="500px"></svg>
+<body class="bg_grid">
+	<svg id="pg_canvas" width="100%" height="100%"></svg>
 
+	<header>
+		<nav>
+			<a href="#" onClick="App.clear(); return false;"><i class="fas fa-trash-alt"></i></a>
+			<a href="#" title="FullScreen" onClick="full_screen_toggle(); return false;"><i class="fas fa-expand-alt"></i></a>
+
+			<!--
+			<a href="#"><i class="fas fa-download"></i></a>
+			
+			<a href="#"><i class="fas fa-bezier-curve"></i></a>
+			<a href="#" title="UNDO"><i class="fas fa-undo-alt"></i></a>
+			<a href="#" title="REDO"><i class="fas fa-redo-alt"></i></a>
+
+			<i class="fas fa-chevron-right"></i>
+			<i class="fas fa-chevron-left"></i>
+			<i class="fas fa-download"></i>
+			<i class="fas fa-trash-alt"></i>
+			<i class="fas fa-bezier-curve"></i>
+			<i class="fas fa-eraser"></i>
+			<i class="fas fa-paint-roller"></i>
+			<i class="fas fa-brush"></i>
+			<i class="fas fa-paint-brush"></i>
+			<i class="fas fa-bars"></i>
+			<i class="fas fa-ellipsis-v"></i>
+			<i class="fas fa-ellipsis-h"></i>
+			<i class="fas fa-circle"></i>
+			<i class="far fa-circle"></i>
+			<i class="fas fa-square"></i>
+			<i class="far fa-square"></i>
+			-->
+		</nav>
+
+		<nav>
+			<a href="#" title="BACKGROUND" onClick="hoverlist( this, 'MNU_BG_LIST', 10 );"><i class="fas fa-paint-roller"></i></a>
+			<a href="#" title="Line Color" onClick="hoverlist( this, 'MNU_COLOR', 10 );"><i class="fas fa-tint"></i></a>
+			<a href="#" title="Line Width" onClick="hoverlist( this, 'MNU_PEN', 10 );"><i class="fas fa-paint-brush"></i></a>
+			<a href="#"><i class="fas fa-ellipsis-v"></i></a>
+		</nav>
+	</header>
+
+
+	<footer>
+		SVG Paper v0.0.1 ALPHA 
+		:: Developed by SketchPunk Labs ( Pedro S. ) 
+		:: <a href="https://www.patreon.com/sketchpunk">Patreon Donations Accepted</a>
+		:: <a href="https://bitbucket.org/sketchpunk/sketchpunk.bitbucket.io/src/master/src/misc/svg_paper/">Source Code</a>
+	</footer>
+
+	<style>
+		.bg_list{ width:200px; margin:0px 4px 4px 4px; display:flex; flex-direction:column; }
+		.bg_list a{ height:100px; border:1px solid #d0d0d0; margin-top:4px; color:#888888; padding:5px 10px; transition: all 0.3s ease-out; display:block; }
+		.bg_list a:hover{ color:black; border-color:#000000; }
+	</style>
+
+	<div class="Hoverlist" id="MNU_BG_LIST" style="top:10px; left:-1000px;"><div></div>
+		<section style="max-height:300px; overflow-y:auto;" class="bg_list" onClick="on_bg_selection( event );">
+			<a href="#" class="bg_grid">Grid</a>
+			<a href="#" class="bg_hideout">Hideout</a>
+			<a href="#" class="bg_pnt_start">Point Start</a>
+			<a href="#" class="bg_checkers">Checkers</a>
+			<a href="#" class="bg_plus">Plus</a>
+			<a href="#" class="bg_bubbles">Bubbles</a>
+			<a href="#" class="bg_polka_dot">Polka Dot</a>
+		</section>
+	</div>
+
+
+	<style>
+		.color_list{ width:140px; margin:6px 4px 4px 4px; display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; }
+		.color_list span{ flex: 1 1 32%; border:0px solid red; text-align:center; }
+		.color_list a{ width:30px; height:30px; border-radius:50%; border-color:gray; border-width:2px; border-style:solid; display:inline-block; }
+	</style>
+
+	<div class="Hoverlist" id="MNU_COLOR" style="top:10px; left:-1000px;"><div></div>
+		<section class="color_list" onClick="on_color_selection( event );">
+			<span><a href="#" style="background-color:#000000"></a></span>
+			<span><a href="#" style="background-color:#ff0000"></a></span>
+			<span><a href="#" style="background-color:#00ff00"></a></span>
+			<span><a href="#" style="background-color:#0000ff"></a></span>
+			<span><a href="#" style="background-color:#00ffff"></a></span>
+			<span><a href="#" style="background-color:#ff00ff"></a></span>
+			<span><a href="#" style="background-color:#ffff00"></a></span>
+		</section>
+	</div>
+
+	<style>
+		.pen_list{ width:60px; margin:6px 4px 4px 4px; display:flex; flex-direction:column; }
+		.pen_list a{ border-color:#f0f0f0; border-width:1px; border-style:solid; display:inline-block; margin:1px 0px; font-size:14px; text-align:center; padding:2px 0px; color:gray; }
+		.pen_list a:hover{ border-color:#909090; color:black; }
+	</style>
+
+	<div class="Hoverlist" id="MNU_PEN" style="top:10px; left:-1000px;"><div></div>
+		<section class="pen_list" onClick="on_pen_selection( event );">
+			<a href="#">1</a>
+			<a href="#">2</a>
+			<a href="#">3</a>
+			<a href="#">4</a>
+			<a href="#">5</a>
+			<a href="#">6</a>
+			<a href="#">7</a>
+		</section>
+	</div>
+
+	
+	<script>
+		function on_bg_selection( e ){
+			let src = e.srcElement;
+			document.body.className = src.className;
+		}
+
+		function on_color_selection( e ){
+			let src = e.srcElement;
+			let rgb = src.style.backgroundColor;
+			//let str = '#' + rgb.substr(4, rgb.indexOf(')') - 4).split(',').map((color) => parseInt(color).toString(16)).join('');
+
+			App.sel_color = getHexColor(rgb);
+		}
+
+		function getHexColor( color ){
+			//if color is already in hex, just return it...
+			if( color.indexOf('#') != -1 ) return color;
+			
+			//leave only "R,G,B" :
+			color = color
+						.replace("rgba", "") //must go BEFORE rgb replace
+						.replace("rgb", "")
+						.replace("(", "")
+						.replace(")", "");
+			color = color.split(","); // get Array["R","G","B"]
+			
+			// 0) add leading #
+			// 1) add leading zero, so we get 0XY or 0X
+			// 2) append leading zero with parsed out int value of R/G/B
+			//    converted to HEX string representation
+			// 3) slice out 2 last chars (get last 2 chars) => 
+			//    => we get XY from 0XY and 0X stays the same
+			return  "#"
+					+ ( '0' + parseInt(color[0], 10).toString(16) ).slice(-2)
+					+ ( '0' + parseInt(color[1], 10).toString(16) ).slice(-2)
+					+ ( '0' + parseInt(color[2], 10).toString(16) ).slice(-2);
+		}
+
+		function on_pen_selection( e ){
+			let src = e.srcElement;
+			App.sel_stroke_size = parseInt( src.innerHTML );
+		}
+
+
+
+		function hoverlist( src, targ_id, offset=0 ){
+			let targ = document.getElementById( targ_id );
+			
+			if( !targ.dataset.init ){
+				targ.dataset.init = true;
+				targ.addEventListener('transitionend', function(e){
+					let elm = e.srcElement;				
+					if( elm === targ && elm.classList.contains( "hide" ) ){  elm.style.left = "-1000px"; }
+				});
+			}
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			let src_box		= src.getBoundingClientRect(),
+				targ_box	= targ.getBoundingClientRect(),
+				y 			= src_box.top + src_box.height + document.documentElement.scrollTop + offset,
+				x			= src_box.left + ( src_box.width / 2 ) - ( targ_box.width / 2 );
+
+			targ.style.top	= y + "px";
+			targ.style.left	= x + "px";
+			targ.classList.remove( "hide" );
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~		
+			// Setting now, triggers event, add delay
+			setTimeout( ()=>{ document.body.addEventListener( "click", _=>{ targ.classList.add( "hide" ); }, {once:true} ); }, 50 );
+		}
+	
+	
+
+		function full_screen_toggle(){
+			if( !document.fullscreenElement )	document.documentElement.requestFullscreen();
+			else if( document.exitFullscreen )	document.exitFullscreen(); 
+		}
+		/*
+		document.documentElement.addEventListener( "fullscreenchange", this.on_full_screen );
+		static on_full_screen(){
+			let i = PageLayout.fullscreen_btn.firstChild;
+			let s = PageLayout.fullscreen_btn.lastChild;
+			if(document.fullscreenElement){
+				i.classList.remove( "fa-expand-alt" );
+				i.classList.add( "fa-compress-alt" );
+				i.style.color = "lime";
+				s.innerHTML = "Minimize";		
+			}else{
+				i.classList.remove( "fa-compress-alt" );
+				i.classList.add( "fa-expand-alt" );
+				i.style.color = "red";
+				s.innerHTML = "Full Screen";
+			}
+		}
+		*/
+	</script>
+	<!--
 	https://css-tricks.com/snippets/css/css-grid-starter-layouts/
 	https://www.digitalocean.com/community/tutorials/css-css-grid-holy-grail-layout
+	http://127.0.0.1:1227/_test/tools/svg_paper/
+	-->
 </body>
 </html>
