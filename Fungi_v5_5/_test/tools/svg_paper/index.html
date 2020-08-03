@@ -1,139 +1,15 @@
 <!DOCTYPE html><script type="module">
-	//https://github.com/soswow/fit-curve
-
-/*
-var fitCurve = require('fit-curve');
-var points = [[0, 0], [10, 10], [10, 0], [20, 0]];
-var error = 50; // The smaller the number - the much closer spline should be
-
-var bezierCurves = fitCurve(points, error);
-// bezierCurves[0] === [[0, 0], [20.27317402, 20.27317402], [-1.24665147, 0], [20, 0]]
-// where each element is [x, y] and elements are [first-point, control-point-1, control-point-2, second-point]
-*/
-
-
-	let $svg;
-	window.addEventListener( "load", ()=>{
-		$svg = new Svg();
-		$svg.on( "mousedown", mouse_down );
-		
-		//$svg = document.getElementById( "pg_canvas" );
-		//$svg.addEventListener( "mousedown", mouse_down );
-	});
-
-	let OFFSET_X	= 0;
-	let OFFSET_Y	= 0;
-	let PNTS		= new Array();
-	let POLY 		= null;
-
-	function mouse_down( e ){
-		if( e.button == 2 ) return; // Right Click
-		if( e.button == 1 ) return; // Middle Click
-
-		let box	= $svg.svg.getBoundingClientRect();
-		let x	= e.clientX - box.left;
-		let y	= e.clientY - box.top;
-
-		OFFSET_X	= box.left;
-		OFFSET_Y	= box.top;
-		POLY		= $svg.new( "polyline", "fill:none; stroke:gray; stroke-width:1;" );
-
-		PNTS.length = 0;
-		PNTS.push( x, y );
-
-		POLY.setAttributeNS( null, "points", x + "," + y );
-
-		$svg.on( "mousemove", mouse_move );
-		$svg.on( "mouseup", mouse_up );
-		//$svg.circle( x, y );
-	}
-
-	function mouse_move( e ){
-		let x	= e.clientX - OFFSET_X;
-		let y	= e.clientY - OFFSET_Y;
-
-		let yy	= PNTS[ PNTS.length-1 ];
-		let xx	= PNTS[ PNTS.length-2 ];
-
-		let len = (x-xx)**2 + (y-yy)**2;
-
-		if( len < 10**2 ) return;  // Limit Point by only drawing the next point X Pixels away
-
-		let pnts = POLY.getAttributeNS( null, "points" );
-		pnts += " " + x + "," + y;
-		POLY.setAttributeNS( null, "points", pnts );
-		POLY.setAttributeNS( null, "class", "Conn_Dash" );
-
-		PNTS.push( x, y );
-	}
-
-	function mouse_up( e ){
-		let x	= e.clientX - OFFSET_X;
-		let y	= e.clientY - OFFSET_Y;
-
-		let pnts = POLY.getAttributeNS( null, "points" );
-		pnts += " " + x + "," + y;
-		POLY.setAttributeNS( null, "points", pnts );
-
-		PNTS.push( x, y );
-
-		$svg.off( "mousemove", mouse_move );
-		$svg.off( "mouseup", mouse_up );
-
-		console.log( PNTS );
-	}
-
-	class Svg{
-		// #region MAIN
-		constructor( elm="pg_canvas" ){
-			this.svg = ( typeof elm == "string" )? document.getElementById( elm ) : elm;
-		}
-		// #endregion ///////////////////////////////////////////////////////////////
-
-		// #region DATA
-		new( name, style=null ){
-			let elm = document.createElementNS( "http://www.w3.org/2000/svg", name );
-			if( style != null ) elm.setAttributeNS( null, "style", style );
-
-			this.svg.appendChild( elm );
-			return elm;
-		}
-		// #endregion ///////////////////////////////////////////////////////////////
-
-		// #region EVENTS
-		on( evt_name, fn ){ this.svg.addEventListener( evt_name, fn ); return this; }
-		off( evt_name, fn ){ this.svg.removeEventListener( evt_name, fn ); return this; }
-		// #endregion ///////////////////////////////////////////////////////////////
-
-		// #region SHAPES
-
-		// https://www.w3schools.com/graphics/svg_circle.asp
-		// <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red" />
-		circle( x, y, radius=3, style=null ){
-			let elm = this.new( "circle", style );
-			elm.setAttributeNS( null, "cx", x );
-			elm.setAttributeNS( null, "cy", y );
-			elm.setAttributeNS( null, "r", radius );
-			return elm;
-		}
-
-		//https://www.w3schools.com/graphics/svg_line.asp
-		//<line x1="0" y1="0" x2="200" y2="200" style="stroke:rgb(255,0,0);stroke-width:2" />
-
-		// https://www.w3schools.com/graphics/svg_polyline.asp
-		// <polyline points="20,20 40,25 60,40 80,120 120,140 200,180" style="fill:none;stroke:black;stroke-width:3" />
-
-		// #endregion ///////////////////////////////////////////////////////////////
-	}
 </script>
-<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }
-svg{ border:1px solid red; margin:20px; }
+<html>
+	<head>
+		<style>
+			html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+		</style>
+	</head>
+<body>
+	<svg id="pg_canvas" width="500px" height="500px"></svg>
 
-.Conn_Dash{ stroke-dasharray:20,5,5,5,5,5; stroke-width:2; stroke:black; animation: connDashOffset 30s linear infinite; }
-@keyframes connDashOffset{
-	from{ stroke-dashoffset: 500; }
-	to{ stroke-dashoffset: 0; }
-}
-
-</style>
-</head><body><svg id="pg_canvas" width="200px" height="200px"></svg></body></html>
+	https://css-tricks.com/snippets/css/css-grid-starter-layouts/
+	https://www.digitalocean.com/community/tutorials/css-css-grid-holy-grail-layout
+</body>
+</html>
