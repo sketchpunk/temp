@@ -1,4 +1,5 @@
-import App from "../../fungi/App.js";
+import App		from "../../fungi/App.js";
+import EyeBall	from "./EyeBall.js";
 
 const DINO_BONES = [
 	{"name":"hips","len":0.2409,"idx":0,"p_idx":null, "pos":[0,1.5999,0.0513],"rot":[3.038739464500395e-7,0.7205613851547241,0.6933911442756653,-2.550459612393752e-7]},
@@ -119,13 +120,15 @@ const DINO_CONFIG = [
 	{"name":"toe_c1.R","top":[0.06,0.07], "bot":[0.09,0.01] },
 ];
 
-function ProtoDino( name="ProtoDino", use_preview=false ){
+function ProtoDino( name="ProtoDino", inc_eye=false, use_preview=false ){
 	let e = App.mesh_entity( name );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// CREATE ARMATURE
 	let arm = App.ecs.add_com( e.id, "Armature" );
-	arm.load_config( DINO_BONES );
+	arm
+		.load_config( DINO_BONES )
+		.anchor_root_bones( e.node );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// BONE PREVIEW
@@ -141,6 +144,22 @@ function ProtoDino( name="ProtoDino", use_preview=false ){
 	let pro = App.ecs.add_com( e.id, "ProtoForm" );
 	pro.use_armature( arm, DINO_CONFIG );
 	e.draw.items.push( pro.get_draw_item() );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// EYEBALL
+	if( inc_eye ){
+		let eye_l = EyeBall();
+		let eye_r = EyeBall();
+
+		eye_l.node.set_pos( -0.28, 0.0, 0.15 ).set_scl( 0.2 ).rot_by( -90, "y" ).rot_by( -20, "x" );
+		eye_r.node.set_pos( 0.28, 0.0, 0.15 ).set_scl( 0.2 ).rot_by( 90, "y" ).rot_by( -20, "x" );
+		
+		arm.attach_to_bone( "head", eye_l.node );
+		arm.attach_to_bone( "head", eye_r.node );
+		
+		e.eye_l = eye_l;
+		e.eye_r = eye_r;
+	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	e.proto	= pro;

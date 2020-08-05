@@ -47,13 +47,11 @@ export default async( App, config )=>{
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	if( config.protoform ){
-		let pr = await import( "./ProtoForm.js" );
-
-		App.ecs.components.reg( pr.default );
-		App.ecs.systems.reg( pr.ProtoFormSys, 810 );
-		pr.LoadShader();
-		console.log( "[ Armature : ProtoForm ]" );
+	if( config.spring ){
+		let o = await import( "./BoneSpring.js" );
+		App.ecs.components.reg( o.default );
+		App.ecs.systems.reg( o.BoneSpringSys, 700 );
+		console.log( "[ Armature : BoneSpring ]" );
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

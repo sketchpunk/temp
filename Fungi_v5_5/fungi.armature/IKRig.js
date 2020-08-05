@@ -185,6 +185,16 @@ class IKRig{
 		this.chains[ name ] = ch;
 		return this;
 	}
+
+	get_chain_indices( ch_name ){
+		let ch = this.chains[ ch_name ];
+		if( !ch ) return null;
+
+		let ary = new Array( ch.bones.length );
+		for( let i=0; i < ch.bones.length; i++ ) ary[ i ] = ch.bones[ i ].idx;
+
+		return ary;
+	}
 	// #endregion /////////////////////////////////////////////////////////
 }
 

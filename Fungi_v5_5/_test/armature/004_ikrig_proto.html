@@ -8,31 +8,33 @@ import IKTarget		from "../../fungi.armature/IKTarget.js";
 import { Animation, PoseAnimator } from "../../fungi.armature/Animation.js";
 
 import ProtoHuman	from "../../fungi.protoform/rigs/ProtoHuman.js";
+import ProtoDino	from "../../fungi.protoform/rigs/ProtoDino.js";
 
 //#####################################################
 App
 	.init( true )
-	.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+	.load_pkg( { name:"fungi.armature", bone_view:true, spring:true, mat:true } )
 	.load_pkg( { name:"fungi.protoform", mat:"Halftone" } )
 	.use_debug()
-	.set_camera( 20, 20, 3.0, 0, 0.7, 0 )
+	.set_camera( 40, 20, 6.0, 0, 0.7, 0 )
 	.task( init )
 	.then();
 
 //#####################################################
-let $anim, $animator, $src, $mesh, $ikpose, $proto;
+let $anim, $animator, $src, $mesh, $ikpose, $proto, $dino;
 
 async function init(){
 	let dl = await XhrQueue.url( "../../files/" )
 		.grp( "src", "anim/Walking.gltf", "json", "anim/Walking.bin", "bin" )
 		//.grp( "src", "anim/Catwalk.gltf", "json", "anim/Catwalk.bin", "bin" )
-		.grp( "ma", "models/vegeta.gltf", "json", "models/vegeta.bin", "bin" )
+		//.grp( "ma", "models/vegeta.gltf", "json", "models/vegeta.bin", "bin" )
 	;
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	load_src( dl.src.json, dl.src.bin );
-	load_mesh( dl.ma.json, dl.ma.bin );
+	//load_mesh( dl.ma.json, dl.ma.bin );
 	load_proto();
+	load_dino();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//on_render( 0.6 );
@@ -53,11 +55,15 @@ function on_render( dt, ss ){
 	IKCompute.run( $src.rig, $ikpose );
 	IKVisualize.run( $src.rig, $ikpose );
 
-	$ikpose.apply_rig( $mesh.rig );
-	$mesh.rig.pose.apply();
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//$ikpose.apply_rig( $mesh.rig );
+	//$mesh.rig.pose.apply();
 
 	$ikpose.apply_rig( $proto.rig );
 	$proto.rig.pose.apply();
+
+	$ikpose.apply_rig( $dino.rig );
+	$dino.rig.pose.apply();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	pose.apply();
@@ -118,11 +124,59 @@ function load_mesh( json, bin ){
 
 function load_proto(){
 	$proto = ProtoHuman( "PHuman", true );
-	$proto.node.set_pos( -0.9, 0, 0 );
+	$proto.node.set_pos( 0.9, 0, 0 );
 
 	$proto.rig = new IKRig()
 		.use_armature( $proto.arm )
 		.use_maximo();	
+}
+
+function load_dino(){
+	$dino = ProtoDino( "PDino", true );
+	$dino.node.set_pos( -1.5, 0, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// CUSTOM RIG
+	let rig = new IKRig().use_armature( $dino.arm );
+	rig
+		.add_point( "hip", "hips" )
+		.add_point( "head", "head" )
+		.add_point( "foot_l", "foot.L" )
+		.add_point( "foot_r", "foot.R" )
+		.add_point( "armx_l", "arm_fore.L" )
+		.add_point( "armx_r", "arm_fore.R" )
+
+		.add_chain( "leg_r", [ "leg_0.R", "leg_1.R", "leg_2.R" ], "foot.R", "three_bone" )
+		.add_chain( "leg_l", [ "leg_0.L", "leg_1.L", "leg_2.L" ], "foot.L", "three_bone" )
+		.add_chain( "spine", [ "spine1", "spine2" ] )
+		.add_chain( "tail", ["tail0","tail1","tail2","tail3","tail4","tail5","tail6"] );
+
+	$dino.rig = rig;
+	App.ecs.add_com( $dino.id, rig );	// Add Rig as Component
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SETUP ALT DIRECTIONS
+	rig.points.hip.set_alt_dir( Vec3.FORWARD, Vec3.UP, rig.tpose );
+	rig.points.head.set_alt_dir( Vec3.FORWARD, Vec3.UP, rig.tpose );
+	rig.points.foot_l.set_alt_dir( Vec3.FORWARD, Vec3.UP, rig.tpose );
+	rig.points.foot_r.set_alt_dir( Vec3.FORWARD, Vec3.UP, rig.tpose );
+
+	rig.chains.leg_l.set_alt_dir( Vec3.DOWN, Vec3.FORWARD, rig.tpose );
+	rig.chains.leg_r.set_alt_dir( Vec3.DOWN, Vec3.FORWARD, rig.tpose );	
+	rig.chains.spine.set_alt_dir( Vec3.UP, Vec3.FORWARD, rig.tpose, true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// CHAIN LEN LIMITS
+	rig.chains.leg_l.len_limit = 1.55;
+	rig.chains.leg_r.len_limit = 1.55;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SPRING BONES
+	let sbone = App.ecs.add_com( $dino.id, "BoneSpring" );
+	sbone
+		.add( rig.get_chain_indices( "tail" ), 2.5, 0.9, -0.02 )
+		.add( rig.points.armx_l.idx, 3.0, 0.9 )
+		.add( rig.points.armx_r.idx, 3.0, 0.9 );
 }
 
 //#####################################################
@@ -204,7 +258,8 @@ class IKPose{
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// How much of the Chain length to use to calc End Effector
 		//let len = ( rig.leg_len_lmt || chain.len ) * limb.len_scale;
-		let len = chain.len * ik_info.len_scale;
+		//let len = chain.len * ik_info.len_scale;
+		let len = ( chain.len_limit || chain.len ) * ik_info.len_scale;
 
 		// Next we pass our info to the Target which does a some pre computations that solvers may need.
 		this.target.from_pos_dir( c_tran.pos, ik_info.look_dir, ik_info.twist_dir, len );	// Setup IK Target

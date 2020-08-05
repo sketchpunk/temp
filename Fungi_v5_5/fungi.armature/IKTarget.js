@@ -212,14 +212,14 @@ class IKTarget{
 				
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// Bone A 
-			this._aim_bone2( chain, tpose, p_wt, rot );		// Aim the first bone toward the target oriented with the bend direction.
+			this._aim_bone( chain, tpose, p_wt, rot );		// Aim the first bone toward the target oriented with the bend direction.
 
 			rad	= Maths.lawcos_sss( a_len, ta_len, bh_len );	// Get the Angle between First Bone and Target.
 			rot
 				.pmul_axis_angle( this.axis.x, -rad )			// Rotate the the aimed bone by the angle from SSS
 				.pmul_invert( p_wt.rot );							// Convert to Bone's Local Space by mul invert of parent bone rotation
 
-			pose.set_bone( bind_a.idx, rot );
+			pose.set_local_rot( bind_a.idx, rot );
 
 			pose_a.world
 				.copy( p_wt )
@@ -233,7 +233,7 @@ class IKTarget{
 				.pmul_axis_angle( this.axis.x, rad )			// Rotate it by the target's x-axis .pmul( tmp.from_axis_angle( this.axis.x, rad ) )
 				.pmul_invert( pose_a.world.rot );				// Convert to Local Space in temp to save WS rot for next bone.
 
-			pose.set_bone( bind_b.idx, rot );
+			pose.set_local_rot( bind_b.idx, rot );
 
 			pose_b.world
 				.copy( pose_a.world )
@@ -246,7 +246,7 @@ class IKTarget{
 				.pmul_axis_angle( this.axis.x, -rad )				// Rotate it by the target's x-axis
 				.pmul_invert( pose_b.world.rot );									// Convert to Bone's Local Space
 
-			pose.set_bone( bind_c.idx, rot );
+			pose.set_local_rot( bind_c.idx, rot );
 
 			pose_c.world
 				.copy( pose_b.world )

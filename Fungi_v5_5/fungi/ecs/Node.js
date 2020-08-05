@@ -124,7 +124,7 @@ class Node{
 			// Parents Exist, loop till reaching the root
 			let n = this;
 			while( n.parent != null ){
-				n = n.parent.Node;
+				n = n.parent;
 				tf.add_rev( n.local );
 			}
 		}
