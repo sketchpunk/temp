@@ -26,7 +26,7 @@ function on_render( dt, ss ){
 }
 
 async function init( ){	
-	let img	= await XhrQueue.url( "../../files/textures/", 
+	 let img	= await XhrQueue.url( "../../files/textures/", 
 		"noise_clouds_01.png",
 		//"ft-sonyred6400hi.jpg",
 	).then();
@@ -39,11 +39,16 @@ async function init( ){
 	$mat		= App.shader.new_material( "TESTER", { 
 		heightmap_tex : tex0,
 	});
-
+	
 	//let mat = App.shader.new_material( "TESTER" );
+	//$mat = App.shader.new_material( "LowPoly" );
 
 	let e = UVSphere( "Eye", $mat, 18, 25, 0.5, true, true );
 	e.node.set_pos( 0, 0.6, 0 );
+
+	//e.draw.items[ 0 ].draw_mode = 0;
+
+	//console.log( e );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* Show Light Location

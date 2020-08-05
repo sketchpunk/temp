@@ -1,9 +1,15 @@
 import App, { Vec3 } from "../App.js";
 
 function Sphere( name, mat, y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false ){
-	let geo 	= Sphere.geo( y_len, x_len, radius, close_loop, pole_fwd );
-	let mesh	= App.mesh.from_data( name, geo.vert, 3, geo.idx, geo.norm, geo.uv );
+	let mesh = Sphere.mesh(  name, y_len, x_len, radius, close_loop, pole_fwd );
+	//let geo 	= Sphere.geo( y_len, x_len, radius, close_loop, pole_fwd );
+	//let mesh	= App.mesh.from_data( name, geo.vert, 3, geo.idx, geo.norm, geo.uv );
 	return App.mesh_entity( "Sphere", mesh, mat, App.mesh.TRI_STRIP ); //TRI_STRIP
+}
+
+Sphere.mesh = function( name, y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false ){
+	let geo = Sphere.geo( y_len, x_len, radius, close_loop, pole_fwd );
+	return  App.mesh.from_data( name, geo.vert, 3, geo.idx, geo.norm, geo.uv );
 }
 
 Sphere.geo = function( y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=false ){
@@ -38,7 +44,7 @@ function verts( y_len=18, x_len=25, radius = 0.5, close_loop=true, pole_fwd=fals
 	// Switch Y to Z Direction so the north pole is drawn forward instead of up.
 	if( pole_fwd ){
 		y_axis[ 1 ] = 0;
-		y_axis[ 0 ] = 1; 
+		y_axis[ 2 ] = 1; 
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

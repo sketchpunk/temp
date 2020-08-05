@@ -1,0 +1,506 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+
+import IKRig		from "../../fungi.armature/IKRig.js";
+import IKTarget		from "../../fungi.armature/IKTarget.js";
+import { Animation, PoseAnimator } from "../../fungi.armature/Animation.js";
+
+import ProtoHuman	from "../../fungi.protoform/rigs/ProtoHuman.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+	.load_pkg( { name:"fungi.protoform", mat:"Halftone" } )
+	.use_debug()
+	.set_camera( 20, 20, 3.0, 0, 0.7, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let $anim, $animator, $src, $mesh, $ikpose, $proto;
+
+async function init(){
+	let dl = await XhrQueue.url( "../../files/" )
+		.grp( "src", "anim/Walking.gltf", "json", "anim/Walking.bin", "bin" )
+		//.grp( "src", "anim/Catwalk.gltf", "json", "anim/Catwalk.bin", "bin" )
+		.grp( "ma", "models/vegeta.gltf", "json", "models/vegeta.bin", "bin" )
+	;
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	load_src( dl.src.json, dl.src.bin );
+	load_mesh( dl.ma.json, dl.ma.bin );
+	load_proto();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//on_render( 0.6 );
+	App.render_by( 1, on_render );
+	return true;
+}
+
+function on_render( dt, ss ){
+	let pose = $src.rig.pose;
+	$animator.tick( dt * 1.0 ).update( $anim, pose );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+	// Maximo animation needs a Root Transform
+	pose.root_offset.copy( $src.node.local );
+	pose.clear_root_motion( 0, 1 );
+	pose.update_world();
+
+	IKCompute.run( $src.rig, $ikpose );
+	IKVisualize.run( $src.rig, $ikpose );
+
+	$ikpose.apply_rig( $mesh.rig );
+	$mesh.rig.pose.apply();
+
+	$ikpose.apply_rig( $proto.rig );
+	$proto.rig.pose.apply();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	pose.apply();
+}
+
+function load_src( json, bin ){
+	let e = GltfUtil.get_bone_only_entity( "src_bones", json, bin );
+	e.draw.items[ 0 ].material.set_depth_test( true );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let rig = new IKRig().use_armature( e.arm );
+
+	rig.pose.root_offset.copy( e.node.local );
+	rig.tpose.root_offset.copy( e.node.local );
+	rig.tpose.update_world().recompute_bone_len();
+
+	// Generate Chains after Offset + World Update + New Bone Lenths
+	rig.use_maximo();	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let data	= Gltf.get_animation( json, bin, null, true );
+	$anim		= Animation.from_gltf( data );
+	$animator	= new PoseAnimator();
+
+	$ikpose		= new IKPose();
+
+	$src = {
+		rig		: rig,
+		node	: e.node,
+		arm		: e.arm,
+	};
+}
+
+function load_mesh( json, bin ){
+	let e = GltfUtil.get_skin_view_entity( "Target", json, bin, "LowPolySkin" );
+
+	e.node.set_pos( 0.9, 0, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~/~~~~~~~~~~~~~~~~~~~~~~~
+	// Load TPose + IKRig
+	let tpose = e.arm.new_pose( "tpose" );
+	GltfUtil.load_pose( tpose, json, "tpose", false );
+	tpose.update_world().apply();
+
+	let rig = new IKRig()
+		.use_armature( e.arm, tpose )
+		.use_maximo();
+
+	rig.points.head.idx = rig.points.neck.idx;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$mesh = {
+		rig		: rig,
+		node	: e.node,
+		arm		: e.arm,
+	};
+}
+
+function load_proto(){
+	$proto = ProtoHuman( "PHuman", true );
+	$proto.node.set_pos( -0.9, 0, 0 );
+
+	$proto.rig = new IKRig()
+		.use_armature( $proto.arm )
+		.use_maximo();	
+}
+
+//#####################################################
+
+// Hold the IK Information, then apply it to a Rig
+class IKPose{
+	target = new IKTarget();		// IK Solvers
+
+	hip = {
+		bind_height	: 0,			// Use to help Scale movement.
+		movement	: new Vec3(),	// How Much Movement the Hip did in world space
+		look_dir	: new Vec3(),
+		twist_dir	: new Vec3(),
+	};
+
+    foot_l = { look_dir:new Vec3(), twist_dir:new Vec3() };
+	foot_r = { look_dir:new Vec3(), twist_dir:new Vec3() };
+
+	// IK Data for limbs is first the Direction toward the End Effector,
+	// The scaled length to the end effector, plus the direction that
+	// the KNEE or ELBOW is pointing. For IK Targeting, Dir is FORWARD and
+	// joint dir is UP
+	leg_l = { len_scale:0,	look_dir:new Vec3(), twist_dir:new Vec3() };
+	leg_r = { len_scale:0,	look_dir:new Vec3(), twist_dir:new Vec3() };
+	arm_l = { len_scale:0,	look_dir:new Vec3(), twist_dir:new Vec3() };
+    arm_r = { len_scale:0,	look_dir:new Vec3(), twist_dir:new Vec3() };
+    
+	spine = [
+		{ look_dir: new Vec3(), twist_dir: new Vec3() },
+		{ look_dir: new Vec3(), twist_dir: new Vec3() },
+	];
+
+	head = { look_dir: new Vec3(), twist_dir: new Vec3() };
+
+	apply_rig( rig ){
+		this.apply_hip( rig );
+
+		this.apply_limb( rig, rig.chains.leg_l, this.leg_l );
+		this.apply_limb( rig, rig.chains.leg_r, this.leg_r );
+
+		this.apply_look_twist( rig, rig.points.foot_l, this.foot_l );
+		this.apply_look_twist( rig, rig.points.foot_r, this.foot_r );
+
+		this.apply_chain_ends( rig, rig.chains.spine, this.spine );
+		
+		if( rig.chains.arm_l ) this.apply_limb( rig, rig.chains.arm_l, this.arm_l );
+		if( rig.chains.arm_r ) this.apply_limb( rig, rig.chains.arm_r, this.arm_r );
+
+		this.apply_look_twist( rig, rig.points.head, this.head );
+	}
+
+	apply_hip( rig ){
+		let b_info	= rig.points.hip,
+			bind 	= rig.tpose.bones[ b_info.idx ],	// TPose which is our Bind Pose
+			pose 	= rig.pose.bones[ b_info.idx ];		// Our Working Pose.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Handle Rotation first, it uses Look & Twist
+		this.apply_look_twist( rig, b_info, this.hip, Vec3.FORWARD, Vec3.UP );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Translation
+		let h_scl	= bind.world.pos.y / this.hip.bind_height;	// Create Scale value from Src's Hip Height and Target's Hip Height
+		let pos		= Vec3
+			.scale( this.hip.movement, h_scl )		// Scale the Translation Differnce to Match this Models Scale
+			.add( bind.world.pos );					// Then Add that change to the TPose Position
+
+		rig.pose.set_local_pos( b_info.idx, pos );	// Save Position to Pose
+	}
+
+	apply_limb( rig, chain, ik_info, grounding=0 ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Get the chain's parent world space transform plus the first bone of the chain.
+		let p_tran = new Transform(),	
+			c_tran = new Transform();
+
+		rig.pose.get_parent_world( chain.first(), p_tran, c_tran );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// How much of the Chain length to use to calc End Effector
+		//let len = ( rig.leg_len_lmt || chain.len ) * limb.len_scale;
+		let len = chain.len * ik_info.len_scale;
+
+		// Next we pass our info to the Target which does a some pre computations that solvers may need.
+		this.target.from_pos_dir( c_tran.pos, ik_info.look_dir, ik_info.twist_dir, len );	// Setup IK Target
+
+		//if( grounding ) this.apply_grounding( grounding );
+
+		// Each Chain is assigned a IK Solver that will bend the bones to the right places
+		let solver = chain.ik_solver || "limb";
+
+		// The IK Solver will update the pose with the results of the operation. We pass in the
+		// parent for it to use it to return things back into local space.
+		this.target[ solver ]( chain, rig.tpose, rig.pose, p_tran );
+	}
+
+	apply_look_twist( rig, b_info, ik ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let bind 	= rig.tpose.bones[ b_info.idx ],
+			pose 	= rig.pose.bones[ b_info.idx ];
+
+		// Get the bone's parent World Space Rotation.
+		// Then compute the Bone's WS rotation as if its local rot
+		// has not change from the initial rotation of the tpose.
+		let p_rot 	= rig.pose.get_parent_rot( b_info.idx );
+		let c_rot 	= Quat.mul( p_rot, bind.local.rot );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Using Bone's WS Rotation, compute its Alt Forward Direction
+		let now_look_dir = Vec3.transform_quat( b_info.alt_fwd, c_rot );
+
+		// Now compute the swing rotation and apply
+		// it to our bone's current WS rotation
+		let rot = Quat
+			.unit_vecs( now_look_dir, ik.look_dir )	// Create our Swing Rotation
+			.mul( c_rot );							// Then Apply to our foot
+		
+		// Next we compute the current Alt Up direction from the bones
+		// swing modified WS rotation. Use this direction with the IK
+		// direction to create a Twist Rotation that we then apply to our bones rotation.
+		let now_twist_dir	= Vec3.transform_quat( b_info.alt_up, rot );
+		let twist 			= Quat.unit_vecs( now_twist_dir, ik.twist_dir  );
+		rot.pmul( twist );	// Apply Twist
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		rot.pmul_invert( p_rot );					// To Local Space
+		rig.pose.set_local_rot( b_info.idx, rot );	// Save to pose.		
+	}
+
+    apply_grounding( y_lmt ){
+		// Once we have out IK Target setup, We can use its data to test various things
+		// First we can test if the end effector is below the height limit. Each foot
+		// may need a different off the ground offset since the bones rarely touch the floor
+		// perfectly.
+		if( this.target.end_pos.y >= y_lmt ) return;
+
+		/* DEBUG IK TARGET */
+		let tar		= this.target,
+			posA	= Vec3.add( tar.start_pos, [-1,0,0] ),
+			posB	= Vec3.add( tar.end_pos, [-1,0,0] );
+		App.Debug
+			.pnt( posA , "yellow", 0.05, 6 )
+			.pnt( posB , "white", 0.05, 6 )
+			.ln( posA, posB , "yellow", "white", true );
+
+		// Where on the line between the Start and end Points would work for our
+		// Y Limit. An easy solution is to find the SCALE based on doing a 1D Scale
+		//operation on the Y Values only. Whatever scale value we get with Y we can use on X and Z
+		
+		let a = this.target.start_pos,
+			b = this.target.end_pos,
+			s = (y_lmt - a.y) / (b.y - a.y); // Normalize Limit Value in the Max/Min Range of Y.
+
+		// Change the end effector of our target
+		this.target.end_pos.set( 
+			(b.x-a.x) * s + a.x, // We scale the 1D Range then apply it to the start
+			y_lmt, 
+			(b.z-a.z) * s + a.z
+		);
+
+		/* DEBUG NEW END EFFECTOR */
+		App.Debug.pnt( Vec3.add(this.target.end_pos,[-1,0,0]) , "orange", 0.05, 6 );
+
+		// Since we changed the end effector, lets update the Sqr Length and Length of our target
+		// This is normally computed by our IK Target when we set it, but since I didn't bother
+		// to create a method to update the end effector, we need to do these extra updates.
+		// IDEALLY i should make that function to prevent bugs :)
+		this.target.len_sqr		= Vec3.len_sqr( this.target.start_pos, this.target.end_pos );
+		this.target.len			= Math.sqrt( this.target.len_sqr );
+    }
+
+	apply_chain_ends( rig, chain, ik ){
+		// For the spline, we have the start and end IK directions. Since spines can have various
+		// amount of bones, the simplest solution is to lerp from start to finish. The first
+		// spine bone is important to control offsets from the hips, and the final one usually
+		// controls the chest which dictates where the arms and head are going to be located.
+		// Anything between is how the spine would kind of react.
+
+		// Since we are building up the Skeleton, We look at the pose object to know where the Hips
+		// currently exist in World Space.
+
+		let cnt			= chain.bone_cnt - 1,						// How Many Spine Bones to deal with
+			p_rot		= rig.pose.get_parent_rot( chain.first() ),	// World Space Rotation of the spine's parent, usually the hips
+			c_rot		= new Quat(),	// Current Bones Rotation
+			ik_look		= new Vec3(),	// Lerp IK Look Dir
+			ik_twist	= new Vec3(),	// Lerp IK Twist Dir
+			now_look	= new Vec3(),	// Look dir at a given moment
+			now_twist	= new Vec3(),	// Twist Dir at a given moment
+			q 			= new Quat(),	// Temp Rotation
+			rot 		= new Quat();	// Working Rotation
+
+		let t, idx, bind, pose, alt_look, alt_twist;
+
+		for( let i=0; i <= cnt; i++ ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Prepare for the Iteration
+			idx		= chain.bones[ i ].idx;		// Bone Index
+			bind	= rig.tpose.bones[ idx ];	// Bind Values of the Bone
+			t 		= ( i / cnt );// ** 2;		// The Lerp Time, be 0 on first bone, 1 at final bone, Can use curves to distribute the lerp differently
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Lerp our Target IK Directions for this bone
+			ik_look.from_lerp(	ik[0].look_dir,		ik[1].look_dir,		t );
+			ik_twist.from_lerp(	ik[0].twist_dir,	ik[1].twist_dir,	t );
+
+			// Get refernce to bones Alt Directions
+			alt_look	= chain.alt_dir[ i ].fwd;
+			alt_twist	= chain.alt_dir[ i ].up;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			c_rot.from_mul( p_rot, bind.local.rot );	// Get bone in WS that has yet to have any rotation applied
+			now_look.from_quat( c_rot, alt_look );		// What direction is the bone point looking now, without any extra rotation
+
+			rot
+				.from_unit_vecs( now_look, ik_look )	// Create our Swing Rotation
+				.mul( c_rot );							// Then Apply to our Bone, so its now swong to match the swing direction.
+
+			now_twist.from_quat( rot, alt_twist );		// Get our Current Twist Direction from Our Swing Rotation
+			q.from_unit_vecs( now_twist, ik_twist  );	// Create our twist rotation
+			rot.pmul( q );								// Apply Twist so now it matches our IK Twist direction
+
+			rot.pmul_invert( p_rot );					// To Local Space
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			rig.pose.set_local_rot( idx, rot );			// Save back to pose
+			if( t != 1 ) p_rot.mul( rot );	// Compute the WS Transform for the next bone in the chain.
+		}
+	}
+}
+
+
+// Read the current pose of a Rig then compute data to be saved to IK Pose.
+class IKCompute{
+	static run( rig, ik_pose ){
+		rig.pose.update_world();	// First thing, We need to compute WS Transforms for all the bones.
+		App.Debug.reset();			// For this example, Lets reset visual debug for every compute.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.hip( rig, ik_pose );
+
+		this.limb( rig.pose, rig.chains.leg_l, ik_pose.leg_l );
+        this.limb( rig.pose, rig.chains.leg_r, ik_pose.leg_r );
+        
+        this.look_twist( rig, rig.points.foot_l, ik_pose.foot_l );
+        this.look_twist( rig, rig.points.foot_r, ik_pose.foot_r );
+
+		this.chain_ends( rig, rig.chains.spine, ik_pose );
+
+		this.limb( rig.pose, rig.chains.arm_l, ik_pose.arm_l );
+        this.limb( rig.pose, rig.chains.arm_r, ik_pose.arm_r );
+        
+        this.look_twist( rig, rig.points.head, ik_pose.head );
+	}
+
+	static hip( rig, ik_pose ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let b_info	= rig.points.hip,					// Rig Hip Info
+			pose 	= rig.pose.bones[ b_info.idx ],		// Animated Pose Bone
+			bind 	= rig.tpose.bones[ b_info.idx ];	// TPose Bone
+
+		// Compute the Look / Twist direction of the hip bone
+		this.look_twist( rig, b_info, ik_pose.hip,  Vec3.FORWARD, Vec3.UP );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Position
+		ik_pose.hip.bind_height	= bind.world.pos.y;	// The Bind Pose Height of the Hip, Helps with scaling.
+		ik_pose.hip.movement.from_sub( pose.world.pos, bind.world.pos );	// Difference of position between TPose and Pose.
+	}
+
+	static limb( pose, chain, ik_limb  ){
+		let boneA	= pose.bones[ chain.first() ],	// First Bone
+			boneB	= pose.bones[ chain.end_idx ],	// END Bone, which is not part of the chain (Hand,Foot)
+			ab_dir	= Vec3.sub( boneB.world.pos, boneA.world.pos ),	// Direction from First Bone to Final Bone ( IK Direction )
+			ab_len	= ab_dir.len();									// Distance from First Bone to Final Bone 
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute the final IK Information needed for the Limb
+		ik_limb.len_scale = ab_len / chain.len;	// Normalize the distance base on the length of the Chain.
+		ik_limb.look_dir.copy( ab_dir.norm() );	// We also normalize the direction to the end effector.
+
+		// We use the first bone of the chain plus the Pre computed ALT UP to easily get the direction of the joint
+		let j_dir	= Vec3.transform_quat( chain.alt_dir[0].up, boneA.world.rot );
+		let lft_dir	= Vec3.cross( j_dir, ab_dir );					// We need left to realign up
+		ik_limb.twist_dir.from_cross( ab_dir, lft_dir ).norm(); 	// Recalc Up, make it orthogonal to LEFT and FWD
+	}
+
+    static look_twist( rig, b_info, ik ){
+		let pose = rig.pose.bones[ b_info.idx ],	// Animated Pose Bone
+			bind = rig.tpose.bones[ b_info.idx ];	// TPose Bone
+
+		// Compute the Alternate Directions of the bone.
+		ik.look_dir.from_quat( pose.world.rot, b_info.alt_fwd );
+		ik.twist_dir.from_quat(	pose.world.rot, b_info.alt_up );
+	}
+
+	static chain_ends( rig, chain, ik_pose ){
+		let idx_ary		= [ 0, chain.bone_cnt-1 ], // First and Last Bone of the Chain.
+			j			= 0,
+			ik, idx, dir, pose;
+
+		for( let i of idx_ary ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			idx		= chain.bones[ i ].idx;
+			dir		= chain.alt_dir[ i ];
+			pose	= rig.pose.bones[ idx ];
+			ik		= ik_pose.spine[ j ];
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			ik.look_dir.from_quat( pose.world.rot, dir.fwd );
+			ik.twist_dir.from_quat( pose.world.rot, dir.up );
+			j++;
+		}
+
+	}
+}
+
+// How to visualize the IK Pose Informaation to get an Idea of what we're looking at.
+class IKVisualize{
+	static run( rig, ik ){
+		this.hip( rig, ik );
+
+		this.limb( rig.pose, rig.chains.leg_l, ik.leg_l );
+		this.limb( rig.pose, rig.chains.leg_r, ik.leg_r );
+		this.limb( rig.pose, rig.chains.arm_l, ik.arm_l );
+        this.limb( rig.pose, rig.chains.arm_r, ik.arm_r );
+        
+		this.look_twist( rig, rig.points.foot_l, ik.foot_l );
+		this.look_twist( rig, rig.points.foot_r, ik.foot_r );
+
+       	this.chain_ends( rig, rig.chains.spine, ik.spine );
+        
+       	this.look_twist( rig, rig.points.head, ik.head );
+	}
+
+	static hip( rig, ik ){
+		let ws = rig.pose.bones[ rig.points.hip.idx ].world;
+		App.Debug.pnt( ws.pos, "orange", 0.09, 6 );
+		this.look_twist( rig, rig.points.hip, ik.hip, Vec3.FORWARD, Vec3.UP );
+	}
+
+	static limb( pose, chain, ik ){
+		let len		= chain.len * ik.len_scale,
+			posA	= pose.bones[ chain.first() ].world.pos,		// Starting Point in Limb
+			posB	= Vec3.scale( ik.look_dir, len ).add( posA ),	// Direction + Length to End Effector
+			posC	= Vec3.scale( ik.twist_dir, 0.2 ).add( posA );	// Direction of Joint
+
+		App.Debug
+			.pnt( posA, "yellow", 0.05, 6 )
+			.pnt( posB, "orange", 0.05, 6 )
+			.ln( posA, posB, "yellow", "orange", true )
+			.ln( posA, posC, "yellow", null, true );
+    }
+    
+    // Was Originally called Foot.
+	static look_twist( rig, b_info, ik, look_dir, twist_dir ){
+		let pos = rig.pose.bones[ b_info.idx ].world.pos;
+		App.Debug
+            .pnt( pos, "cyan", 0.03, 1 )											    // Foot Position
+			.ln( pos, Vec3.scale( ik.look_dir, 0.2 ).add( pos ), "cyan", null, true )	// IK.DIR
+			.ln( pos, Vec3.scale( ik.twist_dir, 0.2 ).add( pos ), "cyan", null, true );	// RESULT OF IK.TWIST
+	}
+	
+	static chain_ends( rig, chain, ik_ary ){
+		let ws, ik, idx = [ chain.first(), chain.last() ];
+
+		for( let i=0; i < 2; i++ ){
+			ws = rig.pose.bones[ idx[i] ].world;
+			ik = ik_ary[ i ];
+
+			App.Debug
+				.pnt( ws.pos, "cyan", 0.025, 1 )
+				.ln( ws.pos, Vec3.scale( ik.look_dir, 0.2 ).add(ws.pos), "cyan", null )
+				.ln( ws.pos, Vec3.scale( ik.twist_dir, 0.2 ).add(ws.pos), "yellow", null );
+		}
+	}
+}
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

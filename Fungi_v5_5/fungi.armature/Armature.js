@@ -77,6 +77,20 @@ class Armature{
 		this.ready();
 		return this;
 	}
+
+	attach_to_bone( bname, node ){
+		let n = this.get_node( bname );
+		if( n ) n.add_child( node );
+		return this;
+	}
+
+	anchor_root_bones( node ){
+		let i=0;
+		for( i; i < this.bones.length; i++ ){
+			if( this.bones[ i ].p_idx == null ) node.add_child( this.nodes[ i ] );
+		}
+		return this;
+	}
     // #endregion /////////////////////////////////////////////////////////////
 
 	// #region GETTERS/SETTERS

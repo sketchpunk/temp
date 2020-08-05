@@ -7,15 +7,22 @@ export default async( App, config )=>{
 	App.ecs.systems.reg( ProtoFormSys, 810 );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+	let sh;
 	switch( config.mat ){
-		default:
-			let pr = await import( "./ShadeDiffuse.js" );
-			pr.default(); // Initializes the Shader
-			break;
+		//-------------------------------
+		case "Halftone":
+			sh = await import( "./ShadeHalftone.js" );
+			sh.default();
+		break;
 
+		//-------------------------------
+		default:
+			sh = await import( "./ShadeDiffuse.js" );
+			sh.default(); // Initializes the Shader
+		break;
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	console.log( "[ Protoform Package Ready ]" );
+	let type_id = App.ecs.components.get_type_id( "ProtoForm" );
+	console.log( "[ Protoform Package Ready - TypeID : "+type_id+" ]" );
 };

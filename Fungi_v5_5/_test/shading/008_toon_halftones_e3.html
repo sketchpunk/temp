@@ -202,7 +202,7 @@ void main( void ){
 	vec3 dir_cam		= normalize( frag_cam_pos - frag_wpos );	// Frag tp Camera Direction
 	float d_lite		= dot( dir_light, norm );
 	float d_lite_c	    = clamp( d_lite, 0.0, 1.0 );	// Clamp Light
-	float d_lite_a	    = d_lite * 0.5 + 0.5;			// Remap Light from -1,1 to 0,1
+	//float d_lite_a	    = d_lite * 0.5 + 0.5;			// Remap Light from -1,1 to 0,1
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//float uv_scale		= 140.0;

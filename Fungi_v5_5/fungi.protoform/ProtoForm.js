@@ -65,7 +65,6 @@ class ProtoForm{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 		
 		// (arc_div-1) * lathe_cnt + 1 == Dome Vert Count
 		let geo 	= Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )

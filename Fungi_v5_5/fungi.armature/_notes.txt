@@ -1,0 +1,16 @@
+
+// Interesting Way to compute the Direction a Knee or Elbow, For Pole Placement
+https://gist.github.com/chris-lesage/0fcc9a344f2096cf6c82a353cb735b3e
+
+
+https://rigmarolestudio.com/matrix-pinning-to-surface-in-maya/
+https://gist.github.com/chris-lesage/0dd01f1af56c00668f867393bb68c4d7
+
+// Spline IK
+https://rigmarolestudio.com/maya_remapvalue_slerp/
+
+https://rigmarolestudio.com/rigging-spherical-eyes/
+
+
+// Control Vertices with Control points to create bulg
+https://chrislesage.com/posts/sliding-bulging-effects-with-softmods/
