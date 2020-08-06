@@ -5,8 +5,9 @@ const vert_src = `#version 300 es
 	layout(location=1) in vec3 a_norm;
 	layout(location=2) in vec2 a_uv;
 
-	layout(location=10)	in vec4 a_ins_rot;
-	layout(location=11)	in vec3 a_ins_pos;
+	layout(location=9)	in vec4 a_ins_rot;
+	layout(location=10)	in vec3 a_ins_pos;
+	layout(location=11)	in vec3 a_ins_scl;
 
 	layout(location=12)	in vec4 a_cfg_top;
 	layout(location=13)	in vec4 a_cfg_bot;
@@ -62,7 +63,7 @@ const vert_src = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Transform Instances
-		pos 		= quat_mul_vec3( a_ins_rot, pos );
+		pos 		= quat_mul_vec3( a_ins_rot, pos * a_ins_scl );
 		pos 		+= a_ins_pos;
 
 		vec4 wpos	= vec4( pos, 1.0 ); //model.view_matrix * 

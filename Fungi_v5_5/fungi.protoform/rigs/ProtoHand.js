@@ -54,7 +54,8 @@ function ProtoHand( name="ProtoHand", use_preview=false ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// CREATE ARMATURE
 	let arm = App.ecs.add_com( e.id, "Armature" );
-	arm.load_config( MAXIMO_BONES );
+	arm	.load_config( MAXIMO_BONES )
+		.anchor_root_bones( e.node );
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// BONE PREVIEW

@@ -18,6 +18,7 @@ class ProtoForm{
 		this.trans_buffer = new InterleavedFloatArray([
 			{ name:"rot",	size:4 },
 			{ name:"pos",	size:3 },
+			{ name:"scl",	size:3 },
 		], bcnt, 0, true );
 
 		this.config_buffer = new InterleavedFloatArray([
@@ -86,7 +87,7 @@ class ProtoForm{
 			{ name:"normal", buffer:norm_buf, attrib_loc:App.shader.NORM_LOC, instanced:false, },
 			// Instances
 			{ name:"cfg", buffer:cfg_buf, instanced:true, interleaved: this.config_buffer.generate_config( 12 ) },
-			{ name:"tran", buffer:tran_buf, instanced:true, interleaved: this.trans_buffer.generate_config( 10 ) },
+			{ name:"tran", buffer:tran_buf, instanced:true, interleaved: this.trans_buffer.generate_config( 9 ) },
 		];
 
 		this.mesh = App.mesh.from_buffer_config( bconfig, "PRMesh", geo.idx.length, cfg.len );
@@ -118,7 +119,7 @@ class ProtoForm{
 			//this.pos_buffer.set( n.world.pos, i*3 );
 			//this.scl_buffer.set( n.world.scl, i*3 );
 
-			this.trans_buffer.set( i, n.world.rot, n.world.pos );
+			this.trans_buffer.set( i, n.world.rot, n.world.pos, n.world.scl );
 		}
 	
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

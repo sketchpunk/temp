@@ -1,0 +1,203 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat }	from "../../fungi/App.js";
+import XhrQueue 					from "../../fungi/lib/XhrQueue.js";
+import GltfUtil,{Gltf}				from "../../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App.builder()
+	.load_shaders( "../fungi.armature/LowPolySkin.js" )
+	.use_armature()
+	.set_camera( 40, 10, 2.5, 0, 0.75, 0 )
+	.add( init )
+	//.render_loop( on_draw )
+	.render_on_mouse()
+	.build();
+
+//#####################################################
+let $animate, $pose;
+function on_draw( dt, ss ){
+	//$animate.next( dt, $pose );
+	//$pose.apply();
+}
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOAD MESH
+	let [ json, bin ]	= await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
+	let mat				= App.new_mat( "LowPolySkin" ); // { color:"white" }
+	let aa 				= GltfUtil.get_skin_mesh( "test", json, bin, mat );
+	let bb 				= GltfUtil.get_skin_mesh( "test", json, bin, mat );
+	//let e 				= GltfUtil.get_debug_view( "test", json, bin, mat );
+
+	aa.Node.set_pos( -0.5, 0, 0 );
+	bb.Node.set_pos( 0.5, 0, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// DEFINE OUR WORKING POSES
+	let pose_a	= aa.Armature.new_pose();	// Define First Pose
+	let pose_b	= bb.Armature.new_pose();	// Define Second Pose
+
+	// Wide Pose
+	pose_a
+		.rot_world_axis_angle( "LeftUpLeg", Vec3.LEFT, Math.PI * -0.5 )
+		.rot_world_axis_angle( "LeftLeg", Vec3.LEFT, Math.PI * 0.5 )
+		.rot_world_axis_angle( "RightUpLeg", Vec3.LEFT, Maths.to_rad( 33 ) )
+		.rot_world_axis_angle( "RightLeg", Vec3.LEFT, Maths.to_rad( 80 ) )
+
+		.rot_world_axis_angle( "LeftForeArm", Vec3.UP, Math.PI * -0.5 )
+		.rot_world_axis_angle( "LeftArm", Vec3.FORWARD, Maths.to_rad( -70 ) )
+		.rot_world_axis_angle( "LeftArm", Vec3.LEFT, Maths.to_rad( 75 ) )
+		
+		.rot_world_axis_angle( "RightForeArm", Vec3.UP, Maths.to_rad( 110 ) )
+		.rot_world_axis_angle( "RightArm", Vec3.FORWARD, Maths.to_rad( 70 ) )
+		.rot_world_axis_angle( "RightArm", Vec3.LEFT, Maths.to_rad( -45 ) )
+	;
+	pose_a.apply();
+
+	// Transition Pose
+	pose_b
+		.rot_world_axis_angle( "LeftUpLeg", Vec3.LEFT, Maths.to_rad( -20 ) )
+		.rot_world_axis_angle( "LeftLeg", Vec3.LEFT, Maths.to_rad( 130 ) )
+		.rot_world_axis_angle( "RightForeArm", Vec3.UP, Maths.to_rad( 30 ) )
+		.rot_world_axis_angle( "RightArm", Vec3.FORWARD, Maths.to_rad( 70 ) )
+		.rot_world_axis_angle( "LeftForeArm", Vec3.UP, Maths.to_rad( -30 ) )
+		.rot_world_axis_angle( "LeftArm", Vec3.FORWARD, Maths.to_rad( -70 ) )
+	;
+	pose_b.apply();
+
+
+	return true;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// BUILD Animation Frames from the Two Pose
+	let r_idx, l_idx, track;
+	$animate = new Animator();
+
+	//------------------------------
+	// LEGS
+	l_idx = arm.name_map[ "LeftUpLeg" ];
+	r_idx = arm.name_map[ "RightUpLeg" ];
+	track = new Track( l_idx )
+		.add( pose_b.get_local_rot( l_idx ), false )
+		.add( pose_a.get_local_rot( l_idx ), false )
+		.add( pose_b.get_local_rot( r_idx ), true )
+		.add( pose_a.get_local_rot( r_idx ), true );
+
+	$animate.tracks.push( track );
+
+	track = new Track( r_idx )
+		.add( pose_b.get_local_rot( r_idx ), false )
+		.add( pose_a.get_local_rot( r_idx ), false )
+		.add( pose_b.get_local_rot( l_idx ), true )
+		.add( pose_a.get_local_rot( l_idx ), true );
+
+	$animate.tracks.push( track );
+
+	l_idx = arm.name_map[ "LeftLeg" ];
+	r_idx = arm.name_map[ "RightLeg" ];
+	track = new Track( l_idx )
+		.add( pose_b.get_local_rot( l_idx ), false )
+		.add( pose_a.get_local_rot( l_idx ), false )
+		.add( pose_b.get_local_rot( r_idx ), true )
+		.add( pose_a.get_local_rot( r_idx ), true );
+	$animate.tracks.push( track );
+
+	track = new Track( r_idx )
+		.add( pose_b.get_local_rot( r_idx ), false )
+		.add( pose_a.get_local_rot( r_idx ), false )
+		.add( pose_b.get_local_rot( l_idx ), true )
+		.add( pose_a.get_local_rot( l_idx ), true );
+	$animate.tracks.push( track );
+
+	//------------------------------
+	// ARMS
+	l_idx = arm.name_map[ "LeftArm" ];
+	r_idx = arm.name_map[ "RightArm" ];
+	track = new Track( l_idx )
+		.add( pose_b.get_local_rot( l_idx ), false )
+		.add( pose_a.get_local_rot( l_idx ), false )
+		.add( pose_b.get_local_rot( r_idx ), true )
+		.add( pose_a.get_local_rot( r_idx ), true );
+	$animate.tracks.push( track );
+
+	track = new Track( r_idx )
+		.add( pose_b.get_local_rot( r_idx ), false )
+		.add( pose_a.get_local_rot( r_idx ), false )
+		.add( pose_b.get_local_rot( l_idx ), true )
+		.add( pose_a.get_local_rot( l_idx ), true );
+	$animate.tracks.push( track );
+
+	l_idx = arm.name_map[ "LeftForeArm" ];
+	r_idx = arm.name_map[ "RightForeArm" ];
+	track = new Track( l_idx )
+		.add( pose_b.get_local_rot( l_idx ), false )
+		.add( pose_a.get_local_rot( l_idx ), false )
+		.add( pose_b.get_local_rot( r_idx ), true )
+		.add( pose_a.get_local_rot( r_idx ), true );
+	$animate.tracks.push( track );
+
+	track = new Track( r_idx )
+		.add( pose_b.get_local_rot( r_idx ), false )
+		.add( pose_a.get_local_rot( r_idx ), false )
+		.add( pose_b.get_local_rot( l_idx ), true )
+		.add( pose_a.get_local_rot( l_idx ), true );
+	$animate.tracks.push( track );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//$animate.next( 0.1, $pose );
+	//$pose.apply();
+	return true;
+}
+
+
+// Each Bone gets its own Track of Frames.
+class Track{
+	frames		= new Array();
+	bone_idx	= null;
+	constructor( b_idx ){ this.bone_idx = b_idx; }
+	add( bone_rot, mirror_x=false ){
+		let f = { rot : bone_rot.clone() };
+		if( mirror_x ) f.rot.mirror_x();
+		this.frames.push( f );
+		return this;
+	}
+}
+
+// Super Bare Bones Animator
+class Animator{
+	time		= 0;			// Current Time of the Animation
+	time_len	= 2;			// Total Length of Animation
+	frame_cnt 	= 4;			// How many Frames in Animation
+	tracks		= new Array();	// List of tracks
+
+	next( dt, pose ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.time	= (this.time + dt) % this.time_len;
+		let t		= this.time / this.time_len;
+		let fa, fb, ft;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Figure out which two frames that the current time lives at.
+		if( t >=1 ){
+			fa = this.frame_cnt - 1;
+			fb = 0;
+			ft = 1;
+		}else{
+			t	= t * this.frame_cnt;			// Frame Index and Fraction between
+			fa	= Math.floor( t );				// Starting Frame Index
+			fb	= ( fa + 1 ) % this.frame_cnt;	// Ending Frame Index
+			ft	= ( t - fa ); 					// Just get the fraction part FRACT(x)
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Loop over all the tracks, compute lerp between the two frames
+		let track, qa, qb, q = new Quat();
+		for( track of this.tracks ){
+			qa = track.frames[ fa ].rot;		// Get Frame Rotations
+			qb = track.frames[ fb ].rot;
+			Quat.nblend( qa, qb, ft, q );		// Lerp, Quadrant Fix, Norm
+			pose.set_bone( track.bone_idx, q );	// Save it back to the pose.
+		}
+	}
+}
+</script><page-layout></page-layout>

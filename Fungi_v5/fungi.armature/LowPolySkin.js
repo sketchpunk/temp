@@ -28,7 +28,7 @@ const vert_src = `#version 300 es
 	} arm;
 
 	//------------------------------------------
-
+	/*
 	vec3 mtx_bone_transform( vec3 pos, mat4x4[90] pose_mtx, vec4 b_idx, vec4 b_wgt ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// NORMALIZE BONE WEIGHT VECTOR 
@@ -50,16 +50,42 @@ const vert_src = `#version 300 es
 
 		return ( wgt_mtx * vec4( pos, 1.0 ) ).xyz;
 	}
+	*/
+	
+	vec4 mtx_bone_transform( vec3 pos, vec4 b_idx, vec4 b_wgt ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// NORMALIZE BONE WEIGHT VECTOR 
+		
+		int a = int( b_idx.x ),
+			b = int( b_idx.y ),
+			c = int( b_idx.z ),
+			d = int( b_idx.w );
+
+		b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WEIGHT
+
+		mat4x4 wgt_mtx	=	arm.bones[ a ] * b_wgt.x +  
+							arm.bones[ b ] * b_wgt.y +
+							arm.bones[ c ] * b_wgt.z +
+							arm.bones[ d ] * b_wgt.w;
+
+		vec4 rtn = wgt_mtx * vec4( pos, 1.0 );
+		return rtn;
+	}
+
 
 	//------------------------------------------
 
 	void main(void){
-		vec3 pos		= mtx_bone_transform( a_pos, arm.bones, a_bone_idx, a_bone_wgt );
+		//vec3 pos		= mtx_bone_transform( a_pos, arm.bones, a_bone_idx, a_bone_wgt );
+		vec4 pos		= mtx_bone_transform( a_pos, a_bone_idx, a_bone_wgt );
 		
-		frag_pos		= pos;
+		frag_pos		= pos.xyz;
 		frag_cam_pos	= global.camera_pos;
 
-		gl_Position		= global.proj_view * vec4( pos, 1.0 );
+		gl_Position		= global.proj_view * pos;
 	}`;
 
 const frag_src = `#version 300 es
