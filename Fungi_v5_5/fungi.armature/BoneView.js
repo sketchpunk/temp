@@ -1,4 +1,4 @@
-import App from "../../fungi/App.js";
+import App from "../fungi/App.js";
 
 class BoneView{
 	armature	= null;

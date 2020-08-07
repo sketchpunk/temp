@@ -57,3 +57,21 @@ https://www.karlsims.com/rd.html
 //---------------------------------------
 // DEFORMERS
 https://github.com/keenanwoodall/Deform/tree/develop  Even has elastic
+
+
+//---------------------------------------
+// LINKAGES
+
+https://github.com/hrldcpr/linkages
+https://www.openprocessing.org/sketch/375382/
+https://codepen.io/2Mogs/pen/gJBQwR
+https://codepen.io/2Mogs/pen/XvNdGK
+https://codepen.io/MisterKeefe/pen/rKOmvd
+
+
+//---------------------------------------
+// DECALS
+
+http://blog.wolfire.com/2009/06/how-to-project-decals/
+https://github.com/Fewes/MeshDecal
+https://twitter.com/FewesW/status/1291699468010762240?s=20

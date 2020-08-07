@@ -1,0 +1,198 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+import Capsule		from "../../fungi/geo/Capsule.js";
+import ProtoForm	from "../../fungi.protoform/ProtoForm.js";
+import ProtoHand	from "../../fungi.protoform/rigs/ProtoHand.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_pkg( { name:"fungi.armature", bone_view:false, mat:false } )
+	.load_pkg( { name:"fungi.protoform", mat:"Halftone" } )
+	.set_camera( 0, 20, 3, 0, 0.2, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let $hand, $ctrl;
+
+async function init(){
+	$hand = ProtoHand( "hand", false );
+	$hand.node.set_scl( 5 );
+	$hand.node.rot_by( 90, "y" );
+
+	$ctrl = new HandController( $hand.arm );
+
+	/*
+	$ctrl.bend( "index", 0.2 );
+	$ctrl.bend( "middle", 0.4 );
+	$ctrl.bend( "ring", 0.6 );
+	$ctrl.bend( "pinky", 0.8 );
+	$ctrl.update();
+	*/
+	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	init_ui();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+class HandController{
+	constructor( arm ){
+		this.arm		= arm;
+		this.fingers	= {};
+		this.spread		= 0.0;
+
+		this
+			.add( "index",	12,		[ "RightHandIndex1","RightHandIndex2","RightHandIndex3" ] )
+			.add( "middle",	0,		[ "RightHandMiddle1","RightHandMiddle2","RightHandMiddle3" ] )
+			.add( "ring",	-12,	[ "RightHandRing1","RightHandRing2","RightHandRing3" ] )
+			.add( "pinky",	-30,	[ "RightHandPinky1","RightHandPinky2","RightHandPinky3" ] );
+	}
+
+	add( fName, max_ang, bAry ){
+		let len = bAry.length;
+		let ary = new Array( len );
+		let idx;
+		for( let i=0; i < len; i++ ){
+			idx = this.arm.names[ bAry[i] ];
+
+			if( idx == null || idx == undefined ){
+				console.error( "Finger Bone Not Found: ", bAry[i] );
+				return this;
+			}
+
+			ary[ i ] = {
+				node	: this.arm.nodes[ idx ],
+				bone	: this.arm.bones[ idx ],
+			};
+		}
+
+		this.fingers[ fName ] = {
+			items	: ary,
+			bend	: 0,
+			max_ang	: max_ang,
+		};
+
+		return this;
+	}
+
+	set_spread( t ){ this.spread = t; return this; }
+	bend_all( t ){
+		let fName;
+		for( fName in this.fingers ) this.fingers[ fName ].bend = t;
+		return this;
+	}
+
+	bend( fName, t ){
+		let f = this.fingers[ fName ];
+		if( !f ){ console.error("Finger Not Found:", fName ); return this; }
+		f.bend = t;
+		return this;
+	}
+
+	pose( a, b, c, d, s ){
+		this.bend( "index", a )
+			.bend( "middle", b )
+			.bend( "ring", c )
+			.bend( "pinky", d )
+			.set_spread( s )
+			.update();
+		return this;
+	}
+
+	update(){
+		let fName, f, i, itm,
+			b_angle, 		// Bend Angle
+			q = new Quat();
+
+		for( fName in this.fingers ){
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			f		= this.fingers[ fName ];					// Finger Reference
+			b_angle	= Math.PI * 0.5 * f.bend;					// Convert Bend T into Radian Angles
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Handle First Finger, Since it needs to include Spread Rotation
+			itm = f.items[ 0 ];
+
+			q.from_axis_angle( Vec3.FORWARD, b_angle );			// How Much to Bend the Finger Joint
+
+			if( this.spread > 0 && f.max_ang != 0 ){
+				q.pmul_axis_angle( Vec3.LEFT, ( this.spread * f.max_ang ) * Math.PI / 180 );
+			}
+
+			q.mul( itm.bone.local.rot );						// Add it to Bind Pose Rotation
+			itm.node.set_rot( q );
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Bend The Rest of the Finger Joints
+			
+			for( i=1; i < f.items.length; i++ ){
+				itm = f.items[ i ];								// Joint Reference
+				q.from_axis_angle( Vec3.FORWARD, b_angle );		// How Much to Bend the Finger Joint
+				q.mul( itm.bone.local.rot );					// Add it to Bind Pose Rotation
+				itm.node.set_rot( q );							// Save it back to the Joint Node
+			}
+		}
+
+		this.arm.updated = true;
+		return this;
+	}
+}
+
+//#####################################################
+
+function init_ui(){
+	elm_on_input( "f_spread", (v)=>{ $ctrl.set_spread( v ).update(); App.render(); });
+	elm_on_input( "f_bend_all", (v)=>{ $ctrl.bend_all( v ).update(); App.render(); });
+
+	elm_on_input( "f_index", (v)=>{ $ctrl.bend( "index", v ).update(); App.render(); });
+	elm_on_input( "f_middle", (v)=>{ $ctrl.bend( "middle", v ).update(); App.render(); });
+	elm_on_input( "f_ring", (v)=>{ $ctrl.bend( "ring", v ).update(); App.render(); });
+	elm_on_input( "f_pinky", (v)=>{ $ctrl.bend( "pinky", v ).update(); App.render(); });
+
+	elm_on_click( "p_rest", (v)=>{ $ctrl.pose( 0.2, 0.4, 0.6, 0.8, 0 ); App.render(); });
+	elm_on_click( "p_rock", (v)=>{ $ctrl.pose( 0, 1, 1, 0, 0.4 ); App.render(); });
+	elm_on_click( "p_two", (v)=>{ $ctrl.pose( 0, 0, 1, 1, 1 ); App.render(); });
+	elm_on_click( "p_point", (v)=>{ $ctrl.pose( 0, 1, 1, 1, 0.5 ); App.render(); });
+
+	elm_on_click( "p_clear", (v)=>{ $ctrl.pose( 0, 0, 0, 0, 0 ); App.render(); });
+}
+
+function elm_on_input( name, fn ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{ fn( parseFloat( e.srcElement.value ) ); });
+}
+
+function elm_on_click( name, fn ){
+	document.getElementById( name ).addEventListener( "click", (e)=>{ fn( parseFloat( e.srcElement.value ) ); });
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body>
+	<canvas id="pg_canvas"></canvas>
+	
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-range label="Spread" id="f_spread" value="0" min="0" max="1" step="0.01"></prop-range>
+		<prop-range label="Bend All" id="f_bend_all" value="0" min="0" max="1" step="0.01"></prop-range>
+
+		<prop-group label="Fingers">
+			<prop-range label="Index" id="f_index" value="0" min="0" max="1" step="0.01"></prop-range>
+			<prop-range label="Middle" id="f_middle" value="0" min="0" max="1" step="0.01"></prop-range>
+			<prop-range label="Ring" id="f_ring" value="0" min="0" max="1" step="0.01"></prop-range>
+			<prop-range label="Pinky" id="f_pinky" value="0" min="0" max="1" step="0.01"></prop-range>
+		</prop-group>
+
+		<prop-group label="Poses">
+			<button id="p_rest"> Relaxed </button>
+			<button id="p_rock"> Rock On </button>
+			<button id="p_two"> Two </button>
+			<button id="p_point"> Point </button>
+			<button id="p_clear"> Clear </button>
+		</prop-group>
+	</prop-panel>
+</body></html>
