@@ -31,8 +31,12 @@ async function init( ){
 	let mesh_idx = App.mesh.from_data( "ProtoCapsule", geo.vert, 4, geo.idx );
 
 	let e = App.mesh_entity( "Capsule" );	
-	//e.draw.add( mesh_pnt, mat_pnt, App.mesh.PNT );
+	//e.draw.add( mesh_idx, mat_lp, App.mesh.PNT );
 	e.draw.add( mesh_idx, mat_lp, App.mesh.PNT );
+
+	e = App.mesh_entity( "Capsule" );
+	e.draw.add( mesh_idx, mat_lp, App.mesh.TRI );
+	e.node.set_pos( 2, 0 , 0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	return true;
@@ -373,17 +377,82 @@ const VERT_SRC = `#version 300 es
 
 	//-------------------------
 
+	vec3 tube_mode( vec3 pos, int grp ){
+		float scl_top		= 0.8; // TODO USE Vec3 for scaling later.
+		float scl_bot		= 0.5;
+		float top_move_y	= 1.5;
+		float bot_move_y	= 1.2;
+
+		if( grp == 1 ){
+			pos.xyz	*= scl_top;
+			pos.y	+= top_move_y - 1.0;
+		}
+
+		if( grp == 2 ){
+			float t = ( pos.y + 1.0 ) / 2.0;
+			pos		*= mix( scl_bot, scl_top, t );
+			pos.y	*= top_move_y;
+		}
+
+		if( grp == 3 ){
+			float t	= ( pos.y + 1.0 ) / 2.0;
+			pos		*= mix( scl_bot, scl_top, t );
+			pos.y	*= bot_move_y;
+		}
+
+		if( grp == 4 ){
+			pos.xyz	*= scl_bot;
+			pos.y	-= bot_move_y - 1.0;
+		}
+
+		return pos;
+	}
+
+
+	//https://blog.demofox.org/2014/08/28/one-dimensional-bezier-curves/
+	//1D Cubic (3rd) Bezier through A, B, C, D where a Start and d is end are assumed to be 0 and 1.
+	float norm_bezier3( float b, float c, float t){
+		float s		= 1.0 - t,
+		float t2	= t * t,
+		float s2	= s * s,
+		float t3	= t2 * t;
+		return (3.0 * b * s2 * t) + (3.0 * c * s * t2) + t3;
+	}
+
 	void main(void){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		vec3 pos 	= a_pos.xyz;
 		int grp		= int( a_pos.w );
 
-		float move_y = 1.0;
-		if( grp == 1 ) pos.y += move_y - 1.0;
+		float wall_h		= 0.7;
+		float scl_top		= 1.0;
+		float scl_mid		= 1.0;
+		float scl_bot		= 1.0;
+		float top_move_y	= 1.5;
+		float bot_move_y	= 1.2;
+
+		//pos = tube_mode( pos, grp );
+
+
+		//if( grp == 1 ) pos.y += move_y - 1.0;
+		
+		//if( grp == 1 ) pos.xz *= scl_top;
+
 		//if( grp == 1 ) pos *= vec3( 2.0, 1.0, 1.0 );
 
-		if( grp == 2 ) pos.y *= move_y;
+		//if( grp == 2 ) pos.y *= move_y;
+		
+		/*
+		if( grp <= 2 ){
+			float t = pos.y / 1.5;
+			pos.xz *= mix( scl_mid, scl_top, t );
+		}
+		*/
 
+		
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 		vec4 wpos	= model.view_matrix * vec4( pos, 1.0 );
 
