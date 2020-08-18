@@ -1,0 +1,105 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.then( init );
+
+//#####################################################
+
+function init(){
+	App.Debug.set_pnt_size( 0.1 );
+
+	let a = new Vec3( -1, 0, 0 );
+	let b = new Vec3( -0.6, 0.5, 0 );
+	let c = new Vec3( 0.6, 0.5, 0 );
+	let d = new Vec3( 1, 0, 0 );
+
+	App.Debug.pnt( a, "red" );
+	App.Debug.pnt( b, "green" );
+	App.Debug.pnt( c, "green" );
+	App.Debug.pnt( d, "red" );
+
+	draw_curves( CBezier, a, b, c, d, 10 );
+}
+
+
+class CBezier{
+
+	static at( a, b, c, d, t, out=null ){
+		let i		= 1 - t,
+			ii		= i * i,
+			iii		= ii * i,
+			tt 		= t * t,
+			ttt 	= tt * t,
+			iit3 	= 3 * ii * t,
+			itt3 	= 3 * i * tt;
+		out = out || new Vec3();
+		out[ 0 ] = iii * a[0] + iit3 * b[0] + itt3 * c[0] + ttt * d[0];
+		out[ 1 ] = iii * a[1] + iit3 * b[1] + itt3 * c[1] + ttt * d[1];
+		out[ 2 ] = iii * a[2] + iit3 * b[2] + itt3 * c[2] + ttt * d[2];
+		return out;
+	}
+
+	static dxdy( a, b, c, d, t, out=null ){
+		if(t > 1)		t = 1;
+		else if(t < 0)	t = 0;
+
+		let i	= 1 - t,
+			ii3	= 3 * i * i,
+			it6	= 6 * i * t,
+			tt3	= 3 * t * t;
+
+		out = out || new Vec3();
+		out[ 0 ] = ii3 * ( b[0] - a[0] ) + it6 * ( c[0] - b[0] ) + tt3 * ( d[0] - c[0] );
+		out[ 1 ] = ii3 * ( b[1] - a[1] ) + it6 * ( c[1] - b[1] ) + tt3 * ( d[1] - c[1] );
+		out[ 2 ] = ii3 * ( b[2] - a[2] ) + it6 * ( c[2] - b[2] ) + tt3 * ( d[2] - c[2] );
+		return out;
+	}
+
+	static dxdy2( a, b, c, d, t, out=null ){
+		// https://stackoverflow.com/questions/35901079/calculating-the-inflection-point-of-a-cubic-bezier-curve
+		if(t > 1)		t = 1;
+		else if(t < 0)	t = 0;
+
+		let t6 = 6 * t;
+		out = out || new Vec3();
+		out[ 0 ] = t6 * ( d[0] + 3 * ( b[0] - c[0] ) - a[0] ) + 6 * ( a[0] - 2 * b[0] + c[0] );
+		out[ 1 ] = t6 * ( d[1] + 3 * ( b[1] - c[1] ) - a[1] ) + 6 * ( a[1] - 2 * b[1] + c[1] );
+		out[ 2 ] = t6 * ( d[2] + 3 * ( b[2] - c[2] ) - a[2] ) + 6 * ( a[2] - 2 * b[2] + c[2] );
+		return out;
+	}
+}
+
+function draw_curves( cls, a, b, c, d, steps=10 ){
+	let prev	= new Vec3();
+	let pos		= new Vec3();
+	let dev		= new Vec3();
+	let dev2	= new Vec3();
+	let t;
+
+	cls.at( a, b, c, d, 0, prev );
+	for( let i=1; i <= steps; i++ ){
+		t = i / steps;
+		
+		cls.at( a, b, c, d, t, pos );
+		cls.dxdy( a, b, c, d, t, dev );
+		cls.dxdy2( a, b, c, d, t, dev2 );
+
+		App.Debug
+			.ln( prev, pos, "yellow" )
+			.ln( pos, dev.norm().scale( 0.3 ).add( pos ), "cyan" )
+			.ln( pos, dev2.norm().scale( 0.2 ).add( pos ), "green" );
+
+		prev.copy( pos );
+	}
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

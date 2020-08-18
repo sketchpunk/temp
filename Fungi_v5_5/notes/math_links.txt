@@ -1,0 +1,13 @@
+https://marctenbosch.com/quaternions/ // Replace Quaternions with Rotors
+https://marctenbosch.com/quaternions/code.htm
+
+Linear Least Squares - Can be used for Curve Fitting
+https://medium.com/@sahirnambiar/linear-least-squares-a-javascript-implementation-and-a-definitional-question-e3fba55a6d4b
+
+Into Vertex Shader - Catmull-Rom Spline, Particles moving and scaling on a Spline
+https://codepen.io/zadvorsky/pen/brporW
+https://codepen.io/zadvorsky/pen/JyXOwW
+
+
+LEFT HAND TO RIGHT HAND CONVERSION
+https://towardsdatascience.com/change-of-basis-3909ef4bed43

@@ -1,0 +1,3 @@
+
+Libray to reduce Keyframes
+https://github.com/robertjoosten/maya-keyframe-reduction

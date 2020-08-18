@@ -1,0 +1,21 @@
+https://twitter.com/exppad/status/1283520023798198273
+https://twitter.com/LukeMamacos/status/1283868952305831942
+
+Ok, So the way it works is, user changes the state of the voxel corners. 
+Any voxel effected by that corner change is then put on the WFC stack for reprocess, 
+which if there is a change, it then adds their neighbors to the stack till all collapsed again.
+
+Plus I kinda get the idea of using the Bit Value from MC of the generated tile as a constraint 
+to quickly limit what tiles can fit in a specific area based on what bits are active around that voxel.
+
+Technically your not really using MC at this point, just its Indexing System to determine whats 
+possible in a cell. In WFC, u list ALL tiles as possible for each cell, but if you use MC indexing, 
+You fill the cell with only possible tiles, less data to process, faster WFC.
+
+So in townscrape oskar has like 300 tiles, So in your  WFC grid you save all 300 possible tiles 
+per cell then run WFC on it. What if you know whats possible and many of the cells can be populated 
+with 10 or less tiles before running WFC. WFC could resolve faster.
+
+Since your building your stuff from the ground up, many cells can be defaulted to collapse with the 
+tile 0, empty space since the MC grid has all most of its points off. To start, WFC will run silly fast. 
+So your using two grids to manage things. 

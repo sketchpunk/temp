@@ -1,0 +1,3 @@
+
+How Babylon's GridMaterial Shader works. Has Extra things in there that might be useful to learn.
+https://github.com/BabylonJS/Babylon.js/tree/master/materialsLibrary/src/grid

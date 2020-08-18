@@ -244,6 +244,48 @@ window.customElements.define( "prop-checkstack", PropCheckStack );
 
 //#############################################################################################
 
+class PropVector extends HTMLElement{
+	constructor(){
+		super();
+		this.inputs			= new Array();
+		this.input_bind		= this.on_input.bind( this );
+
+		let elm;
+		let v		= this.getAttribute( "value" ).split(",");
+		let step	= this.getAttribute( "step" );
+		let min		= this.getAttribute( "min" );
+		let max		= this.getAttribute( "max" );
+
+		for( let i=0; i < v.length; i++ ){
+			elm			= document.createElement( "input" );
+			elm.type	= "number";
+			elm.value	= v[ i ];
+
+			if( step )	elm.step	= step;
+			if( min )	elm.min		= min;
+			if( max )	elm.max		= max;
+
+			this.appendChild( elm );
+			this.inputs.push( elm );
+			elm.addEventListener( "input", this.input_bind );
+		}
+	}
+
+	on_input( e ){
+		e.stopPropagation(); //e.preventDefault();
+		this.dispatchEvent( new CustomEvent( "input", { detail:this.value, bubbles:true, cancelable:true, composed:false } ) ); 
+	}
+
+	get value(){
+		let ary = new Array();
+		for( let elm of this.inputs ) ary.push( parseFloat( elm.value ) );
+		return ary;
+	}
+}
+window.customElements.define( "prop-vector", PropVector );
+
+//#############################################################################################
+
 (function(){
 	let mod_path	= import.meta.url.substring( 0, import.meta.url.lastIndexOf("/") + 1 ),
 		link		= document.createElement( "link" );

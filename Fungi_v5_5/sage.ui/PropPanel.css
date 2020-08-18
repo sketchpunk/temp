@@ -37,6 +37,11 @@ prop-checkstack.space20 label{ flex:1 1 20%; }
 prop-checkstack.space25 label{ flex:1 1 25%; }
 prop-checkstack.space45 label{ flex:1 1 45%; }
 
+prop-vector{ display:flex; flex-direction:row;; }
+prop-vector > input{ flex:1 1 auto; width:10px; }
+prop-vector > input:not( :first-of-type ){ margin-left:4px; }
+prop-vector > input:last-of-type ){ margin-left:0px; }
+
 
 /* ========================================================== 
 BASIC THEME */

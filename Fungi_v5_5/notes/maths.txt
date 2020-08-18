@@ -1,0 +1,13 @@
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Alpha Blending
+
+Classic  out = Src.RGB * S.A + Dest * ( 1 - Src.A );
+
+Actual 
+out.a = Src.A + Dest.A * ( 1 - Src.A );
+if( out.a == 0 ) out.rgb = 0;
+else
+	out.rgb = ( Src.RGB * Src.A + Dest.RGB * Dest.A * ( 1 - Src.A ) ) / out.a;
+
+
+
