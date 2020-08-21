@@ -350,6 +350,18 @@ Maybe Overall Position Shift
 - Caped Curve
 - Curved
 
+uniform vec3	scl_top;
+uniform vec3	scl_mid;
+uniform vec3	scl_bot;
+
+uniform vec3	pos_top;
+uniform vec3	pos_mid;
+uniform vec3	pos_bot;
+
+uniform float	base_opt; // X=Mode, YZ = 1D Bezier
+uniform vec4	base_rot;
+uniform vec3	base_pos;
+
 */
 
 function init_shader(){
@@ -705,9 +717,8 @@ function init_ui(){
 	elm_on_click( "p_clear", (v)=>{ $ctrl.pose( 0, 0, 0, 0, 0 ); App.render(); });
 	*/
 
-	elm_vec_input( "scl_top" );
-	elm_vec_input( "curv_top" );
-	elm_vec_input( "mov_top" );
+	//elm_vec_input( "scl_top" );
+	//elm_vec_input( "mov_top" );
 }
 
 function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
@@ -737,12 +748,15 @@ function elm_on_click( name, fn ){
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
 		<prop-range label="Spread" id="f_spread" value="0" min="0" max="1" step="0.01"></prop-range>
 		<prop-range label="Bend All" id="f_bend_all" value="0" min="0" max="1" step="0.01"></prop-range>
+		<select label="Mode">
+			<option value="0">Mode A</option>
+			<option value="1">Mode B</option>
+			<option value="2">Mode C</option>
+		</select>
 		
 		<prop-group label="TOP DOM">
 			<prop-vector label="Scale"		id="scl_top" value="1,1,1" step="0.1"></prop-vector>
 			<prop-vector label="Translate"	id="mov_top" value="0,0,0" step="0.1"></prop-vector>
-			<prop-vector label="1D Curve"	id="curv_top" value="0,1" step="0.05"></prop-vector>
-			<prop-range	label="Index" id="f_index" value="0" min="0" max="1" step="0.01"></prop-range>
 		</prop-group>
 
 		<prop-group label="Poses">

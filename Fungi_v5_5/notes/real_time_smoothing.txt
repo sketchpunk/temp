@@ -1,0 +1,30 @@
+https://www.reddit.com/r/Unity3D/comments/idhqu5/realtime_autosmoothing_on_the_gpu_without/g290xw5/
+
+This is real-time auto-smoothing done on the GPU using compute shaders without the typical adjacency info needed for such operations.
+
+It's much easier to do this on the CPU with proper adjacency info, but that wouldn't 
+be as efficient. And I wanted this to fit into my real-time volumetric VFX tool, so I 
+wanted it to use compute shaders and run on the GPU.
+
+The meshing algorithm shown here is dual contouring, which excels at preserving sharp features even at low voxel resolution compared to marching cubes and surface nets. Previously, I provided two render modes to render the mesh as fully flat (each vertex's normal is the normal of the triangle it belongs to) and fully smooth (each vertex's normal is computed from central difference of SDFs), which worked fine for marching cubes, as I mostly use it for making blobby objects. But when I started making hard-surface stuff with dual contouring, both render modes came short. I wanted smooth normals across smooth surfaces but crisp-cut normals around sharp features. For people familiar with modeling softwares, this is usually referred to as auto-smoothing, where a maximum angle is specified, and vertices shared by multiple faces will take up some kind of average of the face normals if the angle difference between the face noramls are less than the specified angle.
+
+Auto-smoothing is relatively easy if there is adjacency information available that tells you which faces share a vertex. But such info is not available due to the nature of GPU-based dual contouring. It generates each quad independently (fit for compute shaders) and then move the vertices to the proper positions individually during a refinement step.
+
+I had to come up with a way to construct adjacency info using compute shaders. I familiarized myself with GPU hash tables when I was working on spatial optimization that generates sparse voxel strees. I thought if each vertex of a single quad is generated at the center of a voxel, then it should be possible to use similar spatial hashing technique to map quad vertices generated within the same voxel to the same shared data set, which different GPU threads can use for cross-communication. This is essentially the adjacency info that needs to be built from scratch. After some experimentation, I found that directly taking the FNV-1a hash of quantized vertex positions (coordinates divided by quarter voxel size and rounded to nearest integers) gives a really good distribution without any hash collision in all my use cases so far. Each GPU thread maps a vertex (using the original positions from the initially generated quad, not the positions after the refinement step) to a data set that contains a counter (initialized to 0), an array of normals, and an array of face areas. Then the thread performs an atomic add to the counter to find an index to insert the normal and the area of the face the vertex belongs to (the atomic add prevents race conditions across GPU threads). Once all the information has been appened to each data set, each GPU thread then compares a vertex's face normal to all the recorded face normals and areas in the shared data set, applying a weighted average using the face areas as weight for face normals that are within the specified maximum angle difference. Then it's done! Now we have auto-smoothing running on compute shaders that is efficient enough for real-time use. Or at least for more complicated models, it is still super responsive to work on during edit time.
+
+The only downside is GPU memory usage. Each vertex generated from dual contouring can be shared by up to 12 triangles, which means a single shared adjacency data set needs to fit in 12 normals (36 floats). That's more data than I'd like if the number of total voxels is large. I used a combination of octahedral normal compression and a packing technique that compresses two floats between 0 and 1 into a single float to pack a 3D normal vector into a single float, so now each data contains 12 floats instead of 36. In this video the model has about 13K vertices, and the extra GPU memory for the adjacency info is about 3MB, acceptable IMO. And this extra memory becomes irrelevant if the user just wants to generate the model offline and export to an FBX file.
+
+I haven't been able to find any resources on similar techniques yet, so I'm going to enjoy this moment before someone comes pointing out a paper that did this 10 years ago.
+
+https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/ - Dual Contouring
+http://paulbourke.net/geometry/polygonise/ - Marching Cubes
+https://0fps.net/2012/07/12/smooth-voxel-terrain-part-2/ - Surface Nets
+https://www.iquilezles.org/www/articles/normalsSDF/normalsSDF.htm - central difference of SDFs
+
+https://nosferalatu.com/SimpleGPUHashTable.html - GPU hash tables
+https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function#FNV-1a_hash - FNV-1a 
+
+https://docs.microsoft.com/en-us/windows/win32/direct3dhlsl/interlockedadd - atomic add 
+
+https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/ - octahedral normal compression
+https://stackoverflow.com/questions/17638800/storing-two-float-values-in-a-single-float-variable - packing technique
