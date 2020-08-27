@@ -28,3 +28,47 @@ https://docs.microsoft.com/en-us/windows/win32/direct3dhlsl/interlockedadd - ato
 
 https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/ - octahedral normal compression
 https://stackoverflow.com/questions/17638800/storing-two-float-values-in-a-single-float-variable - packing technique
+
+-----------------------------------------
+
+https://www.reddit.com/r/Unity3D/comments/ieenax/highaccuracy_dual_contouring_on_the_gpu_tech/g2fky0f/
+
+ just finished the "high-accuracy" mode for my GPU-based dual contouring implementation, where the mesh replicates the 
+ isosurface of the underlying signed distance field (SDF) much more accurately than before.
+
+I posted the other day about my GPU-based implementation of auto-smoothing of mesh generated from dual contouring 
+without adjacency data. In the video you can see that there's still some jaggedness to the edges that are supposed 
+to be straight and/or crisp.
+
+I tried playing with libfive, as suggested by other people multiple times. I was amazed by how accurately the mesh 
+replicates the isosurface, after having been unable to figure out the cause of the edge jaggedness of my implementation.
+
+One day I was just randomly re-browsing through some dual contouring resources I've collected, and then I saw the 
+words "binary search" in this tutorial. Then it hit me: I've been using a well-known linear approximation technique 
+described here to compute the intersection of an edge versus the isosurface. It is generally not very accurate for 
+most SDF shapes. Next, I dug into libfive's source code and there it is, binary search! Once I switched to using 
+binary search to find the intersection of edges vs. isosurface, my dual contouring results suddenly became much more 
+accurate. In my implementation, each GPU thread processes one voxel, where three edges from the voxels are tested 
+against the SDF and potentially generate quads. This post describes the high-level concept of how dual contouring 
+tries to move the quad's vertices to the isosurface by solving least square errors.
+
+There was still some unevenness to surfaces that are supposed to be flat or smoothly curved. So I figured out a way 
+to further polish the geometry as a final pass: gradient descent. Taking the central difference of the SDF gives 
+the direction in which the SDF changes the most rapidly, and evaluating the SDF itself gives the closest distance 
+away from the isosurface. Multiplying the two gives an accurate correction vector to vertex positions. This is also 
+fit for compute shaders, as each GPU thread simply processes one vertex and evalutes the SDF and its central 
+difference at the vertex position.
+
+With this final touch of gradeint descent, along with auto-smoothing, I was very pleased to find out that my mesh 
+quality has become on par with that of libfive, and it's running entirely on the GPU!
+
+My compute shader implementation can be found in my volumetric VFX tool.
+
+P.S. In the video it says "high precision", which I later realized should have been "high accuracy".
+
+https://libfive.com/ 
+
+https://www.mattkeeter.com/projects/contours/ binary search for dual contours
+http://paulbourke.net/geometry/polygonise/ 
+https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/ escribes the high-level concept of how dual contouring tries to move the quad's vertices
+https://www.iquilezles.org/www/articles/normalsSDF/normalsSDF.htm central difference of the SDF gives t

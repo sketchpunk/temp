@@ -281,6 +281,11 @@ class PropVector extends HTMLElement{
 		for( let elm of this.inputs ) ary.push( parseFloat( elm.value ) );
 		return ary;
 	}
+
+	set value( ary ){
+		let min = Math.min( ary.length, this.inputs.length );
+		for( let i=0; i < min; i++ ) this.inputs[ i ].value = ary[ i ];
+	}
 }
 window.customElements.define( "prop-vector", PropVector );
 

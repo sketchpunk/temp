@@ -384,10 +384,14 @@ function init_shader(){
 		{ name:"scl_top", type:"vec3", value:new Float32Array([1,1,1]) },
 		{ name:"scl_mid", type:"vec3", value:new Float32Array([1,1,1]) },
 		{ name:"scl_bot", type:"vec3", value:new Float32Array([1,1,1]) },
-		{ name:"mov_top", type:"vec3", value:new Float32Array([0,0,0]) },
-		{ name:"mov_bot", type:"vec3", value:new Float32Array([0,0,0]) },
-		{ name:"curv_top", type:"vec2", value:new Float32Array([0,1]) },
+
+		{ name:"pos_top", type:"vec3", value:new Float32Array([0,1,0]) },
+		{ name:"pos_mid", type:"vec3", value:new Float32Array([0,0,0]) },
+		{ name:"pos_bot", type:"vec3", value:new Float32Array([0,1,0]) },
 		
+		{ name:"base_rot", type:"vec4", value:new Float32Array([0,0,0,1]) },
+		{ name:"base_pos", type:"vec3", value:new Float32Array([0,0,0]) },
+		{ name:"base_opt", type:"int", value:0 },
 
 		//{ name:"eye_color", type:"rgb", value:"#ffffff" },
 		//{ name:"specular_color", type:"rgb", value:"#CC7233" },
@@ -417,12 +421,17 @@ const VERT_SRC = `#version 300 es
 
 	uniform vec2 curv_top; // = vec2( -0.3, 0.75 );
 
-	uniform vec3 scl_top;//		= vec3( 0.60, 0.67, 0.60 );
-	uniform vec3 scl_mid;//		= vec3( 1.0, 1.0, 1.0 );
-	uniform vec3 scl_bot;//	= vec3( 0.70, 0.70, 0.70 );
+	uniform vec3	scl_top;
+	uniform vec3	scl_mid;
+	uniform vec3	scl_bot;
 
-	uniform vec3 mov_top;//		= vec3( 0.2, 0.0, 0.0 );
-	uniform vec3 mov_bot;//		= vec3( 0.2, 0.0, 0.0 );
+	uniform vec3	pos_top;
+	uniform vec3	pos_mid;
+	uniform vec3	pos_bot;
+
+	uniform int		base_opt; // X=Mode, YZ = 1D Bezier
+	uniform vec4	base_rot;
+	uniform vec3	base_pos;
 
 	//-------------------------
 
@@ -476,6 +485,15 @@ const VERT_SRC = `#version 300 es
 		return (3.0 * b * s * s * t) + (3.0 * c * s * t2) + t2 * t;
 	}
 
+	float bezier3( float a, float b, float c, float d, float t ){
+		//y = A * (1-x)^3 + B * 3x(1-x)^2 + C * 3x^2(1-x) + D * x^3
+		float s	= 1.0 - t;
+		float s2	= s * s;
+		float t2	= t * t;
+		return ( a * s2 * s ) + ( b * 3.0 * t * s2 ) + ( c * 3.0 * t2 * s ) + ( d * t2 * t );
+	}
+
+
 	const float PI = 3.1415926535897932384626433832795;
 
 	vec3 qbezier_at( vec3 a, vec3 b, vec3 c, float t ){
@@ -507,10 +525,97 @@ const VERT_SRC = `#version 300 es
 		return normalize( vec4( cross( a, b ), 1.0 + dot ) );
 	}
 
+
+	vec3 mode_linear( vec3 pos, int grp ){
+		//vec3 scl_top	= vec3( 1.0 );
+		//vec3 scl_bot	= vec3( 1.0, 1.0, 1.0 );
+		//vec3 pos_top	= vec3( 0.0, 0.0, 0.0 );
+		//vec3 pos_bot	= vec3( 0.0, 0.0, 0.0 );
+
+		if( grp == 1 ){
+			// To scale correctly, Need to shift the dome to origin, then shift back
+			pos.y	-= 1.0;
+			pos.xyz	*= scl_top;
+			pos.y	+= 1.0;
+
+			// Apply Transition
+			pos.xz	+= pos_top.xz;
+			pos.y	+= pos_top.y - 1.0;	// Dome is already 1u up, -1 will zero out.
+		}
+
+		if( grp == 2 ){
+			//float t	= ( a_pos.y + 1.0 ) / 2.0; // Old Way, tends to curve
+
+			// To Keep the transition linear instead of a lil curved, Need to add up
+			// the total height of the cylinder for normalizing, then scale the height
+			// of the top half and add it to the height of the bottom half.
+			float t	= ( pos.y * pos_top.y + pos_bot.y ) / ( pos_top.y + pos_bot.y );
+			pos.xz	*= mix( scl_bot.xz, scl_top.xz, t );
+			
+			pos.xz	+= pos_top.xz * a_pos.y;
+			pos.y	*= pos_top.y;
+		}
+
+		if( grp == 3 ){
+			//float t	= ( a_pos.y + 1.0 ) / 2.0;
+			float t	=  ( pos.y + 1.0 ) * pos_bot.y / ( pos_top.y + pos_bot.y );
+			pos.xz	*= mix( scl_bot.xz, scl_top.xz, t );
+
+			pos.xz	+= pos_bot.xz * a_pos.y;
+			pos.y	*= pos_bot.y;
+		}
+
+		if( grp == 4 ){
+			// To scale correctly, Need to shift the dome to origin, then shift back
+			pos.y	+= 1.0;
+			pos.xyz	*= scl_bot;
+			pos.y	-= 1.0;
+
+			// Apply Transition
+			pos.xz	+= pos_bot.xz;
+			pos.y	-= pos_bot.y - 1.0;	// Dome is already 1u up, -1 will zero out.
+		}
+
+
+		/*
+		float scl_top		= 0.8; // TODO USE Vec3 for scaling later.
+		float scl_bot		= 0.5;
+		float top_move_y	= 1.5;
+		float bot_move_y	= 1.2;
+
+		if( grp == 1 ){
+			pos.xyz	*= scl_top;
+			pos.y	+= top_move_y - 1.0;
+		}
+
+		if( grp == 2 ){
+			float t = ( pos.y + 1.0 ) / 2.0;
+			pos		*= mix( scl_bot, scl_top, t );
+			pos.y	*= top_move_y;
+		}
+
+		if( grp == 3 ){
+			float t	= ( pos.y + 1.0 ) / 2.0;
+			pos		*= mix( scl_bot, scl_top, t );
+			pos.y	*= bot_move_y;
+		}
+
+		if( grp == 4 ){
+			pos.xyz	*= scl_bot;
+			pos.y	-= bot_move_y - 1.0;
+		}
+		*/
+
+		return pos;
+	}
+
+
 	void main(void){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		vec3 pos 	= a_pos.xyz;
 		int grp		= int( a_pos.w );
+
+		if( base_opt == 0 ) pos = mode_linear( pos, grp );
 
 		/* --------------------------------
 		vec3 a	= vec3( 0.0, -1.5, 0.0 );
@@ -534,7 +639,7 @@ const VERT_SRC = `#version 300 es
 		pos 		+= qbezier_at( a, b, c, t );
 		*/
 
-		/* --------------------------------*/
+		/* --------------------------------
 		vec3 a	= vec3( 0.0, -1.5, 0.0 );
 		vec3 b	= vec3( -0.9, 0.0, 0.0 );
 		vec3 c	= vec3( 0.0, 1.5, 0.0 );
@@ -564,7 +669,7 @@ const VERT_SRC = `#version 300 es
 		vec4 q 		= quat_unit_vecs( UP, dir );
 		pos			= quat_mul_vec3( q, pos );
 		pos 		+= qbezier_at( a, b, c, t );
-		
+		*/
 
 
 
@@ -640,7 +745,7 @@ const VERT_SRC = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		gl_Position		= global.proj_view * wpos;
-		gl_PointSize	= 4.0;
+		gl_PointSize	= 6.0;
 
 		tmp_color = vec3( 0.0, 0.0, 0.0 );
 		if( a_pos.w == 1.0 ) tmp_color = vec3( 1.0, 0.0, 0.0 );
@@ -699,6 +804,7 @@ const FRAG_SRC = `#version 300 es
 
 
 //#####################################################
+let AUTO_UPDATE = true;
 function init_ui(){
 	/*
 	elm_on_input( "f_spread", (v)=>{ $ctrl.set_spread( v ).update(); App.render(); });
@@ -717,12 +823,46 @@ function init_ui(){
 	elm_on_click( "p_clear", (v)=>{ $ctrl.pose( 0, 0, 0, 0, 0 ); App.render(); });
 	*/
 
-	//elm_vec_input( "scl_top" );
-	//elm_vec_input( "mov_top" );
+	elm_vec_input( "scl_top" );
+	elm_vec_input( "pos_top" );
+	elm_vec_input( "pos_bot" );
+	elm_vec_input( "scl_bot" );
+
+	elm_on_change( "rend_mode", (e)=>{
+		let mode = parseInt( e.srcElement.value );
+		$mat.set( "base_opt", mode );
+
+		switch( mode ){
+			case 0:
+				set_vec( "scl_top", [1,1,1] );
+				set_vec( "scl_bot", [1,1,1] );
+				set_vec( "pos_top", [0,1,0] );
+				set_vec( "pos_bot", [0,1,0] );
+				break;
+			case 1:
+				set_vec( "scl_top", [1,1,1] );
+				set_vec( "scl_bot", [1,1,1] );
+				set_vec( "pos_top", [0,1,0] );
+				set_vec( "pos_bot", [0,1,0] );
+				break;
+			case 2:
+				break;
+		}
+	});
 }
 
-function update_mat( n, v ){ $mat.set( n, v ); App.render(); }
-function elm_vec_input( elm_name ){ document.getElementById( elm_name ).addEventListener( "input", (e)=>{ update_mat( elm_name, new Float32Array(e.detail) ) }); }
+function update_mat( n, v ){
+	console.log( "update_mat" );
+
+	$mat.set( n, v );
+	if( AUTO_UPDATE ) App.render();
+}
+function elm_vec_input( elm_name ){
+	document.getElementById( elm_name )
+		.addEventListener( "input", 
+			(e)=>{ update_mat( elm_name, new Float32Array( e.detail ) ) }
+		);
+}
 
 function elm_on_input( name, fn ){
 	document.getElementById( name ).addEventListener( "input", (e)=>{ fn( parseFloat( e.srcElement.value ) ); });
@@ -732,14 +872,14 @@ function elm_on_click( name, fn ){
 	document.getElementById( name ).addEventListener( "click", (e)=>{ fn( parseFloat( e.srcElement.value ) ); });
 }
 
-/*
-	{ name:"scl_top", type:"vec3", value:new Float32Array([1,1,1]) },
-	{ name:"scl_mid", type:"vec3", value:new Float32Array([1,1,1]) },
-	{ name:"scl_bot", type:"vec3", value:new Float32Array([1,1,1]) },
-	{ name:"mov_top", type:"vec3", value:new Float32Array([0,0,0]) },
-	{ name:"mov_bot", type:"vec3", value:new Float32Array([0,0,0]) },
-	{ name:"curv_top", type:"vec2", value:new Float32Array([0,1]) },	
-*/
+function elm_on_change( name, fn ){
+	document.getElementById( name ).addEventListener( "change", fn );
+}
+
+function set_vec( name, v ){
+	document.getElementById( name ).value = v;
+}
+
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
 </head><body>
@@ -748,16 +888,35 @@ function elm_on_click( name, fn ){
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
 		<prop-range label="Spread" id="f_spread" value="0" min="0" max="1" step="0.01"></prop-range>
 		<prop-range label="Bend All" id="f_bend_all" value="0" min="0" max="1" step="0.01"></prop-range>
-		<select label="Mode">
-			<option value="0">Mode A</option>
+		<select label="Mode" id="rend_mode">
+			<option value="0">Linear Tube</option>
 			<option value="1">Mode B</option>
 			<option value="2">Mode C</option>
 		</select>
 		
-		<prop-group label="TOP DOM">
+		<prop-group label="TOP DOME">
 			<prop-vector label="Scale"		id="scl_top" value="1,1,1" step="0.1"></prop-vector>
-			<prop-vector label="Translate"	id="mov_top" value="0,0,0" step="0.1"></prop-vector>
+			<prop-vector label="Position"	id="pos_top" value="0,1,0" step="0.1"></prop-vector>
 		</prop-group>
+
+		<prop-group label="BOTTOM DOME">
+			<prop-vector label="Scale"		id="scl_bot" value="1,1,1" step="0.1"></prop-vector>
+			<prop-vector label="Position"	id="pos_bot" value="0,1,0" step="0.1"></prop-vector>
+		</prop-group>
+
+		<!--
+		{ name:"scl_top", type:"vec3", value:new Float32Array([1,1,1]) },
+		{ name:"scl_mid", type:"vec3", value:new Float32Array([1,1,1]) },
+		{ name:"scl_bot", type:"vec3", value:new Float32Array([1,1,1]) },
+
+		{ name:"pos_top", type:"vec3", value:new Float32Array([0,1,0]) },
+		{ name:"pos_mid", type:"vec3", value:new Float32Array([0,0,0]) },
+		{ name:"pos_bot", type:"vec3", value:new Float32Array([0,1,0]) },
+		
+		{ name:"base_rot", type:"vec4", value:new Float32Array([0,0,0,1]) },
+		{ name:"base_pos", type:"vec3", value:new Float32Array([0,0,0]) },
+		{ name:"base_opt", type:"int", value:0 },
+		-->
 
 		<prop-group label="Poses">
 			<button id="p_rest"> Relaxed </button>
