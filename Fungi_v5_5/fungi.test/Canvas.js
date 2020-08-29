@@ -306,6 +306,13 @@ class Canvas{
 		return this;
 	}
 
+	rect_pnts( min, max, draw = 2 ){
+		this.ctx.beginPath();
+		this.ctx.rect( min[0], min[1], max[0]-min[0], max[1]-min[1] );
+		this.draw( draw );
+		return this;
+	}
+
 	rect_round( x, y, w, h, r=0, draw = 1 ){
 		this.ctx.beginPath();
 
@@ -351,6 +358,14 @@ class Canvas{
 		this.ctx.beginPath();
 		this.ctx.moveTo( p0[0], p0[1] );
 		this.ctx.lineTo( p1[0], p1[1] );
+		this.ctx.stroke();
+		return this;
+	}
+
+	line_vec_to( p0, p1 ){
+		this.ctx.beginPath();
+		this.ctx.moveTo( p0[0], p0[1] );
+		this.ctx.lineTo( p0[0] + p1[0], p0[1] + p1[1] );
 		this.ctx.stroke();
 		return this;
 	}

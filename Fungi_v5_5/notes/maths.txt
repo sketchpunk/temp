@@ -11,3 +11,23 @@ else
 
 
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+determinant, find what direction a point is in relation to a line, left/right 
+https://stackoverflow.com/questions/1560492/how-to-tell-whether-a-point-is-to-the-right-or-left-side-of-a-line
+
+Use the sign of the determinant of vectors (AB,AM), where M(X,Y) is the query point:
+position = sign((Bx - Ax) * (Y - Ay) - (By - Ay) * (X - Ax))
+It is 0 on the line, and +1 on one side, -1 on the other side.
+
+public bool isLeft(Point a, Point b, Point c){
+     return ((b.X - a.X)*(c.Y - a.Y) - (b.Y - a.Y)*(c.X - a.X)) > 0;
+}
+Where a = line point 1; b = line point 2; c = point to check against.
+If the formula is equal to 0, the points are colinear.
+If the line is horizontal, then this returns true if the point is above the line.
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+is perpendicular to the line,
+x = y1-y2;
+y = x2-x1;

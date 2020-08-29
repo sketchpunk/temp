@@ -478,7 +478,7 @@ class Vec3 extends Float32Array{
 			return out.set( to[0] * scl, to[1] * scl, to[2] * scl );
 		}
 
-		static project_plane( from, norm, out=null ){
+		static project_plane( from, norm, out=null ){ // TODO, this is not Correct for Ray
 			// a - ( dot( a, b ) / dot( b, b ) * b )
 			out = out || new Vec3();
 

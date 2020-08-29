@@ -117,6 +117,7 @@ class PropPanel extends HTMLElement{
 				return n;
 		}
 	}
+	// #endregion //////////////////////////////////////////////////////////////
 } 
 PropPanel.Template = document.createElement( "template" );
 PropPanel.Template.innerHTML = `<div>Prop</div><header>Property Panel</header><main></main><footer></footer>`;

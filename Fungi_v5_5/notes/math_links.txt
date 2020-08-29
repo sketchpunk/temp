@@ -11,3 +11,7 @@ https://codepen.io/zadvorsky/pen/JyXOwW
 
 LEFT HAND TO RIGHT HAND CONVERSION
 https://towardsdatascience.com/change-of-basis-3909ef4bed43
+
+
+What direction a point is in relation to a segment
+https://www.geeksforgeeks.org/direction-point-line-segment/

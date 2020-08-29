@@ -385,18 +385,13 @@ function init_shader(){
 		{ name:"scl_mid", type:"vec3", value:new Float32Array([1,1,1]) },
 		{ name:"scl_bot", type:"vec3", value:new Float32Array([1,1,1]) },
 
-		{ name:"pos_top", type:"vec3", value:new Float32Array([0,1,0]) },
+		{ name:"pos_top", type:"vec3", value:new Float32Array([0,1.5,0]) },
 		{ name:"pos_mid", type:"vec3", value:new Float32Array([0,0,0]) },
-		{ name:"pos_bot", type:"vec3", value:new Float32Array([0,1,0]) },
+		{ name:"pos_bot", type:"vec3", value:new Float32Array([0,-1.5,0]) },
 		
 		{ name:"base_rot", type:"vec4", value:new Float32Array([0,0,0,1]) },
 		{ name:"base_pos", type:"vec3", value:new Float32Array([0,0,0]) },
-		{ name:"base_opt", type:"int", value:0 },
-
-		//{ name:"eye_color", type:"rgb", value:"#ffffff" },
-		//{ name:"specular_color", type:"rgb", value:"#CC7233" },
-		//{ name:"edge_color", type:"rgb", value:"#0000ff" },
-		//{ name:"rim_color", type:"rgb", value:"#FF4C4C" },
+		{ name:"base_opt", type:"int", value:2 },
 	], App.ubo.get_array( "Global", "Model" ) );
 }
 
@@ -418,8 +413,6 @@ const VERT_SRC = `#version 300 es
 	uniform Model{ 
 		mat4 view_matrix;
 	} model;
-
-	uniform vec2 curv_top; // = vec2( -0.3, 0.75 );
 
 	uniform vec3	scl_top;
 	uniform vec3	scl_mid;
@@ -443,38 +436,6 @@ const VERT_SRC = `#version 300 es
 	out vec3 tmp_color;
 
 	//-------------------------
-
-	vec3 tube_mode( vec3 pos, int grp ){
-		float scl_top		= 0.8; // TODO USE Vec3 for scaling later.
-		float scl_bot		= 0.5;
-		float top_move_y	= 1.5;
-		float bot_move_y	= 1.2;
-
-		if( grp == 1 ){
-			pos.xyz	*= scl_top;
-			pos.y	+= top_move_y - 1.0;
-		}
-
-		if( grp == 2 ){
-			float t = ( pos.y + 1.0 ) / 2.0;
-			pos		*= mix( scl_bot, scl_top, t );
-			pos.y	*= top_move_y;
-		}
-
-		if( grp == 3 ){
-			float t	= ( pos.y + 1.0 ) / 2.0;
-			pos		*= mix( scl_bot, scl_top, t );
-			pos.y	*= bot_move_y;
-		}
-
-		if( grp == 4 ){
-			pos.xyz	*= scl_bot;
-			pos.y	-= bot_move_y - 1.0;
-		}
-
-		return pos;
-	}
-
 
 	//https://blog.demofox.org/2014/08/28/one-dimensional-bezier-curves/
 	//http://www.demofox.org/bezcubic1d.html
@@ -507,7 +468,6 @@ const VERT_SRC = `#version 300 es
 	vec3 quat_mul_vec3( vec4 q, vec3 v ){ return v + (2.0 * cross(q.xyz, cross(q.xyz, v) + (q.w * v))); }
 	vec4 qmul(vec4 q1, vec4 q2){ return vec4(q2.xyz * q1.w + q1.xyz * q2.w + cross(q1.xyz, q2.xyz), q1.w * q2.w - dot(q1.xyz, q2.xyz) ); }
 	vec4 quat_axis_angle( vec3 axis, float angle ){ return vec4( axis * sin( angle * 0.5 ), cos( angle * 0.5 ) ); }
-
 	vec4 quat_unit_vecs( vec3 a, vec3 b ){
 		// Using unit vectors, Shortest rotation from Direction A to Direction B
 		// http://glmatrix.net/docs/quat.js.html#line548
@@ -525,9 +485,10 @@ const VERT_SRC = `#version 300 es
 		return normalize( vec4( cross( a, b ), 1.0 + dot ) );
 	}
 
+	//-------------------------
 
 	vec3 mode_linear( vec3 pos, int grp ){
-		//vec3 scl_top	= vec3( 1.0 );
+		//vec3 scl_top	= vec3( 1.0, 1.0, 1.0 );
 		//vec3 scl_bot	= vec3( 1.0, 1.0, 1.0 );
 		//vec3 pos_top	= vec3( 0.0, 0.0, 0.0 );
 		//vec3 pos_bot	= vec3( 0.0, 0.0, 0.0 );
@@ -576,39 +537,89 @@ const VERT_SRC = `#version 300 es
 			pos.y	-= pos_bot.y - 1.0;	// Dome is already 1u up, -1 will zero out.
 		}
 
-
-		/*
-		float scl_top		= 0.8; // TODO USE Vec3 for scaling later.
-		float scl_bot		= 0.5;
-		float top_move_y	= 1.5;
-		float bot_move_y	= 1.2;
-
-		if( grp == 1 ){
-			pos.xyz	*= scl_top;
-			pos.y	+= top_move_y - 1.0;
-		}
-
-		if( grp == 2 ){
-			float t = ( pos.y + 1.0 ) / 2.0;
-			pos		*= mix( scl_bot, scl_top, t );
-			pos.y	*= top_move_y;
-		}
-
-		if( grp == 3 ){
-			float t	= ( pos.y + 1.0 ) / 2.0;
-			pos		*= mix( scl_bot, scl_top, t );
-			pos.y	*= bot_move_y;
-		}
-
-		if( grp == 4 ){
-			pos.xyz	*= scl_bot;
-			pos.y	-= bot_move_y - 1.0;
-		}
-		*/
-
 		return pos;
 	}
 
+	const vec3 UP = vec3( 0.0, 1.0, 0.0 );
+	vec3 mode_capped_curve( vec3 pos, int grp ){
+		//vec3 pos_top = vec3( 0.0, 1.0, 0.0 );
+		//vec3 pos_mid = vec3( 0.0, 0.0, 0.0 );
+		//vec3 pos_bot = vec3( 0.0, -1.0, 0.0 );
+		//vec3 scl_top = vec3( 1.0 );
+		//vec3 scl_mid = vec3( 1.0 );
+		//vec3 scl_bot = vec3( 1.0 );
+
+		float t = 1.0;	// when Grp=1, Want T to be 1.0, the end of the curve
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Scale Rings rings between the Top and Bottom Domes.
+		if( grp == 2 || grp == 3 ){
+			t		= ( pos.y + 1.0 ) / 2.0;
+			pos.y	= 0.0;	// Shift ring to origin
+
+			//if( grp <= 2 ) pos *= mix( scl_mid, scl_top, norm_bezier3( 0.0, 0.3, a_pos.y ) );
+			//if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, norm_bezier3( 0.0, 0.3, abs( a_pos.y ) ) );
+
+			if( grp <= 2 ) pos *= mix( scl_mid, scl_top, a_pos.y );
+			if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, abs( a_pos.y ) );
+		}
+
+		// Scale Top Dome
+		if( grp == 1 ){
+			pos.y	-= 1.0;		// Move the Whole Dome to Origin.
+			pos.xyz	*= scl_top;	// Scale Dome
+		}
+
+		// Scale Bottom Dome
+		if( grp == 4 ){
+			pos.y	+= 1.0;		// Move Whole Dome to Origin
+			pos.xyz	*= scl_bot;	// Scale Dome
+			t = 0.0;			// Reset Curve T so its at the beginning of the curve
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		vec3 dir	= normalize( qbezier_dxdy( pos_bot, pos_mid, pos_top, t ) );	// Get the Direction of the T Position on the Curve.
+		vec4 q 		= quat_unit_vecs( UP, dir );					// Create a Rotation that goes from UP to that Curve T Direction
+		pos			= quat_mul_vec3( q, pos );						// Rotate the Ring/Dome
+		pos 		+= qbezier_at( pos_bot, pos_mid, pos_top, t );	// Move the Ring/Dome a Position T of the curve
+
+		return pos;
+	}
+	
+	vec3 mode_full_curve( vec3 pos, int grp ){
+		//vec3 pos_top = vec3( 0.0, 1.5, 0.0 );
+		//vec3 pos_mid = vec3( 0.0, 0.0, 0.0 );
+		//vec3 pos_bot = vec3( 0.0, -1.5, 0.0 );
+		//vec3 scl_top = vec3( 1.0 );
+		//vec3 scl_mid = vec3( 1.0 );
+		//vec3 scl_bot = vec3( 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Remap Capsule height from -1.5 > 1.5 to 0.0 > 3.0
+		// Then normalize the vert height in relation to total height.
+		float t		= ( 1.5 + a_pos.y ) / 3.0;
+
+		// Using the Norm Height, use that as T for bezier curve's first derivative/
+		vec3 dir	= normalize( qbezier_dxdy( pos_bot, pos_mid, pos_top, t ) );
+
+		// Create Rotation between UP and the curve point's direction.
+		vec4 q 		= quat_unit_vecs( UP, dir );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//if( grp <= 2 ) pos *= mix( sb, sc, norm_bezier3( 0.5, 1.3, pos.y / 1.5 ) );
+		//if( grp >= 3 ) pos *= mix( sb, sa, norm_bezier3( 0.2, 0.7, abs( pos.y ) / 1.5 ) );
+
+		// Apply Scale based from the mid point scale to either TOP or BOTTOM Scale.
+		if( grp <= 2 ) pos *= mix( scl_mid, scl_top, pos.y / 1.5 );
+		if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, abs( pos.y ) / 1.5 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		pos.y		= 0.0;											// Vert belongs to a ring, shift it to height origin
+		pos			= quat_mul_vec3( q, pos );						// Then rotate it toward the curve point direction
+		pos 		+= qbezier_at( pos_bot, pos_mid, pos_top, t );	// Then move the ring to the curve's position.
+		return pos;
+	}
+	
 
 	void main(void){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -616,124 +627,10 @@ const VERT_SRC = `#version 300 es
 		int grp		= int( a_pos.w );
 
 		if( base_opt == 0 ) pos = mode_linear( pos, grp );
-
-		/* --------------------------------
-		vec3 a	= vec3( 0.0, -1.5, 0.0 );
-		vec3 b	= vec3( -1.5, 0.0, 0.0 );
-		vec3 c	= vec3( 0.0, 1.5, 0.0 );
-		vec3 UP	= vec3( 0.0, 1.0, 0.0 );
-
-		vec3 sa = vec3( 1.0);
-		vec3 sb = vec3( 1.0 );
-		vec3 sc = vec3( 1.0 );
-
-		float t = ( 1.5 + a_pos.y ) / 3.0;
-		vec3 dir	= normalize( qbezier_dxdy( a, b, c, t ) );
-		vec4 q 		= quat_unit_vecs( UP, dir );
-
-		if( grp <= 2 ) pos *= mix( sb, sc, norm_bezier3( 0.5, 1.3, pos.y / 1.5 ) );
-		if( grp >= 3 ) pos *= mix( sb, sa, norm_bezier3( 0.2, 0.7, abs( pos.y ) / 1.5 ) );
-
-		pos.y		= 0.0;
-		pos			= quat_mul_vec3( q, pos );
-		pos 		+= qbezier_at( a, b, c, t );
-		*/
-
-		/* --------------------------------
-		vec3 a	= vec3( 0.0, -1.5, 0.0 );
-		vec3 b	= vec3( -0.9, 0.0, 0.0 );
-		vec3 c	= vec3( 0.0, 1.5, 0.0 );
-		vec3 UP	= vec3( 0.0, 1.0, 0.0 );
-
-		vec3 sa = vec3( 1.0 );
-		vec3 sb = vec3( 0.7, 1.0, 1.0 );
-		vec3 sc = vec3( 1.0 );
-
-		float t = 1.0;
-
-		if( grp == 2 || grp == 3 ){
-			t		= ( pos.y + 1.0 ) / 2.0;
-			pos.y	= 0.0;
-
-			if( grp <= 2 ) pos *= mix( sb, sc, norm_bezier3( 0.0, 0.3, a_pos.y ) );
-			if( grp >= 3 ) pos *= mix( sb, sa, norm_bezier3( 0.0, 0.3, abs( a_pos.y ) ) );
-
-			//if( grp <= 2 ) pos *= mix( sb, sc, a_pos.y / 1.0  );
-			//if( grp >= 3 ) pos *= mix( sb, sa, abs( a_pos.y ) / 1.0 );
-		}
-
-		if( grp == 1 ) pos.y -= 1.0;
-		if( grp == 4 ){ pos.y += 1.0; t = 0.0; }
-
-		vec3 dir	= normalize( qbezier_dxdy( a, b, c, t ) );
-		vec4 q 		= quat_unit_vecs( UP, dir );
-		pos			= quat_mul_vec3( q, pos );
-		pos 		+= qbezier_at( a, b, c, t );
-		*/
-
-
-
-
-		//vec3 scl_top		= vec3( 0.60, 0.67, 0.60 );
-		//vec3 scl_mid		= vec3( 1.0, 1.0, 1.0 );
-		//vec3 scl_bot		= vec3( 0.70, 0.70, 0.70 );
-		//vec3 mov_top		= vec3( 0.2, 0.0, 0.0 );
-		//vec3 mov_bot		= vec3( 0.2, 0.0, 0.0 );
-
-		//float top_move_y	= 1.5;
-		//float bot_move_y	= 1.2;
-
-		//pos = tube_mode( pos, grp );
-
-		//vec2 curv = vec2( -0.3, 0.75 );
-
-		/*
-		if( grp <= 2 ){
-			float t	= clamp( pos.y / 1.5, 0.0, 1.0 );
-			t		= norm_bezier3( curv_top.x, curv_top.y, t );
-			pos		*= mix( scl_mid, scl_top, t );
-		}
-
-		if( grp >= 3 ){
-			float t	= clamp( abs(pos.y / 1.5), 0.0, 1.0 );
-			t		= norm_bezier3( curv_top.x, curv_top.y, t );
-			pos		*= mix( scl_mid, scl_bot, t );
-		}
-
-		if( grp == 1 ){
-			pos += mov_top;
-		}
-
-		if( grp == 2 ){
-			float t = a_pos.y / 1.0;
-			pos += t * mov_top;
-		}
-
-		if( grp == 3 ){
-			float t = abs( a_pos.y / 1.0 );
-			pos += t * mov_bot;
-		}
-
-		if( grp == 4 ){
-			pos += mov_bot;
-		}
-
-		*/
-
-		//if( grp == 1 ) pos.y += move_y - 1.0;
-		//if( grp == 1 ) pos.xz *= scl_top;
-		//if( grp == 1 ) pos *= vec3( 2.0, 1.0, 1.0 );
-		//if( grp == 2 ) pos.y *= move_y;
-		
-		/*
-		if( grp <= 2 ){
-			float t = pos.y / 1.5;
-			pos.xz *= mix( scl_mid, scl_top, t );
-		}
-		*/
+		if( base_opt == 1 ) pos = mode_capped_curve( pos, grp );
+		if( base_opt == 2 ) pos = mode_full_curve( pos, grp );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 		vec4 wpos	= model.view_matrix * vec4( pos, 1.0 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -752,8 +649,6 @@ const VERT_SRC = `#version 300 es
 		if( a_pos.w == 2.0 ) tmp_color = vec3( 0.0, 1.0, 0.0 );
 		if( a_pos.w == 3.0 ) tmp_color = vec3( 1.0, 1.0, 1.0 );
 		if( a_pos.w == 4.0 ) tmp_color = vec3( 0.0, 1.0, 1.0 );
-
-		//if( a_pos.y >= 1.0 ) tmp_color	= vec3( 0.0, 1.0, 1.0 );
 	}`;
 
 const FRAG_SRC = `#version 300 es
@@ -806,54 +701,53 @@ const FRAG_SRC = `#version 300 es
 //#####################################################
 let AUTO_UPDATE = true;
 function init_ui(){
-	/*
-	elm_on_input( "f_spread", (v)=>{ $ctrl.set_spread( v ).update(); App.render(); });
-	elm_on_input( "f_bend_all", (v)=>{ $ctrl.bend_all( v ).update(); App.render(); });
-
-	elm_on_input( "f_index", (v)=>{ $ctrl.bend( "index", v ).update(); App.render(); });
-	elm_on_input( "f_middle", (v)=>{ $ctrl.bend( "middle", v ).update(); App.render(); });
-	elm_on_input( "f_ring", (v)=>{ $ctrl.bend( "ring", v ).update(); App.render(); });
-	elm_on_input( "f_pinky", (v)=>{ $ctrl.bend( "pinky", v ).update(); App.render(); });
-
-	elm_on_click( "p_rest", (v)=>{ $ctrl.pose( 0.2, 0.4, 0.6, 0.8, 0 ); App.render(); });
-	elm_on_click( "p_rock", (v)=>{ $ctrl.pose( 0, 1, 1, 0, 0.4 ); App.render(); });
-	elm_on_click( "p_two", (v)=>{ $ctrl.pose( 0, 0, 1, 1, 1 ); App.render(); });
-	elm_on_click( "p_point", (v)=>{ $ctrl.pose( 0, 1, 1, 1, 0.5 ); App.render(); });
-
-	elm_on_click( "p_clear", (v)=>{ $ctrl.pose( 0, 0, 0, 0, 0 ); App.render(); });
-	*/
-
 	elm_vec_input( "scl_top" );
 	elm_vec_input( "pos_top" );
 	elm_vec_input( "pos_bot" );
 	elm_vec_input( "scl_bot" );
+	elm_vec_input( "scl_mid" );
+	elm_vec_input( "pos_mid" );
 
 	elm_on_change( "rend_mode", (e)=>{
+		AUTO_UPDATE = false;
+
 		let mode = parseInt( e.srcElement.value );
 		$mat.set( "base_opt", mode );
 
 		switch( mode ){
 			case 0:
 				set_vec( "scl_top", [1,1,1] );
+				set_vec( "scl_mid", [1,1,1] );
 				set_vec( "scl_bot", [1,1,1] );
 				set_vec( "pos_top", [0,1,0] );
+				set_vec( "pos_mid", [0,0,0] );
 				set_vec( "pos_bot", [0,1,0] );
 				break;
 			case 1:
 				set_vec( "scl_top", [1,1,1] );
+				set_vec( "scl_mid", [1,1,1] );
 				set_vec( "scl_bot", [1,1,1] );
 				set_vec( "pos_top", [0,1,0] );
-				set_vec( "pos_bot", [0,1,0] );
+				set_vec( "pos_mid", [0,0,0] );
+				set_vec( "pos_bot", [0,-1,0] );
 				break;
 			case 2:
+				set_vec( "scl_top", [1,1,1] );
+				set_vec( "scl_mid", [1,1,1] );
+				set_vec( "scl_bot", [1,1,1] );
+				set_vec( "pos_top", [0,1.5,0] );
+				set_vec( "pos_mid", [0,0,0] );
+				set_vec( "pos_bot", [0,-1.5,0] );
 				break;
 		}
+
+		AUTO_UPDATE = true;
+		App.render();
 	});
 }
 
 function update_mat( n, v ){
-	console.log( "update_mat" );
-
+	//console.log( "update_mat" );
 	$mat.set( n, v );
 	if( AUTO_UPDATE ) App.render();
 }
@@ -878,6 +772,7 @@ function elm_on_change( name, fn ){
 
 function set_vec( name, v ){
 	document.getElementById( name ).value = v;
+	update_mat( name, new Float32Array( v ) );
 }
 
 </script>
@@ -886,23 +781,30 @@ function set_vec( name, v ){
 	<canvas id="pg_canvas"></canvas>
 
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
-		<prop-range label="Spread" id="f_spread" value="0" min="0" max="1" step="0.01"></prop-range>
-		<prop-range label="Bend All" id="f_bend_all" value="0" min="0" max="1" step="0.01"></prop-range>
 		<select label="Mode" id="rend_mode">
 			<option value="0">Linear Tube</option>
-			<option value="1">Mode B</option>
-			<option value="2">Mode C</option>
+			<option value="1">Capped Curve</option>
+			<option value="2">Full Curve</option>
 		</select>
+		<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="0.1"></prop-vector>
+		<prop-vector label="Offset"		id="base_pos" value="0,0,0" step="0.1"></prop-vector>
 		
 		<prop-group label="TOP DOME">
 			<prop-vector label="Scale"		id="scl_top" value="1,1,1" step="0.1"></prop-vector>
 			<prop-vector label="Position"	id="pos_top" value="0,1,0" step="0.1"></prop-vector>
 		</prop-group>
 
+		<prop-group label="MIDDLE ( Curve Modes )">
+			<prop-vector label="Scale"		id="scl_mid" value="1,1,1" step="0.1"></prop-vector>
+			<prop-vector label="Position"	id="pos_mid" value="0,0,0" step="0.1"></prop-vector>
+		</prop-group>
+
 		<prop-group label="BOTTOM DOME">
 			<prop-vector label="Scale"		id="scl_bot" value="1,1,1" step="0.1"></prop-vector>
 			<prop-vector label="Position"	id="pos_bot" value="0,1,0" step="0.1"></prop-vector>
 		</prop-group>
+
+
 
 		<!--
 		{ name:"scl_top", type:"vec3", value:new Float32Array([1,1,1]) },
@@ -918,7 +820,7 @@ function set_vec( name, v ){
 		{ name:"base_opt", type:"int", value:0 },
 		-->
 
-		<prop-group label="Poses">
+		<prop-group label="Shapes">
 			<button id="p_rest"> Relaxed </button>
 		</prop-group>
 	</prop-panel>

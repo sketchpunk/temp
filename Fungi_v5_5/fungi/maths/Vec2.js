@@ -1,4 +1,10 @@
 class Vec2 extends Float32Array{
+	static UP		= new Vec2( 0, 1 );
+	static RIGHT	= new Vec2( 1, 0 );
+	static LEFT		= new Vec2( -1, 0 );
+	static DOWN		= new Vec2( 0, -1 );
+	static ZERO		= new Vec2( 0, 0 );
+
 	constructor( ini ){
 		super( 2 );
 		if(ini instanceof Vec2 || (ini && ini.length == 2)){	this[0] = ini[0];		this[1] = ini[1]; }
@@ -125,13 +131,27 @@ class Vec2 extends Float32Array{
 		return out;
 	}
 
-	rotate( ang, out ){
+	rotate( rad, out ){
 		out = out || this;
 
-		let cos = Math.cos( ang ),
-			sin = Math.sin( ang ),
-			x = this[0],
-			y = this[1];
+		let cos	= Math.cos( rad ),
+			sin	= Math.sin( rad ),
+			x	= this[ 0 ],
+			y	= this[ 1 ];
+
+		out[0] = x * cos - y * sin;
+		out[1] = x * sin + y * cos;
+		return out;
+	}
+
+	rotate_deg( deg, out ){
+		out = out || this;
+
+		let rad	= deg * Math.PI / 180,
+			cos	= Math.cos( rad ),
+			sin	= Math.sin( rad ),
+			x	= this[ 0 ],
+			y	= this[ 1 ];
 
 		out[0] = x * cos - y * sin;
 		out[1] = x * sin + y * cos;
@@ -144,6 +164,21 @@ class Vec2 extends Float32Array{
 		out[1] = -this[1];
 		return out;
 	}
+
+	perp_cw(){	// Perpendicular ClockWise
+		let x = this[ 0 ];
+		this[ 0 ] = this[ 1 ];
+		this[ 1 ] = -x;
+		return this;
+	}
+
+	perp_ccw(){	// Perpendicular Counter-ClockWise
+		let x = this[ 0 ];
+		this[ 0 ] = -this[ 1 ];
+		this[ 1 ] = x;
+		return this;
+	}
+
 	// #endregion ///////////////////////////////////////////////////////////////////////
 
 	// #region STATIC OPERATIONS
@@ -169,6 +204,33 @@ class Vec2 extends Float32Array{
 	}
 
 	static dot(a,b){ return a[0] * b[0] + a[1] * b[1]; }
+	static det(a,b){ return a[0] * b[1] - a[1] * b[0]; } // "cross product" / determinant also = len(a)*len(b) * sin( angle );
+
+
+	static project( from, to, out=null ){
+		// Modified from https://github.com/Unity-Technologies/UnityCsReference/blob/master/Runtime/Export/Math/Vector3.cs#L265
+		// dot( a, b ) / dot( b, b ) * b
+		out = out || new Vec2();
+
+		let denom = Vec2.dot( to, to );
+		if( denom < 0.000001 ) return out.copy( Vec2.ZERO );
+	
+		let scl	= Vec2.dot( from, to ) / denom;
+		return out.set( to[0] * scl, to[1] * scl );
+	}
+
+	// From FROM and TO should have the same Origin.
+	// FROM is a straight line from origin to plane. May need to do some extra projection to get this value.
+	// To is treated like a Ray from the origin.
+	static project_plane( from, to, plane_norm, out=null ){
+		out = out || new Vec2();
+
+		let denom = Vec2.dot( to, plane_norm );
+		if( denom < 0.000001 && denom > -0.000001 ) return out.copy( Vec2.ZERO );
+
+		let t = Vec2.dot( from, plane_norm ) / denom;
+		return out.from_scale( to, t );
+	}
 
 	static floor(v, out=null){
 		out = out || new Vec2();
@@ -203,6 +265,34 @@ class Vec2 extends Float32Array{
 		//Linear Interpolation : (1 - t) * v0 + t * v1;
 		out[0] = v0[0] * tMin1 + v1[0] * t;
 		out[1] = v0[1] * tMin1 + v1[1] * t;
+		return out;
+	}
+
+	static rotate_deg( v, deg, out ){
+		out = out || new Vec2();
+
+		let rad	= deg * Math.PI / 180,
+			cos	= Math.cos( rad ),
+			sin	= Math.sin( rad ),
+			x	= v[ 0 ],
+			y	= v[ 1 ];
+
+		out[0] = x * cos - y * sin;
+		out[1] = x * sin + y * cos;
+		return out;
+	}
+
+	static perp_cw( v, out=null ){	// Perpendicular ClockWise
+		out = out || new Vec2();
+		out[ 0 ] = v[ 1 ];
+		out[ 1 ] = -v[ 0 ];
+		return out;
+	}
+
+	static perp_ccw( v, out=null ){	// Perpendicular Counter-ClockWise
+		out = out || new Vec2();
+		out[ 0 ] = -v[ 1 ];
+		out[ 1 ] = v[ 0 ];
 		return out;
 	}
 	// #endregion ///////////////////////////////////////////////////////////////////////

@@ -1,0 +1,524 @@
+<!DOCTYPE html><script type="module">
+import Canvas	from "../../fungi.test/Canvas.js";
+import Vec2		from "../../fungi/maths/Vec2.js";
+
+//https://lcmccauley.wordpress.com/2014/04/27/2d-frustum-culling-tutorial-p2/
+//https://github.com/Frederoche/WebGL-Map
+// http://blog.notdot.net/2009/11/Damn-Cool-Algorithms-Spatial-indexing-with-Quadtrees-and-Hilbert-Curves
+
+// Inspiration - https://www.researchgate.net/profile/Oscar_Martinez_Rubi/publication/284617106/figure/fig8/AS:667879422820361@1536246271375/2D-simplification-of-the-view-frustum-culling-and-level-of-detail-calculations.ppm
+let $;
+let $cam;
+let $quad;
+
+window.addEventListener( "load", ()=>{
+	$		= new Canvas( "pg_canvas" );
+	$quad	= new QuadTree( $ )
+	$cam	= new Camera( $ );
+
+	Draw();
+});
+
+window.addEventListener( "keydown", (e)=>{
+	switch( e.keyCode ){
+		case 38: $cam.forward( 5 ); Draw(); break;		// UP
+		case 40: $cam.forward( -5 ); Draw(); break;	// Down
+		case 37: $cam.right( 5 ); Draw(); break;	// Left
+		case 39: $cam.right( -5 ); Draw(); break;		// Right
+		case 65: $cam.rotate( -5 ); Draw(); break; // A
+		case 68: $cam.rotate( 5 ); Draw(); break; // D
+		case 87: $cam.add_far( 10 ); Draw(); break; // w
+		case 83: $cam.add_far( -10 ); Draw();break; // s
+	}
+});
+
+function Draw(){
+	$.clear();
+	
+	$quad.draw( $cam );
+	$cam.draw();
+}
+
+
+class Camera{
+	angle		= -90;
+	pos 		= new Vec2( 100, 100 );
+	fov			= 45;
+
+	near		= 30;
+	near_pnt	= new Vec2();
+	near_pnt_a	= new Vec2();
+	near_pnt_b	= new Vec2();
+	
+	far			= 200;
+	far_pnt 	= new Vec2();
+	far_pnt_a	= new Vec2();
+	far_pnt_b	= new Vec2();
+
+	constructor( c ){
+		this.canvas = c;
+		this.update_frustum();
+	}
+
+	add_far( p ){
+		this.far += p;
+		if( this.far < 70 ) this.far = 70;
+		this.update_frustum();
+	}
+
+	rotate( d ){
+		let v = ( this.angle + d ) % 360; 	// This is a Modulus formula that handles Negative Remainders
+		this.angle = ( v < 0 )? 360+v : v;
+	}
+
+	forward( p ){
+		let v = Vec2.rotate_deg( [0,p], this.angle );
+		this.pos.add( v );
+	}
+
+	right( p ){
+		let v = Vec2.rotate_deg( [p,0], this.angle );
+		this.pos.add( v );
+	}
+
+	update_frustum(){
+		// https://i.stack.imgur.com/j5Usy.png
+		// Image that illustrates how to compute and draw out a frustum.
+
+		// Figure out the distances from origin the near and far planes
+		let fovH = this.fov * 0.5;
+		this.near_pnt.from_scale( Vec2.UP, this.near );	
+		this.far_pnt.from_scale( Vec2.UP, this.far );
+
+		let plane_norm	= Vec2.UP.clone().invert();
+		let v			= new Vec2();	// Throw Away Vector
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Using Plane Projection to Compute the FAR Point Edges
+		v.copy( this.far_pnt ).rotate_deg( fovH ).scale( 1.5 ); // Scale for projection, so its goes beyond the plane.
+		Vec2.project_plane( this.far_pnt, v, plane_norm, this.far_pnt_a );
+		this.far_pnt_b.copy( this.far_pnt_a );	// Mirror the Point, just need to negate X
+		this.far_pnt_b[0] = -this.far_pnt_b[0];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Using Plane Projection to Compute the NEAR Point Edges
+		v.copy( this.near_pnt ).rotate_deg( fovH ).scale( 1.5 ); // Scale for projection, so its goes beyond the plane.
+		Vec2.project_plane( this.near_pnt, v, plane_norm, this.near_pnt_a );
+		this.near_pnt_b.copy( this.near_pnt_a );	// Mirror the Point, just need to negate X
+		this.near_pnt_b[0] = -this.near_pnt_b[0];
+	}	
+
+	get_frustum(){
+		return {
+			near_a	: Vec2.rotate_deg( this.near_pnt_a, this.angle ).add( this.pos ),
+			near_b	: Vec2.rotate_deg( this.near_pnt_b, this.angle ).add( this.pos ),
+			far_a	: Vec2.rotate_deg( this.far_pnt_a, this.angle ).add( this.pos ),
+			far_b	: Vec2.rotate_deg( this.far_pnt_b, this.angle ).add( this.pos ),
+		}
+	}
+
+	get_frustum_planes(){
+		let f	= this.get_frustum();
+		let out	= new Array( 4 );
+
+		out[ 0 ] = { 	// Ride Side
+			dir : Vec2.sub( f.far_a, f.near_a ).perp_cw().norm(), 
+			mid : Vec2.lerp( f.far_a, f.near_a, 0.5 )
+		};
+
+		out[ 1 ] = {	// Far
+			dir : Vec2.sub( f.far_b, f.far_a ).perp_cw().norm(),
+			mid : Vec2.lerp( f.far_b, f.far_a, 0.5 )
+		};
+
+		out[ 2 ] = {	// Left Side
+			dir : Vec2.sub( f.near_b, f.far_b ).perp_cw().norm(),
+			mid : Vec2.lerp( f.near_b, f.far_b, 0.5 )
+		};
+
+		out[ 3 ] = {	// Near
+			dir : Vec2.sub( f.near_a, f.near_b ).perp_cw().norm(),
+			mid : Vec2.lerp( f.near_a, f.near_b, 0.5 )
+		};
+
+		//let i=3;
+		//this.canvas.circle_vec( out[ i ].mid, 4 );
+		//this.canvas.line_vec( out[ i ].mid, Vec2.scale( out[ i ].dir, 10 ).add( out[ i ].mid ) );
+		return out;
+	}
+
+	draw(){
+		let c = this.canvas;
+		let a = new Vec2();
+		let b = new Vec2();
+
+		let near_pnt	= Vec2.rotate_deg( this.near_pnt, this.angle ).add( this.pos );
+		let near_pnt_a	= Vec2.rotate_deg( this.near_pnt_a, this.angle ).add( this.pos );
+		let near_pnt_b	= Vec2.rotate_deg( this.near_pnt_b, this.angle ).add( this.pos );
+
+		let far_pnt		= Vec2.rotate_deg( this.far_pnt, this.angle ).add( this.pos );
+		let far_pnt_a	= Vec2.rotate_deg( this.far_pnt_a, this.angle ).add( this.pos );
+		let far_pnt_b	= Vec2.rotate_deg( this.far_pnt_b, this.angle ).add( this.pos );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Draw Lines
+		c.stroke( "gray" );
+		c
+			.line_vec( this.pos, far_pnt )
+			.line_vec( this.pos, far_pnt_a )
+			.line_vec( this.pos, far_pnt_b )
+			.line_vec( far_pnt_a, far_pnt_b )
+			.line_vec( near_pnt_a, near_pnt_b )
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Draw Points
+		c
+			.fill( "white" ).stroke( "black" ).line_width( 3 )
+			.circle_vec( this.pos, 5, 3 )	// Origin Pnt
+
+			.fill( "black" )
+			.circle_vec( near_pnt, 2 )		// Near Point
+			.circle_vec( far_pnt, 2 )		// Far Point
+			.circle_vec( near_pnt_a, 2 )	// Near Point
+			.circle_vec( near_pnt_b, 2 )	// Near Point
+			.circle_vec( far_pnt_a, 2 )		// Far Point
+			.circle_vec( far_pnt_b, 2 );	// Far Point
+	}
+}
+
+class QuadTree{
+	width		= 512;
+	height		= 512;
+	zoom		= 0;
+	zoom_max	= 5;
+
+	constructor( c ){
+		this.canvas = c;
+	}
+
+	draw( cam ){
+		let c = this.canvas;
+		c.stroke( "red" ).line_width( 1 );
+		c.rect( 0, 0, this.width, this.height ); // Draw the QuadTree Boundary
+
+		//this.show_camera_quad( cam.pos );
+		this.show_frustum_intersect( cam );
+	}
+
+	show_camera_quad( pos ){
+		let min		= [ 0, 0 ];
+		let max		= [ this.width, this.height ];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if pos is within the main area else it lives outside
+		// the Quadtree's Boundaries.
+		if(
+			pos.x < min[ 0 ] || pos.x > max[0] ||
+			pos.y < min[ 1 ] || pos.y > max[1] 
+		) return;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Using the Mid point of the Quadrant to determine
+		// which sub-quadrant the camera is in. Keep subdividing
+		// till reaching the maximum zoom.
+		let zoom = 0;
+		let wh, hh;	// Halfway Points
+
+		this.canvas.stroke( "#c0c0c0" );
+		for( zoom; zoom < this.zoom_max; zoom++ ){
+			// Use Lerp to get Middle Point
+			wh	= min[0] * 0.5 + max[0] * 0.5;
+			hh	= min[1] * 0.5 + max[1] * 0.5;
+
+			// Check if Position is before or after Mid Points
+			( pos.x < wh )?	max[ 0 ] = wh : min[ 0 ] = wh;
+			( pos.y < hh )?	max[ 1 ] = hh : min[ 1 ] = hh;
+			
+			this.canvas.rect_pnts( min, max );
+		}
+	}
+
+	/*
+	BINARY ADDRESSING
+	TopLeft		: 00
+	TopRight	: 10
+	BotLeft		: 01
+	BotRight	: 11
+
+	Then can save Address in Binary
+	32 bites. Can save 16 levels
+	00 -> 01, Top Left, Sub Top Right
+	*/
+
+
+	get_box(){
+
+	}
+
+	show_frustum_intersect( cam ){
+		let f		= cam.get_frustum_planes();
+		let root	= this.get_quad();
+		let i, j, plane, box, corn;
+		let cnt = 0;
+		let corners_in_cnt = 0;
+		let stack = [
+			this.get_quad( root, 0 ),
+		];
+
+		let v	= new Vec2();
+		let dir	= new Vec2();
+		let push = false;
+
+		while( stack.length > 0 ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			box		= stack.pop();
+			corn	= this.get_quad_corners( box );
+			push	= false;
+			//this.canvas.stroke( "gray" ).rect_pnts( box.min, box.max );
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			corners_in_cnt = 0;
+			for( i=0; i < 8; i+=2 ){	// Loop Each Corner of the Quad
+				v.set( corn[i], corn[i+1] );
+				//this.canvas.circle_vec( v, 3 );
+
+				cnt = 0;
+				for( j=0; j < 4; j++ ){
+					plane = f[ j ];
+					dir.from_sub( v, plane.mid );
+
+					if( Vec2.dot( dir, plane.dir ) < 0 ) break;
+					else cnt++;
+				}
+				//console.log( i, "---------------IS IN", (cnt == 4), cnt );
+				if( cnt == 4 ) corners_in_cnt++;
+			}
+
+			//console.log( "Total Corners", corners_in_cnt );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			//if( corners_in_cnt == 0 ) console.log( "Quad Not In Frustum" );
+			//if( corners_in_cnt == 1 ) console.log( "One Corner In Frustum" );
+			//if( corners_in_cnt == 2 ) console.log( "Two Corner In Frustum" );
+			//if( corners_in_cnt == 3 ) console.log( "Three Corner In Frustum" );
+			//if( corners_in_cnt == 4 ) console.log( "ALL In Frustum" );
+
+			if( corners_in_cnt == 4 ) this.canvas.stroke( "gray" ).rect_pnts( box.min, box.max );
+			else if( corners_in_cnt != 0 ){
+				push = true
+			}else if( this.is_pnt_in_quad( cam.pos, box ) ){
+				push = true;
+			}
+
+			if( push && box.zoom < this.zoom_max ) stack.push(
+				this.get_quad( box, 0 ),
+				this.get_quad( box, 1 ),
+				this.get_quad( box, 2 ),
+				this.get_quad( box, 3 ),
+			);
+		}
+
+		
+
+
+		/*
+		if( box.zoom < this.zoom_max && this.is_pnt_in_quad( cam.pos, box ) ){
+			stack.push(
+				this.get_quad( box, 0 ),
+				this.get_quad( box, 1 ),
+				this.get_quad( box, 2 ),
+				this.get_quad( box, 3 ),
+			);
+		}
+		*/
+		
+		
+		//corn = this.get_quad_corners( root.min, root.max );
+		//for( i=0; i < 8; i+=2 ) this.canvas.circle( corn[i], corn[i+1], 3 );
+		
+
+		//for( let i=0; i < 4; i++ ){
+		//	box = this.get_quad( root.min, root.max, i );
+		//	this.canvas.rect_pnts( box.min, box.max );
+		//}
+
+		//this.canvas.rect_pnts( box.min, box.max );
+		//box 	= this.get_quad( box.min, box.max, 0 );
+		//this.canvas.rect_pnts( box.min, box.max );
+	}
+
+	is_pnt_in_quad( pos, box ){
+		return (	pos.x >= box.min[ 0 ] && pos.x <= box.max[0] &&
+					pos.y >= box.min[ 1 ] && pos.y <= box.max[1] );
+	}
+
+	get_quad( box=null, q=0 ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Return Root World Quad
+		if( !box ) return {
+			min		: [ 0, 0 ],
+			max		: [ this.width, this.height ],
+			zoom	: 0,
+		};
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Half Way Points
+		let min = box.min;
+		let max = box.max;
+		let wh	= min[0] * 0.5 + max[0] * 0.5;
+		let hh	= min[1] * 0.5 + max[1] * 0.5;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Sub Quad Min + Max
+		switch( q ){
+			case 0: return { min: [ min[0], min[1] ], max: [ wh, hh ], zoom:box.zoom+1 }; break;	// TOP Left
+			case 1:	return { min: [ wh, min[1] ], max: [ max[0], hh ], zoom:box.zoom+1 }; break;	// TOP Right
+			case 2:	return { min: [ min[0], hh ], max: [ wh, max[1] ], zoom:box.zoom+1 }; break;	// Bot Left
+			case 3:	return { min: [ wh, hh ], max: [ max[0], max[1] ], zoom:box.zoom+1 }; break;	// Bot Right
+		}
+	}
+
+	get_quad_corners( box ){
+		return [
+			box.min[ 0 ], box.min[ 1 ],
+			box.max[ 0 ], box.min[ 1 ],
+			box.max[ 0 ], box.max[ 1 ],
+			box.min[ 0 ], box.max[ 1 ],
+		];
+	}
+}
+
+/*
+https://sketchpunk.bitbucket.io/src/2d/010_quadtree.html
+let $ = new Canvas("canvas", 500, 500 );
+let qt = new QuatTree( $.width, $.height );
+for(let i = 0; i < 200; i++ ) qt.add_point( Math.random() * 500, Math.random() * 500 );
+qt.draw( $ );
+*/
+
+class QuatTreex{
+	constructor( w, h ){
+		this.zones		= [];
+		this.width		= w;
+		this.height		= h;
+		this.zoneLmt	= 2;
+
+		let mx = w * 0.5,
+			my = h * 0.5;
+
+		this.add_zone( 0, 0, mx, my )
+			.add_zone( mx, 0, w, my )
+			.add_zone( 0, my, mx, h )
+			.add_zone( mx, my, w, h );
+	}
+
+	add_zone( x0, y0, x1, y1 ){
+		this.zones.push( { x0, y0, x1, y1, pnts:[], child:null } );
+		return this;
+	}
+
+	add_point( x, y ){
+		let i, rtn = false;
+		let chk = [ 0, 1, 2, 3 ];
+		let loop = 0;
+		let loopLmt = this.zones.length + 1;
+
+		while( rtn != null && loop < loopLmt ){
+			rtn = this.check_zone( x, y, chk );
+			loop++;
+
+			if( rtn != null ){
+			// Zone Is divided, Check those
+				if( rtn.status == 1 ){
+					chk = this.zones[ rtn.idx].child;
+					continue;
+				}
+
+				// Zone full, sub-divide
+				if( rtn.status == 2 ){ 
+					this.divide_zone( rtn.idx );
+					chk = this.zones[ rtn.idx ].child;
+					//console.log( "STATUS 2 ", chk );
+					continue;
+				}
+			}
+		}
+	}
+
+	check_zone( x, y, idx ){
+		let i, z;
+		for( i=0; i < 4; i++ ){
+			z = this.zones[ idx[i] ];
+
+			if( x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1 ){
+				if( z.child != null )				return { status: 1, idx: idx[i] };	// Try Checking Child Zones
+				if( z.pnts.length >= this.zoneLmt )	return { status: 2, idx: idx[i] };	// Limit Reach, Sub Divide.
+
+				z.pnts.push( [x,y] );
+				return null;
+			}
+		}
+
+		return null;
+	}
+
+	divide_zone( i ){
+		console.log("divide zone", i);
+
+		if( this.zones[ i ].child != null ){
+			console.log("zone already divided");
+			return;
+		}
+		
+		let z	= this.zones[ i ],
+			mx	= z.x0 * 0.5 + z.x1 * 0.5,
+			my	= z.y0 * 0.5 + z.y1 * 0.5,
+			n   = this.zones.length;
+
+		this.add_zone( z.x0, z.y0, mx, my )
+			.add_zone( mx, z.y0, z.x1, my )
+			.add_zone( z.x0, my, mx, z.y1 )
+			.add_zone( mx, my, z.x1, z.y1 );
+
+		z.child = [ n, n+1, n+2, n+3 ];
+
+		let p, ii, zz;
+		for( p of z.pnts ){
+			for( ii=0; ii < 4; ii++ ){
+				zz = this.zones[ z.child[ ii ] ];
+				if( p[0] >= zz.x0 && p[0] <= zz.x1 && p[1] >= zz.y0 && p[1] <= zz.y1 ){
+					zz.pnts.push( p );
+					break;
+				}
+			}
+		}
+
+		z.pnts.length = 0;
+	}
+
+	draw( c ){
+		let i, j;
+		let pcnt = 0;
+
+		c.fill( "#ff0000" ).stroke( "#c0c0c0"); 
+
+		for( i of this.zones ){
+			c.rect( i.x0, i.y0, i.x1-i.x0, i.y1-i.y0 );
+
+			if( i.pnts.length ){
+				for( j of i.pnts ){
+					c.circle_vec( j, 2 );
+					pcnt++;
+				}
+			}
+		}
+
+		console.log("Points: " + pcnt);
+	}
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

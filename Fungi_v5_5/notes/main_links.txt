@@ -20,6 +20,9 @@ https://mapbox.github.io/delaunator/ Voronoi triangular
 
 https://github.com/SamsonStarmerLee/UE4-Grass
 
+// Simple 3D Engine
+https://github.com/simondevyoutube/WebGL_1Day_3DEngine/blob/master/main.js
+
 //---------------------------------------
 // Planet Generator. Amazing Math Samples of how to create crator, like SmoothMin and SmoothMax
 
@@ -49,6 +52,9 @@ http://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
 
 //---------------------------------------
 SHADERS
+
+http://www.aortiz.me/2018/12/21/CG.html  Forward, Deferred, Tiled, Cluster and Forward+
+
 
 https://observablehq.com/@mbostock/gray-scott-reaction-diffusion
 https://www.karlsims.com/rd.html
