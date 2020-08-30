@@ -5,6 +5,8 @@ import Vec2		from "../../fungi/maths/Vec2.js";
 //https://lcmccauley.wordpress.com/2014/04/27/2d-frustum-culling-tutorial-p2/
 //https://github.com/Frederoche/WebGL-Map
 // http://blog.notdot.net/2009/11/Damn-Cool-Algorithms-Spatial-indexing-with-Quadtrees-and-Hilbert-Curves
+// https://www.flipcode.com/archives/Frustum_Culling.shtml
+// https://sites.google.com/site/letsmakeavoxelengine/home/frustum-culling
 
 // Inspiration - https://www.researchgate.net/profile/Oscar_Martinez_Rubi/publication/284617106/figure/fig8/AS:667879422820361@1536246271375/2D-simplification-of-the-view-frustum-culling-and-level-of-detail-calculations.ppm
 let $;
@@ -16,7 +18,32 @@ window.addEventListener( "load", ()=>{
 	$quad	= new QuadTree( $ )
 	$cam	= new Camera( $ );
 
+	//$cam.pos.copy( [181.51170349121094, 169.34799194335938] );
+	//$cam.angle = 215;
+
+	//$cam.pos.copy( [197.89476013183594, 180.81954956054688] );
+	//$cam.angle = 230;
+
+	//$cam.pos.copy( [376.25030517578125, 258.1217041015625] );
+	//$cam.angle = 120;
+
+	$cam.pos.copy( [311.9979248046875, 215.1214141845703] );
+	$cam.angle = 220;
+
 	Draw();
+
+	/*
+	let qt = new QTree();
+
+	qt.root.expand();
+	qt.root.quadrants[ QTreeNode.TOP_L ].expand();
+	qt.root.quadrants[ QTreeNode.BOT_R ].expand();
+	qt.root.quadrants[ QTreeNode.BOT_R ].quadrants[ QTreeNode.BOT_R ].expand();
+
+	qt.draw( $ );
+	*/
+
+	//console.log( qt );
 });
 
 window.addEventListener( "keydown", (e)=>{
@@ -29,6 +56,12 @@ window.addEventListener( "keydown", (e)=>{
 		case 68: $cam.rotate( 5 ); Draw(); break; // D
 		case 87: $cam.add_far( 10 ); Draw(); break; // w
 		case 83: $cam.add_far( -10 ); Draw();break; // s
+
+		case 80: //P
+			console.log( "---- INFO ----" );
+			console.log( "POSITION: ", $cam.pos );
+			console.log( "ANGLE: ", $cam.angle );
+		break;
 	}
 });
 
@@ -247,17 +280,6 @@ class QuadTree{
 		}
 	}
 
-	/*
-	BINARY ADDRESSING
-	TopLeft		: 00
-	TopRight	: 10
-	BotLeft		: 01
-	BotRight	: 11
-
-	Then can save Address in Binary
-	32 bites. Can save 16 levels
-	00 -> 01, Top Left, Sub Top Right
-	*/
 
 
 	show_frustum_intersect( cam ){
@@ -266,7 +288,8 @@ class QuadTree{
 		let root	= this.get_quad();
 
 		let box, cnt;
-		let draw = false
+		let fq_intersect = false
+		let cir_intersect = false;
 
 		let stack = [
 			this.get_quad( root, 0 ),
@@ -275,16 +298,46 @@ class QuadTree{
 			this.get_quad( root, 3 ),
 		];
 
+		can.stroke( "silver" );
+
 		while( stack.length > 0 ){
-			draw	= false;
-			box		= stack.pop();
-			cnt		= this.quad_frustum_intersect( box, frust.planes );
+			box				= stack.pop();
+			cnt				= this.quad_frustum_intersect( box, frust.planes );
+			fq_intersect	= ( cnt==0 )? this.frustum_quad_intersect( frust.pnts, box ) : false;
 
-			if( cnt > 0 ) draw = true;
-			else if( this.frustum_quad_intersect( frust.pnts, box ) ) draw = true;
+			//if( cnt > 0 ) draw = true;
+			//else if( this.frustum_quad_intersect( frust.pnts, box ) ){
+			//	draw			= true;
+			//	fq_intersect	= true;
+			//}
 
-			if( draw ){
+			if( cnt > 0 || fq_intersect ){
 				can.rect_pnts( box.min, box.max );
+				
+				//if( Vec2.len_sqr( box.mid, cam.pos ) > RADIUS_SQ ){
+				//	if( cnt > 0 ) continue;
+				//}
+				cir_intersect = this.quad_circle_intersect( box, cam.pos, RADIUS );
+				
+				//can.text( box.zoom+",quad "+box.quadrant+",cnt "+cnt +" fqi " + fq_intersect + " cin " + cir_intersect, box.mid[0], box.mid[1] );
+
+				//if( box.zoom == 2 && box.quadrant == 1 ){
+				//	let tmp = (this.quad_circle_intersect( box, cam.pos, RADIUS_SQ ))? "cir_in":"cir_out";
+				//	let tmp2 = ( fq_intersect )? " fq_yes" : " fa_no";
+				//	can.text( box.zoom+",quad "+box.quadrant+",cnt "+cnt+","+tmp+tmp2, box.mid[0], box.mid[1] );
+				//	can.rect_pnts( box.min, box.max );
+				//}
+
+				// If not near the camera, If There is one corner in the Frustrum or it intersects the quad
+				// Good enough, dont need to dig deeper. Only Dig deeper when within the Camera radius.
+				if( !cir_intersect && ( cnt > 0 || fq_intersect  ) ) continue;
+
+				// if circle > Dig
+				// if cnt > 0 or c_intersect, Good Enough End.
+
+				//if( cnt > 0 && !c_intersect ) continue;
+
+				//can.rect_pnts( box.min, box.max );
 
 				if( box.zoom < this.zoom_max ){
 					stack.push(
@@ -295,6 +348,8 @@ class QuadTree{
 					);
 				}
 			}
+
+			// Note, Box should Include Boundary and Corner Points
 
 			// 1. Any Corner of a Quad Inside the Frustum.
 			// 2. If any point of a Frustrum is Inside a Quad.
@@ -343,6 +398,47 @@ class QuadTree{
 		}
 		return false;
 	}
+
+	// Checks if Quad Intersects a Circle
+	quad_circle_intersect( box, pos, radius ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let wh		= ( box.max[ 0 ] - box.min[ 0 ] ) * 0.5;
+		let hh		= ( box.max[ 1 ] - box.min[ 1 ] ) * 0.5;
+		let len_x	= Math.abs( pos.x - box.mid[ 0 ] );
+		let len_y	= Math.abs( pos.y - box.mid[ 1 ] );
+
+		// If circle is no where near the Quad
+		if( len_x > wh + radius ) return false;
+		if( len_y > hh + radius ) return false;
+
+		// Circle is close enough to an edge
+		if( len_x <= wh ) return true;
+		if( len_y <= hh ) return true;
+
+		// If Circle is in the corner
+		let len_sq = (len_x - wh)**2 + (len_y - hh)**2;
+    	return ( len_sq <= radius**2 );
+
+
+		// WROTE THE FOLLOWING MYSELF... ALMOST WORKS PERFECTLY.
+		//let corners = this.get_quad_corners( box );
+		//let pnt;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		/* Test if Circle Center is inside box */
+		//if( pos.x >= box.min[0] && pos.x <= box.max[0] &&
+		//	pos.y >= box.min[1] && pos.y <= box.max[1]
+		//) return true; 
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Test if Corners are in radius of circle
+		//for( pnt of corners ){
+		//	if( Vec2.len_sqr( pnt, pos ) <= radius_sqr ) return true;
+		//}
+
+		return false;
+	}
+
 
 	show_frustum_intersectx( cam ){
 		let f		= cam.get_frustum_planes();
@@ -504,6 +600,8 @@ class QuadTree{
 			out.min[ 0 ] * 0.5 + out.max[ 0 ] * 0.5,
 			out.min[ 1 ] * 0.5 + out.max[ 1 ] * 0.5,
 		];
+
+		out.quadrant = q;
 		return out;
 	}
 
@@ -517,6 +615,154 @@ class QuadTree{
 	}
 }
 
+
+/*
+BINARY ADDRESSING
+TopLeft		: 00
+TopRight	: 10
+BotLeft		: 01
+BotRight	: 11
+
+Then can save Address in Binary
+With a uint16 Can save 16 levels
+With a Uint64 can save 32 Levels ( Requirement is 20 Levels )
+00 -> 01, Top Left, Sub Top Right
+
+Every First SubQuad has the same Address as its parent.
+If had access to 64 units, can reserve the first 6 bits to be
+the quad's depth value which I think might give each quad a unique address, I think.
+*/
+
+class QTreeNode{
+	static TOP_L = 0;
+	static TOP_R = 1;
+	static BOT_L = 2;
+	static BOT_R = 3;
+
+	data		= null;
+	address		= 0;
+	depth		= 0;
+	width		= 0;
+	height		= 0;
+	min			= new Vec2();
+	max			= new Vec2();
+	mid			= new Vec2();
+	corners		= [ new Vec2(), new Vec2(), new Vec2(), new Vec2() ];
+	quadrants	= null;
+
+	constructor( node=null, q=0 ){
+		if( node ) this.as_quad( node, q );
+	}
+
+	as_root( x, y, w, h ){
+		this.width		= w;
+		this.height		= h;
+		this.depth		= 0;
+		this.address	= 0;
+
+		this.min.set( x, y );
+		this.max.from_add( this.min, [w,h] );
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+		return this;
+	}
+
+	as_quad( node, q=0 ){
+		let min_x	= node.min.x;
+		let min_y	= node.min.y;
+		let max_x	= node.max.x;
+		let max_y	= node.max.y;
+		let mid_x	= node.mid.x;
+		let mid_y	= node.mid.y;
+
+		switch( q ){
+			case 0: // TOP Left
+				this.min.set( min_x, min_y );
+				this.max.set( mid_x, mid_y );
+			break;	
+			case 1:	// TOP Right
+				this.min.set( mid_x, min_y );
+				this.max.set( max_x, mid_y );
+			break;
+			case 2:	// Bot Left
+				this.min.set( min_x, mid_y );
+				this.max.set( mid_x, max_y );
+			break;
+			case 3:	// Bot Right
+				this.min.set( mid_x, mid_y );
+				this.max.set( max_x, max_y );
+			break;	
+		}
+
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+
+		this.depth		= node.depth + 1;
+		this.width		= this.max.x - this.min.x;
+		this.height		= this.max.y - this.min.y;
+		this.address	= node.address | ( q << ( node.depth * 2 ) );
+
+		console.log( q, node.depth, this.depth, "PARENT", node.address, node.get_address_str(), "Child", this.address, this.get_address_str() );
+
+		return this;
+	}
+
+	get_address_str(){
+		if( this.depth == 0 ) return "X";
+		
+		let i, num, add = "";
+		for( i=0; i < this.depth; i++ ){
+			num = ( this.address >> ( i*2 ) ) & 3;
+			switch( num ){
+				case 0: add += "00"; break;
+				case 1: add += "10"; break;
+				case 2: add += "01"; break;
+				case 3: add += "11"; break;
+			}
+		}
+		
+		return add + "-" + this.address;
+	}
+
+	expand(){
+		if( !this.quadrants ){
+			this.quadrants = [
+				new QTreeNode( this, 0 ),
+				new QTreeNode( this, 1 ),
+				new QTreeNode( this, 2 ),
+				new QTreeNode( this, 3 ),
+			];
+		}
+		return this;
+	}
+}
+
+class QTree{
+	width	= 512;
+	height	= 512;
+	root	= new QTreeNode().as_root( 0, 0, this.width, this.height );
+
+	draw( c ){
+		let stack = [ this.root ];
+		let n;
+
+		while( stack.length > 0 ){
+			n = stack.pop();
+
+			c.rect_pnts( n.min, n.max );
+			c.text( n.get_address_str(), n.mid.x, n.mid.y );
+			//console.log( n );
+
+			if( n.quadrants ){
+				stack.push(
+					n.quadrants[ 0 ],
+					n.quadrants[ 1 ],
+					n.quadrants[ 2 ],
+					n.quadrants[ 3 ],
+				);
+			}
+		}
+
+	}
+}
 
 
 /*

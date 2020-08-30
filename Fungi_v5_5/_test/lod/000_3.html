@@ -1,0 +1,566 @@
+<!DOCTYPE html><script type="module">
+import Canvas	from "../../fungi.test/Canvas.js";
+import Vec2		from "../../fungi/maths/Vec2.js";
+
+//https://lcmccauley.wordpress.com/2014/04/27/2d-frustum-culling-tutorial-p2/
+//https://github.com/Frederoche/WebGL-Map
+// http://blog.notdot.net/2009/11/Damn-Cool-Algorithms-Spatial-indexing-with-Quadtrees-and-Hilbert-Curves
+// https://www.flipcode.com/archives/Frustum_Culling.shtml
+// https://sites.google.com/site/letsmakeavoxelengine/home/frustum-culling
+
+// Inspiration - https://www.researchgate.net/profile/Oscar_Martinez_Rubi/publication/284617106/figure/fig8/AS:667879422820361@1536246271375/2D-simplification-of-the-view-frustum-culling-and-level-of-detail-calculations.ppm
+let $, $App;
+
+window.addEventListener( "load", ()=>{
+	$App = new App();
+	$App.draw();
+});
+
+window.addEventListener( "keydown", (e)=>{
+	switch( e.keyCode ){
+		case 38: $App.camera.forward( 5 ); $App.draw(); break;			// UP
+		case 40: $App.camera.forward( -5 ); $App.draw(); break;			// Down
+		case 37: $App.camera.right( 5 ); $App.draw(); break;			// Left
+		case 39: $App.camera.right( -5 ); $App.draw(); break;			// Right
+		case 65: $App.camera.rotate( -5 ); $App.draw(); break;			// A
+		case 68: $App.camera.rotate( 5 ); $App.draw(); break;			// D
+		case 87: $App.frustum.add_far( 10 ); $App.draw(); break;		// w
+		case 83: $App.frustum.add_far( -10 ); $App.draw();break;		// S
+		case 81: $App.frustum.add_radius( 10 ); $App.draw(); break;		// Q
+		case 69: $App.frustum.add_radius( -10 ); $App.draw(); break;	// E
+		case 80: // P
+			console.log( "---- INFO ----" );
+			console.log( "POSITION: ", $App.camera.pos );
+			console.log( "ANGLE: ", $App.camera.angle );
+		break;
+	}
+});
+
+
+class App{
+	constructor(){
+		this.depth_max	= 5;
+		this.canvas		= new Canvas( "pg_canvas" );
+		this.camera		= new Camera();
+		this.qtree		= new QTree( true );
+		this.frustum	= new Frustum2D();
+
+		$ = this.canvas;
+	}
+
+	draw(){
+		this.canvas.clear();
+		this.frustum.world_update( this.camera.pos, this.camera.angle );
+		
+		this.qtree.clear_data();
+		this.process_frustum();
+
+
+		this.frustum.draw( this.canvas, this.camera );
+		
+		this.canvas
+			.stroke( "black" ).line_width( 2 )
+			.rect_pnts( this.qtree.root.min, this.qtree.root.max );
+
+		this.qtree.draw( this.canvas );
+	}
+
+	process_frustum(){
+		let can		= this.canvas;
+		let cam		= this.camera;
+		let root	= this.qtree.root;
+		let frust	= this.frustum;
+
+		let stack	= [
+			root.quadrants[ 0 ],
+			root.quadrants[ 1 ],
+			root.quadrants[ 2 ],
+			root.quadrants[ 3 ],
+		];
+
+		can.stroke( "#e0e0e0" ).line_width( 3 );
+
+		let node,
+			fq_pnt_cnt,
+			is_fq_overlap,
+			is_circle_overlap;
+
+		while( stack.length > 0 ){
+			node = stack.pop();
+			node.data = false;
+
+			//---------------------------------------------------
+			// How many corners of the Quad are inside the Frustum
+			fq_pnt_cnt = this.intersect_cnt_quad_frustum( node, frust );
+
+			// If no corners inside Frustum, Check if Frustum is inside Quad
+			// Uses a collection of points in a frustum and checks if any of
+			// them exists inside the boundary of the quad.
+			is_fq_overlap = ( fq_pnt_cnt == 0 )?
+				this.is_overlap_frustum_quad( frust, node ) : false;
+
+			//---------------------------------------------------
+			// If the Frustom/Quad intersect or overlap somehow, Then
+			// we need to investigate further.
+			if( fq_pnt_cnt > 0 || is_fq_overlap ){
+				can.rect_pnts( node.min, node.max );
+				node.data = true;
+				
+				// Check if the Quad intersects the HLOD Radius Range. If it does, then
+				// Need to dig further down the tree
+				is_circle_overlap = this.quad_circle_intersect( node, cam.pos, frust.radius );
+
+				// If not near the camera, If There is one corner in the Frustrum or it intersects the quad
+				// Good enough, dont need to dig deeper. Only Dig deeper when within the Camera radius.
+				if( !is_circle_overlap ) continue;
+
+				if( node.depth < this.depth_max ){
+					if( !node.quadrant ) node.expand();
+
+					stack.push(
+						node.quadrants[ 0 ],
+						node.quadrants[ 1 ],
+						node.quadrants[ 2 ],
+						node.quadrants[ 3 ],
+					);
+				}
+				//console.log( node.get_address_str(), fq_pnt_cnt, is_fq_overlap, is_circle_overlap );
+			}
+
+		}
+	}
+
+	// #region INTERSECTION CHECKS
+
+	// Check if Quad intersects inside a frustum
+	intersect_cnt_quad_frustum( node, fruct ){
+		let sub_cnt		= 0;
+		let total_cnt	= 0;
+		let dir			= new Vec2();
+		let plane, pnt;
+
+		// Loop over all the corner points of the quad
+		for( pnt of node.corners ){
+			sub_cnt = 0;
+			
+			// Test each Point if its in the positive side of each plane
+			// edge of the frustum.
+			for( plane of fruct.planes ){
+				dir.from_sub( pnt, plane.pos );
+				if( Vec2.dot( dir, plane.dir ) < 0 ) break;
+			
+				sub_cnt++;
+			}
+
+			// If point is in the positive side of all planes
+			// then the point is inside the frustum.
+			if( sub_cnt == 4 ) total_cnt++;
+		}
+
+		return total_cnt;
+	}
+
+	// Check if any of the Frustum Points are inside a quad
+	// NOTES: Maybe checking Edges intersect might be better?
+	// But its easier to just have extra points and do boundary checks
+	is_overlap_frustum_quad( fruct, node ){
+		let pos;
+		for( pos of fruct.w_points ){
+			if(
+				pos.x >= node.min[ 0 ] && pos.x <= node.max[0] &&
+				pos.y >= node.min[ 1 ] && pos.y <= node.max[1]
+			) return true;
+		}
+		return false;
+	}
+
+	// Checks if Quad Intersects a Circle
+	quad_circle_intersect( box, pos, radius ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let wh		= ( box.max[ 0 ] - box.min[ 0 ] ) * 0.5;
+		let hh		= ( box.max[ 1 ] - box.min[ 1 ] ) * 0.5;
+		let len_x	= Math.abs( pos.x - box.mid[ 0 ] );
+		let len_y	= Math.abs( pos.y - box.mid[ 1 ] );
+
+		// If circle is no where near the Quad
+		if( len_x > wh + radius ) return false;
+		if( len_y > hh + radius ) return false;
+
+		// Circle is close enough to an edge
+		if( len_x <= wh ) return true;
+		if( len_y <= hh ) return true;
+
+		// If Circle is in the corner
+		let len_sq = (len_x - wh)**2 + (len_y - hh)**2;
+		return ( len_sq <= radius**2 );
+	}
+	
+	// #endregion //////////////////////////////////////////////////////////////////
+}
+
+class Camera{
+	angle		= -90;
+	pos 		= new Vec2( 100, 100 );
+
+	constructor(){}
+
+	rotate( d ){
+		let v = ( this.angle + d ) % 360; 	// This is a Modulus formula that handles Negative Remainders
+		this.angle = ( v < 0 )? 360+v : v;
+	}
+
+	forward( p ){
+		let v = Vec2.rotate_deg( [0,p], this.angle );
+		this.pos.add( v );
+	}
+
+	right( p ){
+		let v = Vec2.rotate_deg( [p,0], this.angle );
+		this.pos.add( v );
+	}
+}
+
+class Frustum2D{
+	fov			= 45;
+	near		= 30;
+	far			= 200;
+	radius		= 100;
+
+	near_pnt	= new Vec2();	// Local Space Position
+	near_pnt_a	= new Vec2();
+	near_pnt_b	= new Vec2();
+	far_pnt 	= new Vec2();
+	far_pnt_a	= new Vec2();
+	far_pnt_b	= new Vec2();
+
+	w_near_a	= new Vec2();	// World Space Position
+	w_near_b	= new Vec2();
+	w_far_a		= new Vec2();
+	w_far_b		= new Vec2();
+	w_center	= new Vec2();
+
+	planes		= [
+		{ dir: new Vec2(), pos: new Vec2() },	// Right Side
+		{ dir: new Vec2(), pos: new Vec2() },	// Far
+		{ dir: new Vec2(), pos: new Vec2() },	// Left Side
+		{ dir: new Vec2(), pos: new Vec2() },	// Near
+	];
+	
+	w_points	= [
+		this.w_near_a, this.w_far_a, this.w_far_b, this.w_near_b, 								// Corner Points
+		this.planes[ 0 ].pos, this.planes[ 1 ].pos, this.planes[ 2 ].pos, this.planes[ 3 ].pos, // Mid Points
+		this.w_center,																			// Center of Frustum
+	];
+	
+	constructor(){
+		this.update_local();
+	}
+
+	add_far( p ){
+		this.far += p;
+		if( this.far < 70 ) this.far = 70;
+		this.update_local();
+		return this;
+	}
+
+	add_radius( p ){
+		this.radius += p;
+		if( this.radius < 30 ) this.radius = 30;
+		return this;
+	}
+
+	update_local(){
+		// https://i.stack.imgur.com/j5Usy.png
+		// Image that illustrates how to compute and draw out a frustum.
+
+		// Figure out the distances from origin the near and far planes
+		let fovH = this.fov * 0.5;
+		this.near_pnt.from_scale( Vec2.UP, this.near );	
+		this.far_pnt.from_scale( Vec2.UP, this.far );
+
+		let plane_norm	= Vec2.UP.clone().invert();
+		let v			= new Vec2();	// Throw Away Vector
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Using Plane Projection to Compute the FAR Point Edges
+		v.copy( this.far_pnt ).rotate_deg( fovH ).scale( 1.5 ); // Scale for projection, so its goes beyond the plane.
+		Vec2.project_plane( this.far_pnt, v, plane_norm, this.far_pnt_a );
+		this.far_pnt_b.copy( this.far_pnt_a );	// Mirror the Point, just need to negate X
+		this.far_pnt_b[0] = -this.far_pnt_b[0];
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Using Plane Projection to Compute the NEAR Point Edges
+		v.copy( this.near_pnt ).rotate_deg( fovH ).scale( 1.5 ); // Scale for projection, so its goes beyond the plane.
+		Vec2.project_plane( this.near_pnt, v, plane_norm, this.near_pnt_a );
+		this.near_pnt_b.copy( this.near_pnt_a );	// Mirror the Point, just need to negate X
+		this.near_pnt_b[0] = -this.near_pnt_b[0];
+	}	
+
+	world_update( pos, angle ){
+		let p;
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// WORLD SPACE CORNER POSITIONS
+		this.w_near_a.copy( this.near_pnt_a ).rotate_deg( angle ).add( pos );
+		this.w_near_b.copy( this.near_pnt_b ).rotate_deg( angle ).add( pos );
+		this.w_far_a.copy( this.far_pnt_a ).rotate_deg( angle ).add( pos );
+		this.w_far_b.copy( this.far_pnt_b ).rotate_deg( angle ).add( pos );
+		
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// PLANES
+		p = this.planes[ 0 ];	// Right Side
+		p.dir.from_sub( this.w_far_a, this.w_near_a ).perp_cw().norm();
+		p.pos.from_lerp( this.w_far_a, this.w_near_a, 0.5 );
+
+		p = this.planes[ 1 ];	// Far
+		p.dir.from_sub( this.w_far_b, this.w_far_a ).perp_cw().norm();
+		p.pos.from_lerp( this.w_far_b, this.w_far_a, 0.5 );
+
+		p = this.planes[ 2 ];	// Left Side
+		p.dir.from_sub( this.w_near_b, this.w_far_b ).perp_cw().norm();
+		p.pos.from_lerp( this.w_near_b, this.w_far_b, 0.5 );
+
+		p = this.planes[ 3 ];	// Near
+		p.dir.from_sub( this.w_near_a, this.w_near_b ).perp_cw().norm();
+		p.pos.from_lerp( this.w_near_a, this.w_near_b, 0.5 );
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// POINTS
+		this.w_center.from_lerp( this.planes[ 3 ].pos, this.planes[ 1 ].pos, 0.5 ); // Middle of near+far ws point
+
+		return this;
+	}
+
+	draw( can, cam ){
+		let pl = this.planes;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Draw Lines
+		can	.stroke( "black" ).line_width( 1.0 )
+			.line_vec( cam.pos, pl[ 1 ].pos )			// Center Line
+			.line_vec( cam.pos, this.w_far_a )			// Right Line
+			.line_vec( cam.pos, this.w_far_b )			// Left Line
+			.line_vec( this.w_far_a, this.w_far_b )		// Far Limit
+			.line_vec( this.w_near_a, this.w_near_b )	// Near Limit
+		;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Draw Points
+		can
+			.fill( "white" ).stroke( "black" ).line_width( 3 )
+			.circle_vec( cam.pos, 5, 3 )	// Origin Pnt
+
+			.line_width( 1 )
+			.circle_vec( cam.pos, this.radius, 2 )	// Camera HLOD Limit
+
+			.fill( "black" )
+			.circle_vec( this.w_near_a, 2 )		// Corner Points
+			.circle_vec( this.w_far_a, 2 )
+			.circle_vec( this.w_far_b, 2 )
+			.circle_vec( this.w_near_b, 2 )		
+			.circle_vec( this.w_center, 2 )		// Center Point
+			.circle_vec( pl[ 0 ].pos, 2 )		// Edge Center Mid Points
+			.circle_vec( pl[ 1 ].pos, 2 )
+			.circle_vec( pl[ 2 ].pos, 2 )
+			.circle_vec( pl[ 3 ].pos, 2 )
+		;
+	}
+}
+
+/*
+BINARY ADDRESSING
+TopLeft		: 00
+TopRight	: 10
+BotLeft		: 01
+BotRight	: 11
+
+Then can save Address in Binary
+With a uint16 Can save 16 levels
+With a Uint64 can save 32 Levels ( Requirement is 20 Levels )
+00 -> 01, Top Left, Sub Top Right
+
+Every First SubQuad has the same Address as its parent.
+If had access to 64 units, can reserve the first 6 bits to be
+the quad's depth value which I think might give each quad a unique address, I think.
+*/
+
+class QTreeNode{
+	static TOP_L = 0;
+	static TOP_R = 1;
+	static BOT_L = 2;
+	static BOT_R = 3;
+
+	data		= null;
+	address		= 0;
+	depth		= 0;
+	width		= 0;
+	height		= 0;
+	min			= new Vec2();
+	max			= new Vec2();
+	mid			= new Vec2();
+	corners		= [ new Vec2(), new Vec2(), new Vec2(), new Vec2() ];
+	quadrants	= null;
+
+	constructor( node=null, q=0 ){
+		if( node ) this.as_quad( node, q );
+	}
+
+	as_root( x, y, w, h ){
+		this.width		= w;
+		this.height		= h;
+		this.depth		= 0;
+		this.address	= 0;
+
+		this.min.set( x, y );
+		this.max.from_add( this.min, [w,h] );
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+		return this;
+	}
+
+	as_quad( node, q=0 ){
+		let min_x	= node.min.x;
+		let min_y	= node.min.y;
+		let max_x	= node.max.x;
+		let max_y	= node.max.y;
+		let mid_x	= node.mid.x;
+		let mid_y	= node.mid.y;
+
+		switch( q ){
+			case 0: // TOP Left
+				this.min.set( min_x, min_y );
+				this.max.set( mid_x, mid_y );
+			break;	
+			case 1:	// TOP Right
+				this.min.set( mid_x, min_y );
+				this.max.set( max_x, mid_y );
+			break;
+			case 2:	// Bot Left
+				this.min.set( min_x, mid_y );
+				this.max.set( mid_x, max_y );
+			break;
+			case 3:	// Bot Right
+				this.min.set( mid_x, mid_y );
+				this.max.set( max_x, max_y );
+			break;	
+		}
+
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+
+		this.depth		= node.depth + 1;
+		this.width		= this.max.x - this.min.x;
+		this.height		= this.max.y - this.min.y;
+		this.address	= node.address | ( q << ( node.depth * 2 ) );
+
+		this.corners[ 0 ].set( this.min.x, this.min.y );
+		this.corners[ 1 ].set( this.min.x, this.max.y );
+		this.corners[ 2 ].set( this.max.x, this.max.y );
+		this.corners[ 3 ].set( this.max.x, this.min.y );
+
+		//console.log( q, node.depth, this.depth, "PARENT", node.address, node.get_address_str(), "Child", this.address, this.get_address_str() );
+
+		return this;
+	}
+
+	get_address_str(){
+		if( this.depth == 0 ) return "X";
+		
+		let i, num, add = "";
+		for( i=0; i < this.depth; i++ ){
+			num = ( this.address >> ( i*2 ) ) & 3;
+			switch( num ){
+				case 0: add += "00"; break;
+				case 1: add += "10"; break;
+				case 2: add += "01"; break;
+				case 3: add += "11"; break;
+			}
+		}
+		
+		return add + "-" + this.address;
+	}
+
+	expand(){
+		if( !this.quadrants ){
+			this.quadrants = [
+				new QTreeNode( this, 0 ),
+				new QTreeNode( this, 1 ),
+				new QTreeNode( this, 2 ),
+				new QTreeNode( this, 3 ),
+			];
+		}
+		return this;
+	}
+}
+
+class QTree{
+	width	= 512;
+	height	= 512;
+	root	= new QTreeNode().as_root( 0, 0, this.width, this.height );
+
+	constructor( expanded=false ){
+		if( expanded ) this.root.expand();
+	}
+
+	clear_data(){
+		let n, stack = [ this.root ];
+
+		while( stack.length > 0 ){
+			n		= stack.pop();
+			n.data	= null;
+
+			if( n.quadrants ){
+				stack.push(
+					n.quadrants[ 0 ],
+					n.quadrants[ 1 ],
+					n.quadrants[ 2 ],
+					n.quadrants[ 3 ],
+				);
+			}
+		}
+	}
+
+	draw( c ){
+		let stack = [ 
+			this.root.quadrants[ 0 ],
+			this.root.quadrants[ 1 ],
+			this.root.quadrants[ 2 ],
+			this.root.quadrants[ 3 ],
+		];
+		
+		let i, n, q, cnt = 0;
+
+		c.stroke( "red" ).line_width( 1 );
+
+		while( stack.length > 0 ){
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			n = stack.pop();
+			if( !n.data ) continue;	// Process will set Data to True if its in a Frustum.
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// If Children exist, Check if any is set to true, if so add to stack.
+			if( n.quadrants ){
+				cnt = 0;
+
+				// Any Quadrant that has data = true, add to stack;
+				for( q of n.quadrants ){
+					if( q.data ){
+						stack.push( q );
+						cnt++;
+					}
+				}
+
+				// if any children's data is set to true, dont draw this quad.
+				if( cnt != 0 ) continue;
+			}
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// This is the final quad in the branch, draw.
+			c.rect_pnts( n.min, n.max );
+		}
+
+	}
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
