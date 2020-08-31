@@ -1,5 +1,5 @@
 <!DOCTYPE html><script type="module">
-import App, { Vec3 } from "../../fungi/App.js";
+import App, { Vec3, Quat } from "../../fungi/App.js";
 import Vec2		from "../../fungi/maths/Vec2.js";
 import Points	from "../../fungi/geo/Points.js";
 import Lines	from "../../fungi/geo/Lines.js";
@@ -9,7 +9,7 @@ App
 	.init()
 	.load_shaders( "UvBorder.js" )
 	.use_debug()
-	.set_camera( 0, 40, 6, 0, 1.0, 0 )
+	.set_camera( 0, 40, 10, 0, 1.4, 0 )
 	.task( init )
 	.then();
 
@@ -18,28 +18,26 @@ App
 async function init(){
 	$App.init();
 
-	//let f = new Frustum3D().from_camera( App.cam_com, 0.3, 3.0 ) ;
-	//f.node.rot_by( -45, "x" );
-
-	let mesh	= floor_quad_mesh();
-	let mat		= App.shader.new_material( "UvBorder", null, { cullFace:false } );
+	//let mesh	= floor_quad_mesh();
+	//let mat		= App.shader.new_material( "UvBorder", null, { cullFace:false } );
 	//let e		= App.mesh_entity( "x", mesh, mat, App.mesh.TRI );
 	
 	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Setup Quad Tree
-	let qt = new QTree( false, 4, 4 );
-	qt.root.data = true;
-	qt.root.expand().set_all_data( true );
+	//let qt = new QTree( false, 4, 4 );
+	//qt.root.data = true;
+	//qt.root.expand().set_all_data( true );
 
 	// Open up a few levels and set to render. 
 	// Any parent Quadrant will not render if there is at least one Child set to true.
-	qt.root.quadrants[ QTreeNode.TOP_L ].expand().set_all_data( true );
-	qt.root.quadrants[ QTreeNode.BOT_R ].expand().set_all_data( true );
+	//qt.root.quadrants[ QTreeNode.TOP_L ].expand().set_all_data( true );
+	//qt.root.quadrants[ QTreeNode.BOT_R ].expand().set_all_data( true );
 
-	qt.root.quadrants[ QTreeNode.BOT_R ].quadrants[ QTreeNode.BOT_R ].expand().set_all_data( true );
+	//qt.root.quadrants[ QTreeNode.BOT_R ].quadrants[ QTreeNode.BOT_R ].expand().set_all_data( true );
 
 	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Render Quad Tree
+	/*
 	let offset = new Vec3( -2, 0, -2 );
 	qt.draw((n)=>{
 		let name	= n.get_address_str();
@@ -50,6 +48,7 @@ async function init(){
 
 		console.log( name );
 	});
+	*/
 
 	return true;
 }
@@ -61,14 +60,13 @@ window.addEventListener( "keydown", (e)=>{
 		case 40: $App.pan( -0.1, Vec3.UP );		break;	// Down
 		case 37: $App.pan( 0.1, Vec3.LEFT );	break;	// Left
 		case 39: $App.pan( -0.1, Vec3.LEFT );	break;	// Right
-		case 87: $App.rot( -1 ); 				break;	// w
-		case 83: $App.rot( 1 );					break;	// S
+		case 87: $App.rot( -1, "x" ); 			break;	// w
+		case 83: $App.rot( 1, "x" );			break;	// S
 		case 65: $App.far( -0.1 ); 				break;	// A
 		case 68: $App.far( 0.1 );				break;	// D
-
+		case 81: $App.zoom( 0.1 );				break;	// Q
+		case 69: $App.zoom( -0.1 );				break;	// E
 		/*
-		case 81: $App.frustum.add_radius( 10 ); $App.draw(); break;		// Q
-		case 69: $App.frustum.add_radius( -10 ); $App.draw(); break;	// E
 		case 80: // P
 			console.log( "---- INFO ----" );
 			console.log( "POSITION: ", $App.camera.pos );
@@ -79,24 +77,191 @@ window.addEventListener( "keydown", (e)=>{
 });
 
 class $App{
-	static frustum = null;
+	static frustum		= null;
+	static depth_max	= 5;
+	static mesh			= null;
+	static mat			= null;
+
 	static init(){
-		this.frustum = new Frustum3D().from_camera( App.cam_com, 0.3, 3.0 );
-		this.frustum.set_pos( [0,3,0] ).rot_by( 90, "x" );
+		this.frustum = new Frustum3D().from_camera( App.cam_com, 0.3, 6.0 );
+		this.frustum.set_pos( [0,4.8,0] ).rot_by( 90, "x" );
+		this.frustum.get_world_space( this.frustum.node.local );
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.qtree = new QTree( false, 4, 4 );
+		this.qtree.root.data = true;
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Render Quad Tree
+		this.mesh	= floor_quad_mesh();
+		this.mat	= App.shader.new_material( "UvBorder", null, { cullFace:false } );
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.run();
 	}
 
-	static pan( n, dir ){ this.frustum.node.add_pos( Vec3.scale( dir, n ).transform_quat( this.frustum.node.local.rot ) ); return this; }
-	static rot( n ){ this.frustum.rot_by( n, "x" ); return this; }
+	static zoom( n ){
+		this.frustum.node.add_pos( [0,n,0] );
+		this.run();
+		return this;
+	}
+
+	static pan( n, dir ){ 
+		this.frustum.node.add_pos( Vec3.scale( dir, n ).transform_quat( this.frustum.node.local.rot ) ); 
+		this.run();
+		return this;
+	}
+
+	static rot( n, axis="x"){
+		this.frustum.rot_by( n, axis );
+		this.run();
+		return this;
+	}
+
 	static far( v ){
 		let f = this.frustum.far + v;
 		let n = this.frustum.near;
 
 		if( f < n * 2 ) f = n * 2;
 		
-		this.frustum.from_camera( App.cam_com, n, f );
+		this.frustum.from_camera( App.cam_com, n, f ); // Redraw the Frustum
+		this.run();
 		return this;
 	}
 
+	static process_frustum(){
+		let frust	= this.frustum;
+		let stack	= [
+			this.qtree.root
+		];
+
+		let node;
+		let plane_in_cnt;
+
+		while( stack.length > 0 ){
+			node = stack.pop();
+			//console.log( "process", node.get_address_str() );
+
+			plane_in_cnt = frust.intersect_quad2( node );
+			console.log( "quad in frust", plane_in_cnt );
+
+			if( plane_in_cnt == 0 ) continue;
+
+			if( plane_in_cnt >= 5 ){
+				node.data = true;
+
+			}else{ // if( plane_in_cnt <= 4 ){
+				node.data = true;
+
+				if( node.depth < this.depth_max ){
+					if( !node.quadrant ) node.expand();
+
+					stack.push(
+						node.quadrants[ 0 ],
+						node.quadrants[ 1 ],
+						node.quadrants[ 2 ],
+						node.quadrants[ 3 ],
+					);
+				}
+
+			}
+		}
+	}
+
+	static reset_qtree(){
+		this.qtree.for_each( (n)=>{
+			n.data = false;
+			if( n.entity ) App.ecs.set_entity_active( n.entity.id, false );
+		});
+	}
+
+	static run(){
+		this.reset_qtree();
+
+		this.frustum.get_world_space( this.frustum.node.local );
+
+		this.process_frustum();
+
+		this.qtree.draw((n)=>{
+			if( !n.entity ){
+				let name	= n.get_address_str();
+				let e		= App.mesh_entity( name, this.mesh, this.mat, App.mesh.TRI );
+
+				e.node.set_scl( n.width, 1.0, n.height );
+				e.node.add_pos( n.min.x, 0, n.min.y );
+
+				n.entity = e;
+			}
+
+			App.ecs.set_entity_active( n.entity.id, true );
+			//console.log( "DRAW", name );
+		});
+	}
+
+	static process_frustumXX(){
+		let can		= this.canvas;
+		let cam		= this.camera;
+		let root	= this.qtree.root;
+		let frust	= this.frustum;
+
+		let stack	= [
+			root.quadrants[ 0 ],
+			root.quadrants[ 1 ],
+			root.quadrants[ 2 ],
+			root.quadrants[ 3 ],
+		];
+
+		can.stroke( "#e0e0e0" ).line_width( 3 );
+
+		let node,
+			fq_pnt_cnt,
+			is_fq_overlap,
+			is_circle_overlap;
+
+		while( stack.length > 0 ){
+			node = stack.pop();
+			node.data = false;
+
+			//---------------------------------------------------
+			// How many corners of the Quad are inside the Frustum
+			fq_pnt_cnt = this.intersect_cnt_quad_frustum( node, frust );
+
+			// If no corners inside Frustum, Check if Frustum is inside Quad
+			// Uses a collection of points in a frustum and checks if any of
+			// them exists inside the boundary of the quad.
+			is_fq_overlap = ( fq_pnt_cnt == 0 )?
+				this.is_overlap_frustum_quad( frust, node ) : false;
+
+			//---------------------------------------------------
+			// If the Frustom/Quad intersect or overlap somehow, Then
+			// we need to investigate further.
+			if( fq_pnt_cnt > 0 || is_fq_overlap ){
+				can.rect_pnts( node.min, node.max );
+				node.data = true;
+				
+				// Check if the Quad intersects the HLOD Radius Range. If it does, then
+				// Need to dig further down the tree
+				is_circle_overlap = this.quad_circle_intersect( node, cam.pos, frust.radius );
+
+				// If not near the camera, If There is one corner in the Frustrum or it intersects the quad
+				// Good enough, dont need to dig deeper. Only Dig deeper when within the Camera radius.
+				if( !is_circle_overlap ) continue;
+
+				if( node.depth < this.depth_max ){
+					if( !node.quadrant ) node.expand();
+
+					stack.push(
+						node.quadrants[ 0 ],
+						node.quadrants[ 1 ],
+						node.quadrants[ 2 ],
+						node.quadrants[ 3 ],
+					);
+				}
+				//console.log( node.get_address_str(), fq_pnt_cnt, is_fq_overlap, is_circle_overlap );
+			}
+
+		}
+	}
 }
 
 //https://github.com/mrdoob/three.js/blob/master/src/math/Plane.js
@@ -104,9 +269,17 @@ class $App{
 
 // Should look at this link. Shows how to build a Frustum Object with lots of instruction. VERY GOOD.
 // http://www.lighthouse3d.com/tutorials/view-frustum-culling/geometric-approach-implementation/
+
 class Frustum3D{
+	// TODO, NEXT TIME JUST COMPUTE WORLD SPACE. Let the inital with no rotation be the mesh rendering data.
+	// Also, Should only need to update when Camera has Moved or Rotated.
+
+	// TODO, This whole object is a mess, Needs some heavy refactoring :(
+
 	near 		= 0;
 	far			= 0;
+	ratio		= 0;
+	fov			= 0;
 
 	l_near_c	= new Vec3();	// Points of the Near Plane
 	l_near_tl	= new Vec3();
@@ -130,12 +303,17 @@ class Frustum3D{
 
 	// Plane Data
 	planes		= [
-		{ norm: new Vec3(), pnt: new Vec3() },
-		{ norm: new Vec3(), pnt: new Vec3() },
-		{ norm: new Vec3(), pnt: new Vec3() },
-		{ norm: new Vec3(), pnt: new Vec3() },
-		{ norm: new Vec3(), pnt: new Vec3() },
-		{ norm: new Vec3(), pnt: new Vec3() },
+		{ norm: new Vec3(), pnt: new Vec3(), distance:0, },
+		{ norm: new Vec3(), pnt: new Vec3(), distance:0, },
+		{ norm: new Vec3(), pnt: new Vec3(), distance:0, },
+		{ norm: new Vec3(), pnt: new Vec3(), distance:0, },
+		{ norm: new Vec3(), pnt: new Vec3(), distance:0, },
+		{ norm: new Vec3(), pnt: new Vec3(), distance:0, },
+	];
+
+	points = [
+		this.l_near_tl, this.l_near_bl, this.l_near_br, this.l_near_tr,
+		this.l_far_tl, this.l_far_bl, this.l_far_br, this.l_far_tr,
 	];
 
 	constructor(){
@@ -167,7 +345,9 @@ class Frustum3D{
 
 		near	= near || cam.near;
 		far		= far || cam.far;
-
+		
+		this.ratio 	= 1.0; //cam.ratio;
+		this.fov	= cam.fov;
 		this.near	= near;
 		this.far	= far;
 
@@ -177,9 +357,9 @@ class Frustum3D{
 
 		// Compute the Width/Height of the Near and Far Planes
 		let near_h	= 2 * Math.tan( cam.fov / 2 ) * near;
-		let near_w	= near_h * cam.ratio;
+		let near_w	= near_h * this.ratio ;
 		let far_h	= 2 * Math.tan( cam.fov / 2 ) * far;
-		let far_w	= far_h * cam.ratio;
+		let far_w	= far_h * this.ratio ;
 
 		// Half Movement from Center of Far/Near Plane
 		let up_inc	= new Vec3();
@@ -280,6 +460,165 @@ class Frustum3D{
 		
 		this.pnt.add( Vec3.ZERO, "yellow", 0.2, 6 ); // CENTER POINT
 	}
+
+	get_world_space( tf ){
+		//App.Debug.reset();
+		//console.log( tf );
+
+		// Current World Space Axis
+		let fwd = Vec3.transform_quat( Vec3.FORWARD, tf.rot ).norm();
+		let lft = Vec3.cross( Vec3.UP, fwd ).norm();
+		let up	= Vec3.cross( fwd, lft ).norm();
+
+		// Compute the Width/Height of the Near and Far Planes
+		let near_h	= 2 * Math.tan( this.fov / 2 ) * this.near;
+		let near_w	= near_h * this.ratio;
+		let far_h	= 2 * Math.tan( this.fov / 2 ) * this.far;
+		let far_w	= far_h * this.ratio;
+
+		// Half Movement from Center of Far/Near Plane
+		let up_inc	= new Vec3();
+		let lft_inc	= new Vec3();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Near Plane
+		up_inc.from_scale( up, near_h / 2 );
+		lft_inc.from_scale( lft, near_w / 2 );
+
+		this.l_near_c.from_scale( fwd, this.near ).add( tf.pos );
+		this.l_near_tl.from_add( this.l_near_c, up_inc ).add( lft_inc );	// tl = ncenter + (up * Hnear/2) - (right * Wnear/2)
+		this.l_near_bl.from_sub( this.l_near_c, up_inc ).add( lft_inc );	// bl = ncenter - (up * Hnear/2) - (right * Wnear/2)
+		this.l_near_br.from_sub( this.l_near_c, up_inc ).sub( lft_inc );	// br = ncenter - (up * Hnear/2) + (right * Wnear/2)
+		this.l_near_tr.from_add( this.l_near_c, up_inc ).sub( lft_inc );	// tr = ncenter + (up * Hnear/2) + (right * Wnear/2)
+
+		/*
+		App.Debug.pnt( this.l_near_c );
+		App.Debug.pnt( this.l_near_tl );
+		App.Debug.pnt( this.l_near_bl );
+		App.Debug.pnt( this.l_near_br );
+		App.Debug.pnt( this.l_near_tr );
+		*/
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//Far Plane
+		up_inc.from_scale( up, far_h / 2 );
+		lft_inc.from_scale( lft, far_w / 2 );
+
+		this.l_far_c.from_scale( fwd, this.far ).add( tf.pos );
+		this.l_far_tl.from_add( this.l_far_c, up_inc ).add( lft_inc );	// ftl = fc + (up * Hfar/2) - (right * Wfar/2)
+		this.l_far_bl.from_sub( this.l_far_c, up_inc ).add( lft_inc );	// fbl = fc - (up * Hfar/2) - (right * Wfar/2)
+		this.l_far_br.from_sub( this.l_far_c, up_inc ).sub( lft_inc );	// fbr = fc - (up * Hfar/2) + (right * Wfar/2)
+		this.l_far_tr.from_add( this.l_far_c, up_inc ).sub( lft_inc );	// ftr = fc + (up * Hfar/2) + (right * Wfar/2)
+
+		/*
+		App.Debug.pnt( this.l_far_c );
+		App.Debug.pnt( this.l_far_tl );
+		App.Debug.pnt( this.l_far_bl );
+		App.Debug.pnt( this.l_far_br );
+		App.Debug.pnt( this.l_far_tr );
+		*/
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Compute Plane Mid Points and Normal Direction.
+		let ary = [ this.plane_n, this.plane_f, this.plane_t, this.plane_r, this.plane_b, this.plane_l ];
+		let i, j, p, plane,
+			a 	= new Vec3(),
+			b 	= new Vec3(),
+			n 	= new Vec3(),
+			mid = new Vec3();
+
+		for( i=0; i < ary.length; i++ ){
+			plane = ary[ i ];
+			mid.clear();
+
+			// Get the Centroid of the plane
+			for( p of plane ) mid.add( p );
+			mid.scale( 0.25 ) // Average by 4
+
+			// Get INWARD Normal of the plane
+			a.from_sub( plane[ 1 ], plane[ 0 ] );
+			b.from_sub( plane[ 3 ], plane[ 0 ] );
+			n.from_cross( b, a ).norm();
+
+			// Save Results
+			this.planes[ i ].pnt.copy( mid );
+			this.planes[ i ].norm.copy( n );
+			this.planes[ i ].distance = -Vec3.dot( n, mid ); // Different way to test Planes
+
+			//App.Debug.pnt( mid );
+			//App.Debug.ln( mid, Vec3.scale( n, 0.3 ).add( mid ) );
+		}
+
+	}
+
+	intersect_quad( n ){		
+		let v			= new Vec3();
+		let total_cnt	= 0;
+		let pnt, plane, dist, in_cnt;
+
+		// Loop over all the corner points of the quad
+		for( pnt of n.corners ){
+			v.set( pnt.x, 0, pnt.y ); // Need to convert 2D to 3D Vectors, TODO QuadTree should use Vec3
+
+			// Test each Point if its in the positive side of each plane
+			// edge of the frustum.
+			in_cnt = 0;
+			for( plane of this.planes ){
+				dist = plane.distance + Vec3.dot( plane.norm, v ); // Gives the same dist as Dot( p.norm, v - p.pnt); Caching saves v - p.cnt step.
+				if( dist < 0 ) break;
+				in_cnt++;
+			}
+
+			// If point is in the positive side of all planes
+			// then the point is inside the frustum.
+			if( in_cnt == 6 ) total_cnt++;
+		}
+
+		return total_cnt;
+	}
+
+	// THIS ONE WORKS MUCH BETTER THEN THE FIRST ONE
+	// Doing it backwards and checking if all points exist behind just one plane
+	// means no intersection, at least 1 means there is some intersection
+	intersect_quad2( n ){
+		let v			= new Vec3();
+		let total_cnt	= 0;
+		let pnt, plane, dist, in_cnt;
+
+		for( plane of this.planes ){
+			in_cnt = 4;
+
+			for( pnt of n.corners ){				
+				v.set( pnt.x, 0, pnt.y ); // Need to convert 2D to 3D Vectors, TODO QuadTree should use Vec3	
+
+				dist = plane.distance + Vec3.dot( plane.norm, v ); // Gives the same dist as Dot( p.norm, v - p.pnt); Caching saves v - p.cnt step.
+
+				// if behind the plane, deduct from count
+				if( dist < 0 ) in_cnt--;
+			}
+
+			// if All 4 points are behind a plane, its not intersecting.
+			if( in_cnt == 0 ) return 0;
+
+			if( in_cnt == 4 ) total_cnt++;
+			//total_cnt++;	// Add for Partial 
+		}	
+
+		return total_cnt; // If 6 then quad is inside frustum, otherwise it intersects.
+	}
+
+	// TODO, not really needed
+	is_overlap_quad( node ){
+		let pos;
+		for( pos of this.points ){
+			if(
+				pos.x >= node.min.x && pos.x <= node.max.x &&
+				pos.z >= node.min.y && pos.z <= node.max.y
+			) return true;
+		}
+		return false;
+	}
+
 }
 
 
@@ -313,6 +652,7 @@ class QTreeNode{
 	static BOT_L = 2;
 	static BOT_R = 3;
 
+	entity		= null; 
 	data		= null;
 	address		= 0;
 	depth		= 0;
@@ -324,6 +664,8 @@ class QTreeNode{
 	corners		= [ new Vec2(), new Vec2(), new Vec2(), new Vec2() ];
 	quadrants	= null;
 
+	offset		= new Vec2( -2,-2 );
+
 	constructor( node=null, q=0 ){
 		if( node ) this.as_quad( node, q );
 	}
@@ -334,9 +676,15 @@ class QTreeNode{
 		this.depth		= 0;
 		this.address	= 0;
 
-		this.min.set( x, y );
+		this.min.set( x, y ).add( this.offset );
 		this.max.from_add( this.min, [w,h] );
 		this.mid.from_lerp( this.min, this.max, 0.5 );
+
+		this.corners[ 0 ].set( this.min.x, this.min.y );
+		this.corners[ 1 ].set( this.min.x, this.max.y );
+		this.corners[ 2 ].set( this.max.x, this.max.y );
+		this.corners[ 3 ].set( this.max.x, this.min.y );
+
 		return this;
 	}
 
@@ -435,6 +783,22 @@ class QTree{
 		this.root	= new QTreeNode().as_root( 0, 0, w, h );
 
 		if( expanded ) this.root.expand();
+	}
+
+	for_each( fn ){
+		let n, stack = [ this.root ];
+		while( stack.length > 0 ){
+			n = stack.pop();
+			fn( n );
+			if( n.quadrants ){
+				stack.push(
+					n.quadrants[ 0 ],
+					n.quadrants[ 1 ],
+					n.quadrants[ 2 ],
+					n.quadrants[ 3 ],
+				);
+			}
+		}
 	}
 
 	clear_data(){

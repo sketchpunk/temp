@@ -9,6 +9,11 @@ class Camera{
 	proj_inv	= new Mat4();	// Projection Matrix Inverted ( For RayCasting )
 	proj_view	= new Mat4();	// Projection * View Matrix ( Less Matrix Mul to do in Shader )
 
+	fov			= 0;
+	near		= 0;
+	far			= 0;
+	ratio		= 0;
+
 	// #region SETTERS / GETTERS
 	set_perspective( fov=45, near=0.1, far=100.0 ){
 		let ratio	= App.gl.width / App.gl.height;
@@ -16,6 +21,11 @@ class Camera{
 		
 		this.proj.from_perspective( fov, ratio, near, far );
 		this.proj_inv.from_invert( this.proj );
+
+		this.fov	= fov;
+		this.near	= near;
+		this.far 	= far;
+		this.ratio	= ratio;
 		return this;
 	}
 	// #endregion ///////////////////////////////////////////////////////////////////////

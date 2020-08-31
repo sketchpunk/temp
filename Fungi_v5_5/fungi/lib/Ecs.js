@@ -319,6 +319,12 @@ class QueryCache{
 		if( sort_fn ) key += "_" + sort_fn.name;
 		return this.cache.set( key, data );
 	}
+
+	clear(){
+		let k,v;
+		for( [k,v] of this.cache ) v.length = 0;	// Cleanup Arrays
+		this.cache.clear();							// Clears Map
+	}
 }
 
 class Ecs{
@@ -327,7 +333,14 @@ class Ecs{
 	systems		= new Systems();
 	queries		= new QueryCache();
 
+	do_clear	= false;
+
 	run(){
+		if( this.do_clear ){
+			this.queries.clear();
+			this.do_clear = false;
+		}
+
 		this.systems.run( this );
 		return this;
 	}
@@ -341,6 +354,7 @@ class Ecs{
 			for( c of com ) this.add_com( eid, c );
 		}
 
+		this.do_clear = true;
 		return eid;
 	}
 
@@ -358,6 +372,7 @@ class Ecs{
 		for( [ct_id, c_id] of e.component_ids ) this.components.retire( ct_id, c_id );
 
 		this.entities.retire( id );	// Recycle Entity
+		this.do_clear = true;
 		return this;
 	}
 
@@ -396,6 +411,8 @@ class Ecs{
 		com._entity_id = e_id;
 		e.component_mask.on( com._component_type_id );
 		e.component_ids.set( com._component_type_id, com._component_id );
+
+		this.do_clear = true;
 		return com;
 	}
 
@@ -430,6 +447,8 @@ class Ecs{
 		this.components.retire( ct_id, c_id );	// Recycle Object
 		e.component_mask.off( ct_id );			// Remove from mask
 		e.component_ids.delete( ct_id );		// Remove ID
+
+		this.do_clear = true;
 		return this;
 	}
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 

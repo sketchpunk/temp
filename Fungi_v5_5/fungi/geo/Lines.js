@@ -16,6 +16,17 @@ function LinesSys( ecs ){
 }
 
 class Lines{
+	// #region STATIC
+	static new_entity( name="LnEntity" ){
+		let e = App.mesh_entity( name );
+		e.lines = new Lines();
+		e.draw.items.push( e.lines.get_draw_item() );
+		App.ecs.add_com( e.id, e.lines );
+		return e;
+	}
+
+	// #endregion /////////////////////////////////////////////////////////////
+
 	// #region MAIN
 	constructor( ini_cnt=INITAL_CNT, auto_ext=AUTO_EXTEND ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

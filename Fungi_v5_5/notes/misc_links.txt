@@ -1,3 +1,8 @@
 
 Libray to reduce Keyframes
 https://github.com/robertjoosten/maya-keyframe-reduction
+
+
+TriCubic Texture Sampling, Alternative to TriPlanar
+https://gist.github.com/Fewes/59d2c831672040452aa77da6eaab2234
+http://www.dannyruijters.nl/cubicinterpolation/

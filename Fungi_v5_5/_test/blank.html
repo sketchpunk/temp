@@ -5,12 +5,19 @@ import App, { } from "../../fungi/App.js";
 App
 	.init()
 	.set_camera( 0, 20, 4, 0, 0.0, 0 )
-	.then( init );
+	.task( init )
+	.then();
+
+/*
+
+https://jeremybouny.fr/en/articles/webgl_lod/
+
+*/
 
 //#####################################################
 
-function init(){
-
+async function init(){
+	return true;
 }
 
 //#####################################################
