@@ -1,0 +1,492 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat } from "../../fungi/App.js";
+import Vec2		from "../../fungi/maths/Vec2.js";
+import Points	from "../../fungi/geo/Points.js";
+import Lines	from "../../fungi/geo/Lines.js";
+
+//#####################################################
+App
+	.init()
+	.load_shaders( "UvBorder.js" )
+	.use_debug()
+	.set_camera( 0, 20, 5, 0, 0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	$App.init();
+
+	//let mesh	= floor_quad_mesh();
+	//let mat		= App.shader.new_material( "UvBorder", null, { cullFace:false } );
+	//let e		= App.mesh_entity( "x", mesh, mat, App.mesh.TRI );
+	
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup Quad Tree
+	//let qt = new QTree( false, 4, 4 );
+	//qt.root.data = true;
+	//qt.root.expand().set_all_data( true );
+
+	// Open up a few levels and set to render. 
+	// Any parent Quadrant will not render if there is at least one Child set to true.
+	//qt.root.quadrants[ QTreeNode.TOP_L ].expand().set_all_data( true );
+	//qt.root.quadrants[ QTreeNode.BOT_R ].expand().set_all_data( true );
+
+	//qt.root.quadrants[ QTreeNode.BOT_R ].quadrants[ QTreeNode.BOT_R ].expand().set_all_data( true );
+
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Render Quad Tree
+	/*
+	let offset = new Vec3( -2, 0, -2 );
+	qt.draw((n)=>{
+		let name	= n.get_address_str();
+		let e		= App.mesh_entity( name, mesh, mat, App.mesh.TRI );
+
+		e.node.set_scl( n.width, 1.0, n.height );
+		e.node.add_pos( offset ).add_pos( n.min.x, 0, n.min.y );
+
+		console.log( name );
+	});
+	*/
+
+	return true;
+}
+
+
+window.addEventListener( "keydown", (e)=>{
+	switch( e.keyCode ){
+		case 38: $App.move( -0.1, Vec3.FORWARD );	break;	// UP
+		case 40: $App.move( 0.1, Vec3.FORWARD );	break;	// Down
+		case 37: $App.move( -0.1, Vec3.LEFT );		break;	// Left
+		case 39: $App.move( 0.1, Vec3.LEFT );		break;	// Right
+
+		/*
+		case 87: $App.zoom( 0.1 );					break;	// w
+		case 83: $App.zoom( -0.1 );					break;	// S
+		case 81: $App.rot( 1, "x" ); 				break;	// Q
+		case 65: $App.rot( -1, "x" ); 				break;	// A
+		case 69: $App.far( -0.1 );					break;	// E
+		case 68: $App.far( 0.1 );					break;	// D
+
+		case 80: // P
+			console.log( "---- INFO ----" );
+			console.log( "POSITION: ", $App.camera.pos );
+			console.log( "ANGLE: ", $App.camera.angle );
+		break;
+		*/
+	}
+});
+
+class $App{
+	static target		= null;
+	static depth_max	= 4;
+	static mesh			= null;
+	static mat			= null;
+
+	static init(){
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+		this.target		= App.mesh_entity( "Target" );
+		this.tar_node	= this.target.node;
+		this.tar_node.set_pos( 0, 0, 1.8 );
+
+		let pnt_com		= new Points();	// Add Point Rendering to Entity
+		pnt_com.add( [0,0.1,0], "green", 0.2, 3 );
+		
+		App.ecs.add_com( this.target.id, pnt_com );
+		this.target.draw.items.push( pnt_com.get_draw_item() );
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.qtree = new QTree( false, 4, 4 );
+		this.qtree.root.data = true;
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Render Quad Tree
+		this.mesh	= floor_quad_mesh();
+		this.mat	= App.shader.new_material( "UvBorder", null, { cullFace:false } );
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.run();
+
+		App.Debug.sqr( [-2,0,-2], [2,0,2], Vec3.UP, "yellow", true );
+	}
+
+	static zoom( n ){
+		this.frustum.node.add_pos( [0,n,0] );
+		this.run();
+		return this;
+	}
+
+	static move( n, dir ){ 
+		this.tar_node.add_pos( Vec3.scale( dir, n ) ); 
+		this.run();
+		return this;
+	}
+
+	static pan( n, dir ){ 
+		this.frustum.node.add_pos( Vec3.scale( dir, n ).transform_quat( this.frustum.node.local.rot ) ); 
+		this.run();
+		return this;
+	}
+
+	static rot( n, axis="x"){
+		this.frustum.rot_by( n, axis );
+		this.run();
+		return this;
+	}
+
+	static far( v ){
+		let f = this.frustum.far + v;
+		let n = this.frustum.near;
+
+		if( f < n * 2 ) f = n * 2;
+		
+		this.frustum.from_camera( App.cam_com, n, f ); // Redraw the Frustum
+		this.run();
+		return this;
+	}
+
+	static process_target(){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// If Point is out of Bounds, Just Show the Root Node
+		let r		= this.qtree.root;
+		let pos		= new Vec2().from_vec3( this.tar_node.local.pos );
+		if( pos.x < r.min.x || pos.x > r.max.x ||
+			pos.y < r.min.y || pos.y > r.max.y ){
+			
+			r.data = true;
+			return;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Point is in Bounds, Lets subdivide
+		const RNG_RATIO = 0.9;
+
+		let node, delta, range;
+		let stack	= [
+			this.qtree.root
+		];
+
+		while( stack.length > 0 ){
+			node = stack.pop();
+			if( node.depth >= this.depth_max ) continue;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Only Expand
+			delta	= Vec2.len_sqr( pos, node.mid );
+			range	= ( node.width * RNG_RATIO )**2;
+
+			if( delta > range ) continue;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+			//console.log( "inRng", node.get_address_str() );
+
+			node.data = true;
+			if( !node.quadrant ) node.expand();
+
+			node.set_all_data( true );
+			stack.push(
+				node.quadrants[ 0 ],
+				node.quadrants[ 1 ],
+				node.quadrants[ 2 ],
+				node.quadrants[ 3 ],
+			);
+		}
+
+		//console.log( this.qtree.root );
+	}
+
+	static reset_qtree(){
+		this.qtree.for_each( (n)=>{
+			n.data = false;
+			if( n.entity ) App.ecs.set_entity_active( n.entity.id, false );
+		});
+	}
+
+	static run(){
+		this.reset_qtree();
+
+		this.process_target();
+
+		this.qtree.draw((n)=>{
+			if( !n.entity ){
+				let name	= n.get_address_str();
+				let e		= App.mesh_entity( name, this.mesh, this.mat, App.mesh.TRI );
+
+				e.node.set_scl( n.width, 1.0, n.height );
+				e.node.add_pos( n.min.x, 0, n.min.y );
+
+				n.entity = e;
+			}
+
+			App.ecs.set_entity_active( n.entity.id, true );
+			//console.log( "DRAW", name );
+		});
+	}
+
+}
+
+
+function floor_quad_mesh(){
+	let buf_idx		= App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
+	let buf_vert	= App.buffer.new_array( new Float32Array(
+		/*[ -0.5, 0.0, -0.5, 	0,0,0,	0,0, // Center Ground
+			-0.5, 0.0, 0.5, 	0,1,0,	0,1,
+			0.5, 0.0, 0.5, 	0,1,0,	1,1, 
+			0.5, 0.0, -0.5, 	0,1,0,	1,0 ]*/
+		[ 0.0, 0.01, 0.0, 	0,1,0,	0,0,	// Ground - Top Left Origin
+		  0.0, 0.01, 1.0, 	0,1,0,	0,1,
+		  1.0, 0.01, 1.0, 	0,1,0,	1,1, 
+		  1.0, 0.01, 0.0, 	0,1,0,	1,0 ]
+	));
+
+	return App.mesh.from_buffer_config([
+		{ name: "indices", buffer: buf_idx },
+		{ name: "quad", buffer: buf_vert, interleaved: [
+			{ attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },
+			{ attrib_loc:1, size:3, stride_len:8 * 4, offset:3 * 4 },
+			{ attrib_loc:2, size:2, stride_len:8 * 4, offset:6 * 4 },
+		]}
+	], "FungiFloorQuadTL", 6 );
+}
+
+
+class QTreeNode{
+	static TOP_L = 0;
+	static TOP_R = 1;
+	static BOT_L = 2;
+	static BOT_R = 3;
+
+	entity		= null; 
+	data		= null;
+	address		= 0;
+	depth		= 0;
+	width		= 0;
+	height		= 0;
+	min			= new Vec2();
+	max			= new Vec2();
+	mid			= new Vec2();
+	corners		= [ new Vec2(), new Vec2(), new Vec2(), new Vec2() ];
+	quadrants	= null;
+
+	offset		= new Vec2( -2,-2 );
+
+	constructor( node=null, q=0 ){
+		if( node ) this.as_quad( node, q );
+	}
+
+	as_root( x, y, w, h ){
+		this.width		= w;
+		this.height		= h;
+		this.depth		= 0;
+		this.address	= 0;
+
+		this.min.set( x, y ).add( this.offset );
+		this.max.from_add( this.min, [w,h] );
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+
+		this.corners[ 0 ].set( this.min.x, this.min.y );
+		this.corners[ 1 ].set( this.min.x, this.max.y );
+		this.corners[ 2 ].set( this.max.x, this.max.y );
+		this.corners[ 3 ].set( this.max.x, this.min.y );
+
+		return this;
+	}
+
+	as_quad( node, q=0 ){
+		let min_x	= node.min.x;
+		let min_y	= node.min.y;
+		let max_x	= node.max.x;
+		let max_y	= node.max.y;
+		let mid_x	= node.mid.x;
+		let mid_y	= node.mid.y;
+
+		switch( q ){
+			case 0: // TOP Left
+				this.min.set( min_x, min_y );
+				this.max.set( mid_x, mid_y );
+			break;	
+			case 1:	// TOP Right
+				this.min.set( mid_x, min_y );
+				this.max.set( max_x, mid_y );
+			break;
+			case 2:	// Bot Left
+				this.min.set( min_x, mid_y );
+				this.max.set( mid_x, max_y );
+			break;
+			case 3:	// Bot Right
+				this.min.set( mid_x, mid_y );
+				this.max.set( max_x, max_y );
+			break;	
+		}
+
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+
+		this.depth		= node.depth + 1;
+		this.width		= this.max.x - this.min.x;
+		this.height		= this.max.y - this.min.y;
+		this.address	= node.address | ( q << ( node.depth * 2 ) );
+
+		this.corners[ 0 ].set( this.min.x, this.min.y );
+		this.corners[ 1 ].set( this.min.x, this.max.y );
+		this.corners[ 2 ].set( this.max.x, this.max.y );
+		this.corners[ 3 ].set( this.max.x, this.min.y );
+
+		//console.log( q, node.depth, this.depth, "PARENT", node.address, node.get_address_str(), "Child", this.address, this.get_address_str() );
+
+		return this;
+	}
+
+	get_address_str(){
+		if( this.depth == 0 ) return "ROOT";
+		
+		let i, num, add = "";
+		for( i=0; i < this.depth; i++ ){
+			num = ( this.address >> ( i*2 ) ) & 3;
+			switch( num ){
+				case 0: add += "00"; break;
+				case 1: add += "10"; break;
+				case 2: add += "01"; break;
+				case 3: add += "11"; break;
+			}
+		}
+		
+		return add;// + "-" + this.address;
+	}
+
+	expand(){
+		if( !this.quadrants ){
+			this.quadrants = [
+				new QTreeNode( this, 0 ),
+				new QTreeNode( this, 1 ),
+				new QTreeNode( this, 2 ),
+				new QTreeNode( this, 3 ),
+			];
+		}
+		return this;
+	}
+
+	set_all_data( d ){
+		if( this.quadrants ){
+			this.quadrants[ 0 ].data = d;
+			this.quadrants[ 1 ].data = d;
+			this.quadrants[ 2 ].data = d;
+			this.quadrants[ 3 ].data = d;
+		}
+		return this;
+	}
+}
+
+class QTree{
+	width	= 512;
+	height	= 512;
+	root	= null;
+
+	constructor( expanded=false, w=512, h=512 ){
+		this.width	= w;
+		this.height	= h;
+		this.root	= new QTreeNode().as_root( 0, 0, w, h );
+
+		if( expanded ) this.root.expand();
+	}
+
+	for_each( fn ){
+		let n, stack = [ this.root ];
+		while( stack.length > 0 ){
+			n = stack.pop();
+			fn( n );
+			if( n.quadrants ){
+				stack.push(
+					n.quadrants[ 0 ],
+					n.quadrants[ 1 ],
+					n.quadrants[ 2 ],
+					n.quadrants[ 3 ],
+				);
+			}
+		}
+	}
+
+	clear_data(){
+		let n, stack = [ this.root ];
+
+		while( stack.length > 0 ){
+			n		= stack.pop();
+			n.data	= null;
+
+			if( n.quadrants ){
+				stack.push(
+					n.quadrants[ 0 ],
+					n.quadrants[ 1 ],
+					n.quadrants[ 2 ],
+					n.quadrants[ 3 ],
+				);
+			}
+		}
+	}
+
+	draw( fnMesh ){
+		let stack = [ 
+			this.root
+
+			//this.root.quadrants[ 0 ],
+			//this.root.quadrants[ 1 ],
+			//this.root.quadrants[ 2 ],
+			//this.root.quadrants[ 3 ],
+		];
+		
+		let i, n, q, cnt = 0;
+
+		while( stack.length > 0 ){
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			n = stack.pop();
+			if( !n.data ) continue;	// Process will set Data to True if its in a Frustum.
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// If Children exist, Check if any is set to true, if so add to stack.
+			if( n.quadrants ){
+
+				cnt = n.quadrants.reduce( (acc,q)=>{
+					return acc+(q.data == true);
+				}, 0 );
+
+
+				//if( cnt > 0 && cnt < 4 ){
+				if( cnt != 0  ){
+					// Any Quadrant that has data = true, add to stack;
+					for( q of n.quadrants ){
+						if( q.data ) stack.push( q );
+					}
+					
+					// Dont Render parent Quad
+					continue;
+				}
+			}
+
+			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// This is the final quad in the branch, draw.
+			//c.rect_pnts( n.min, n.max );
+			fnMesh( n );
+		}
+
+	}
+}
+
+
+//#####################################################
+</script>
+<html><head><style>
+	html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+	*{ font-family:monospace; font-size:11px; }
+	div{ position:absolute; top:0px; top:0px; padding:4px 6px; color:yellow; }
+	span{ color:white; }
+</style>
+</head><body>
+	<canvas id="pg_canvas"></canvas>
+	<div>
+		[ ARROWS KEYS <span>: Move Triangle</span> ] <span>-</span>
+		[ MOUSE LEFT CLICK <span>: Orbit Cam</span> ] <span>-</span>
+		[ MOUSE WHEEL <span>: Cam Zoom</span> ] <span>-</span>
+		[ HOLD SHIFT+CTRL+MOUSE <span>: PAN</span> ]
+	</div>
+</body></html>

@@ -78,6 +78,12 @@ class Vec2 extends Float32Array{
 		this[1] = a[1] * tt + b[1] * t;
 		return this;
 	}
+
+	from_vec3( v, z_plane=true ){
+		this[0] = v[0];
+		this[1] = ( z_plane )? v[2] : v[1];
+		return this;
+	}
 	// #endregion ///////////////////////////////////////////////////////////////////////
 
 	// #region MATH OPERATIONS

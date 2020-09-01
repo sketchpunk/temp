@@ -1,2 +1,5 @@
 https://www.redblobgames.com/maps/terrain-from-noise/
 
+https://www.gamasutra.com/view/feature/131841/continuous_lod_terrain_meshing_.php?page=2
+
+http://www.shamusyoung.com/twentysidedtale/?p=11991

@@ -9,7 +9,7 @@ App
 	.init()
 	.load_shaders( "UvBorder.js" )
 	.use_debug()
-	.set_camera( 0, 40, 10, 0, 1.4, 0 )
+	.set_camera( 0, 40, 10, 0, 1.2, 0 )
 	.task( init )
 	.then();
 
@@ -56,36 +56,41 @@ async function init(){
 
 window.addEventListener( "keydown", (e)=>{
 	switch( e.keyCode ){
-		case 38: $App.pan( 0.1, Vec3.UP );		break;	// UP
-		case 40: $App.pan( -0.1, Vec3.UP );		break;	// Down
-		case 37: $App.pan( 0.1, Vec3.LEFT );	break;	// Left
-		case 39: $App.pan( -0.1, Vec3.LEFT );	break;	// Right
-		case 87: $App.rot( -1, "x" ); 			break;	// w
-		case 83: $App.rot( 1, "x" );			break;	// S
-		case 65: $App.far( -0.1 ); 				break;	// A
-		case 68: $App.far( 0.1 );				break;	// D
-		case 81: $App.zoom( 0.1 );				break;	// Q
-		case 69: $App.zoom( -0.1 );				break;	// E
-		/*
+		case 38: $App.move( -0.1, Vec3.FORWARD );	break;	// UP
+		case 40: $App.move( 0.1, Vec3.FORWARD );	break;	// Down
+		case 37: $App.move( -0.1, Vec3.LEFT );		break;	// Left
+		case 39: $App.move( 0.1, Vec3.LEFT );		break;	// Right
+		case 87: $App.zoom( 0.1 );					break;	// w
+		case 83: $App.zoom( -0.1 );					break;	// S
+		case 81: $App.rot( 1, "x" ); 				break;	// Q
+		case 65: $App.rot( -1, "x" ); 				break;	// A
+		case 69: $App.far( -0.1 );					break;	// E
+		case 68: $App.far( 0.1 );					break;	// D
+	
 		case 80: // P
-			console.log( "---- INFO ----" );
-			console.log( "POSITION: ", $App.camera.pos );
-			console.log( "ANGLE: ", $App.camera.angle );
+			$App.set_far( 4.7 );
+			$App.frustum.node.set_pos( [0,1.1,3.5] ).set_rot_axis( [1,0,0], 160 * Math.PI / 180 );
+			$App.run();
+			//console.log( "---- INFO ----" );
+			//console.log( "POSITION: ", $App.camera.pos );
+			//console.log( "ANGLE: ", $App.camera.angle );
 		break;
-		*/
+			/**/
 	}
 });
 
 class $App{
 	static frustum		= null;
-	static depth_max	= 5;
+	static depth_max	= 4;
 	static mesh			= null;
 	static mat			= null;
 
 	static init(){
 		this.frustum = new Frustum3D().from_camera( App.cam_com, 0.3, 6.0 );
-		this.frustum.set_pos( [0,4.8,0] ).rot_by( 90, "x" );
+		this.frustum.set_pos( [0,5.0,0] ).rot_by( 90, "x" );
 		this.frustum.get_world_space( this.frustum.node.local );
+
+
 
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.qtree = new QTree( false, 4, 4 );
@@ -98,10 +103,20 @@ class $App{
 
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		this.run();
+
+		App.Debug.sqr( [-2,0,-2], [2,0,2], Vec3.UP, "yellow", true );
+
+		//sqr( min, max, dir=Vec3.UP, color=ln_color, is_dash=false )
 	}
 
 	static zoom( n ){
 		this.frustum.node.add_pos( [0,n,0] );
+		this.run();
+		return this;
+	}
+
+	static move( n, dir ){ 
+		this.frustum.node.add_pos( Vec3.scale( dir, n ) ); 
 		this.run();
 		return this;
 	}
@@ -129,6 +144,11 @@ class $App{
 		return this;
 	}
 
+	static set_far( v ){		
+		this.frustum.from_camera( App.cam_com, this.frustum.near, v ); // Redraw the Frustum
+		return this;
+	}
+
 	static process_frustum(){
 		let frust	= this.frustum;
 		let stack	= [
@@ -137,20 +157,22 @@ class $App{
 
 		let node;
 		let plane_in_cnt;
+		let cnts;
 
 		while( stack.length > 0 ){
 			node = stack.pop();
 			//console.log( "process", node.get_address_str() );
 
-			plane_in_cnt = frust.intersect_quad2( node );
-			console.log( "quad in frust", plane_in_cnt );
+			//plane_in_cnt = frust.intersect_quad( node );
+			cnts = frust.intersect_quad2( node );
+			console.log( node.get_address_str(), "PlaneCnt ", cnts.planes, "CornerCnt", cnts.corners );
 
-			if( plane_in_cnt == 0 ) continue;
+			if( cnts.planes == 0 ) continue; // No Planes means absolutely no intersection
 
-			if( plane_in_cnt >= 5 ){
-				node.data = true;
+			//if( plane_in_cnt >= 5 ){
+			node.data = true;	
 
-			}else{ // if( plane_in_cnt <= 4 ){
+			if( cnts.corners <= 1 ){
 				node.data = true;
 
 				if( node.depth < this.depth_max ){
@@ -577,37 +599,48 @@ class Frustum3D{
 		return total_cnt;
 	}
 
+
 	// THIS ONE WORKS MUCH BETTER THEN THE FIRST ONE
 	// Doing it backwards and checking if all points exist behind just one plane
 	// means no intersection, at least 1 means there is some intersection
 	intersect_quad2( n ){
 		let v			= new Vec3();
-		let total_cnt	= 0;
+		let plane_cnt	= 0;
 		let pnt, plane, dist, in_cnt;
+
+		let corner_cnt = [0,0,0,0];
 
 		for( plane of this.planes ){
 			in_cnt = 4;
 
+			let i=0;
 			for( pnt of n.corners ){				
 				v.set( pnt.x, 0, pnt.y ); // Need to convert 2D to 3D Vectors, TODO QuadTree should use Vec3	
 
 				dist = plane.distance + Vec3.dot( plane.norm, v ); // Gives the same dist as Dot( p.norm, v - p.pnt); Caching saves v - p.cnt step.
 
 				// if behind the plane, deduct from count
-				if( dist < 0 ) in_cnt--;
+				if( dist < 0 )	in_cnt--;
+				else			corner_cnt[ i ]++;
+
+				i++;
 			}
 
 			// if All 4 points are behind a plane, its not intersecting.
-			if( in_cnt == 0 ) return 0;
+			if( in_cnt == 0 ) return { planes:0, corners:0 };
 
-			if( in_cnt == 4 ) total_cnt++;
+			if( in_cnt == 4 ) plane_cnt++;
 			//total_cnt++;	// Add for Partial 
-		}	
+		}
 
-		return total_cnt; // If 6 then quad is inside frustum, otherwise it intersects.
+		//return plane_cnt; // If 6 then quad is inside frustum, otherwise it intersects.
+		return {
+			planes	: plane_cnt,
+			corners	: corner_cnt.reduce( (acc,val)=>acc+(val==6), 0 ),
+		}
 	}
 
-	// TODO, not really needed
+	// TODO, not really needed anymore
 	is_overlap_quad( node ){
 		let pos;
 		for( pos of this.points ){
@@ -839,18 +872,22 @@ class QTree{
 			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 			// If Children exist, Check if any is set to true, if so add to stack.
 			if( n.quadrants ){
-				cnt = 0;
 
-				// Any Quadrant that has data = true, add to stack;
-				for( q of n.quadrants ){
-					if( q.data ){
-						stack.push( q );
-						cnt++;
+				cnt = n.quadrants.reduce( (acc,q)=>{
+					return acc+(q.data == true);
+				}, 0 );
+
+
+				//if( cnt > 0 && cnt < 4 ){
+				if( cnt != 0  ){
+					// Any Quadrant that has data = true, add to stack;
+					for( q of n.quadrants ){
+						if( q.data ) stack.push( q );
 					}
+					
+					// Dont Render parent Quad
+					continue;
 				}
-
-				// if any children's data is set to true, dont draw this quad.
-				if( cnt != 0 ) continue;
 			}
 
 			// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -865,5 +902,23 @@ class QTree{
 
 //#####################################################
 </script>
-<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
-</head><body><canvas id="pg_canvas"></canvas></body></html>
+<html><head><style>
+	html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+	*{ font-family:monospace; font-size:11px; }
+	div{ position:absolute; top:0px; top:0px; padding:4px 6px; color:yellow; }
+	span{ color:white; }
+</style>
+</head><body>
+	<canvas id="pg_canvas"></canvas>
+	<div>
+		[ ARROWS KEYS <span>: Y Plane Move Frustum</span> ] <span>-</span>
+		[ W,S <span>: Move Up/Down </span> ] <span>-</span>
+		[ Q,A <span>: X Rotate </span> ] <span>-</span>
+		[ E,D <span>: Frustum Far </span> ]
+		<br>[ MOUSE LEFT CLICK <span>: Orbit Cam</span> ] <span>-</span>
+		[ MOUSE WHEEL <span>: Cam Zoom</span> ] <span>-</span>
+		[ HOLD SHIFT+CTRL+MOUSE <span>: PAN</span> ]
+
+		<br>[ P <span>: Angle Test</span> ]
+	</div>
+</body></html>

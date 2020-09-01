@@ -6,3 +6,13 @@ https://github.com/robertjoosten/maya-keyframe-reduction
 TriCubic Texture Sampling, Alternative to TriPlanar
 https://gist.github.com/Fewes/59d2c831672040452aa77da6eaab2234
 http://www.dannyruijters.nl/cubicinterpolation/
+
+
+https://www.flipcode.com/archives/Frustum_Culling.shtml
+http://www.lighthouse3d.com/tutorials/view-frustum-culling/
+
+
+Matrix the World
+https://medium.com/@shahriyarshahrabi/shader-studies-matrix-effect-3d2ead3a84c5
+https://github.com/IRCSS/MatrixVFX
+https://twitter.com/IRCSS/status/1300538162406739974?s=20

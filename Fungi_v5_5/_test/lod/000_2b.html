@@ -1,0 +1,158 @@
+<!DOCTYPE html><script type="module">
+import Canvas	from "../../fungi.test/Canvas.js";
+import Vec2		from "../../fungi/maths/Vec2.js";
+
+let $;
+let $cam;
+let $quad;
+
+window.addEventListener( "load", ()=>{
+	$		= new Canvas( "pg_canvas" );
+
+	let qt = new QTree();
+
+	qt.root.expand();
+	qt.root.quadrants[ QTreeNode.TOP_L ].expand();
+	qt.root.quadrants[ QTreeNode.BOT_R ].expand();
+	qt.root.quadrants[ QTreeNode.BOT_R ].quadrants[ QTreeNode.BOT_R ].expand();
+
+	qt.draw( $ );
+});
+
+
+class QTreeNode{
+	static TOP_L = 0;
+	static TOP_R = 1;
+	static BOT_L = 2;
+	static BOT_R = 3;
+
+	data		= null;
+	address		= 0;
+	depth		= 0;
+	width		= 0;
+	height		= 0;
+	min			= new Vec2();
+	max			= new Vec2();
+	mid			= new Vec2();
+	corners		= [ new Vec2(), new Vec2(), new Vec2(), new Vec2() ];
+	quadrants	= null;
+
+	constructor( node=null, q=0 ){
+		if( node ) this.as_quad( node, q );
+	}
+
+	as_root( x, y, w, h ){
+		this.width		= w;
+		this.height		= h;
+		this.depth		= 0;
+		this.address	= 0;
+
+		this.min.set( x, y );
+		this.max.from_add( this.min, [w,h] );
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+		return this;
+	}
+
+	as_quad( node, q=0 ){
+		let min_x	= node.min.x;
+		let min_y	= node.min.y;
+		let max_x	= node.max.x;
+		let max_y	= node.max.y;
+		let mid_x	= node.mid.x;
+		let mid_y	= node.mid.y;
+
+		switch( q ){
+			case 0: // TOP Left
+				this.min.set( min_x, min_y );
+				this.max.set( mid_x, mid_y );
+			break;	
+			case 1:	// TOP Right
+				this.min.set( mid_x, min_y );
+				this.max.set( max_x, mid_y );
+			break;
+			case 2:	// Bot Left
+				this.min.set( min_x, mid_y );
+				this.max.set( mid_x, max_y );
+			break;
+			case 3:	// Bot Right
+				this.min.set( mid_x, mid_y );
+				this.max.set( max_x, max_y );
+			break;	
+		}
+
+		this.mid.from_lerp( this.min, this.max, 0.5 );
+
+		this.depth		= node.depth + 1;
+		this.width		= this.max.x - this.min.x;
+		this.height		= this.max.y - this.min.y;
+		this.address	= node.address | ( q << ( node.depth * 2 ) );
+
+		console.log( q, node.depth, this.depth, "PARENT", node.address, node.get_address_str(), "Child", this.address, this.get_address_str() );
+
+		return this;
+	}
+
+	get_address_str(){
+		if( this.depth == 0 ) return "X";
+		
+		let i, num, add = "";
+		for( i=0; i < this.depth; i++ ){
+			num = ( this.address >> ( i*2 ) ) & 3;
+			switch( num ){
+				case 0: add += "00"; break;
+				case 1: add += "10"; break;
+				case 2: add += "01"; break;
+				case 3: add += "11"; break;
+			}
+		}
+		
+		return add + "-" + this.address;
+	}
+
+	expand(){
+		if( !this.quadrants ){
+			this.quadrants = [
+				new QTreeNode( this, 0 ),
+				new QTreeNode( this, 1 ),
+				new QTreeNode( this, 2 ),
+				new QTreeNode( this, 3 ),
+			];
+		}
+		return this;
+	}
+}
+
+class QTree{
+	width	= 512;
+	height	= 512;
+	root	= new QTreeNode().as_root( 0, 0, this.width, this.height );
+
+	draw( c ){
+		let stack = [ this.root ];
+		let n;
+
+		while( stack.length > 0 ){
+			n = stack.pop();
+
+			c.rect_pnts( n.min, n.max );
+			c.text( n.get_address_str(), n.mid.x, n.mid.y );
+			//console.log( n );
+
+			if( n.quadrants ){
+				stack.push(
+					n.quadrants[ 0 ],
+					n.quadrants[ 1 ],
+					n.quadrants[ 2 ],
+					n.quadrants[ 3 ],
+				);
+			}
+		}
+
+	}
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

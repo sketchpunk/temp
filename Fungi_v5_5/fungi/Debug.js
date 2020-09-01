@@ -75,6 +75,20 @@ class Debug{
 	static box_at( pos, x=1, y=1, z=1, col="red", is_dash=false ){
 		return this.box( pos, [ pos[0] + x, pos[1] + y, pos[2] + z ], col, is_dash )
 	}
+
+	static sqr( min, max, dir=Vec3.UP, color=ln_color, is_dash=false ){
+		let mid	= Vec3.lerp( min, max, 0.5 );			// Mid point Needed for Left/Right Points
+		let fwd	= Vec3.sub( max, min );
+		let lft	= Vec3.cross( dir, fwd ).norm();		// Where to draw the other 2 Points from Mid
+		let len	= fwd.len() * 0.5;						// Distance of MinMax for the other 2 points
+		let pp	= Vec3.scale( lft, len ).add( mid );	
+		let pn	= Vec3.scale( lft, -len ).add( mid );
+
+		this.ln( min, pn, color, null, is_dash );
+		this.ln( pn, max, color, null, is_dash );
+		this.ln( max, pp, color, null, is_dash );
+		this.ln( pp, min, color, null, is_dash );
+	}
 	// #endregion /////////////////////////////////////////////////////////////
 
 	// #region MISC
