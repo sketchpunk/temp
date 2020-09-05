@@ -1,5 +1,5 @@
 <!DOCTYPE html><script type="module">
-import App, { Vec3, Colour } from "../../fungi/App.js";
+import App, { Vec3, Quat, Colour } from "../../fungi/App.js";
 //import Capsule	from "../../fungi/geo/Capsule.js";
 import Util			from "../../fungi/geo/Util.js";
 import PropPanel	from "../../sage.ui/PropPanel.js";
@@ -8,9 +8,9 @@ import PropPanel	from "../../sage.ui/PropPanel.js";
 //#####################################################
 App
 	.init()
-	.load_shaders( "LowPoly.js" )
-	.load_shaders( "BaseColor.js" )
-	.set_camera( 0, 20, 6, 0, 0.0, 0 )
+	//.load_shaders( "LowPoly.js" )
+	//.load_shaders( "BaseColor.js" )
+	.set_camera( 0, 20, 7, 0, 0.0, 0 )
 	.task( init )
 	.then();
 
@@ -385,13 +385,13 @@ function init_shader(){
 		{ name:"scl_mid", type:"vec3", value:new Float32Array([1,1,1]) },
 		{ name:"scl_bot", type:"vec3", value:new Float32Array([1,1,1]) },
 
-		{ name:"pos_top", type:"vec3", value:new Float32Array([0,1.5,0]) },
+		{ name:"pos_top", type:"vec3", value:new Float32Array([0,1.0,0]) },
 		{ name:"pos_mid", type:"vec3", value:new Float32Array([0,0,0]) },
-		{ name:"pos_bot", type:"vec3", value:new Float32Array([0,-1.5,0]) },
+		{ name:"pos_bot", type:"vec3", value:new Float32Array([0,1.0,0]) },
 		
 		{ name:"base_rot", type:"vec4", value:new Float32Array([0,0,0,1]) },
 		{ name:"base_pos", type:"vec3", value:new Float32Array([0,0,0]) },
-		{ name:"base_opt", type:"int", value:2 },
+		{ name:"base_opt", type:"int", value:0 },
 	], App.ubo.get_array( "Global", "Model" ) );
 }
 
@@ -630,6 +630,9 @@ const VERT_SRC = `#version 300 es
 		if( base_opt == 1 ) pos = mode_capped_curve( pos, grp );
 		if( base_opt == 2 ) pos = mode_full_curve( pos, grp );
 
+		pos = quat_mul_vec3( base_rot, pos );	// Add Rotation Offset
+		pos += base_pos;						// Add Offset
+
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		vec4 wpos	= model.view_matrix * vec4( pos, 1.0 );
 
@@ -708,6 +711,9 @@ function init_ui(){
 	elm_vec_input( "scl_mid" );
 	elm_vec_input( "pos_mid" );
 
+	elm_vec_input( "base_pos" );
+	elm_euler_input( "base_rot" );
+
 	elm_on_change( "rend_mode", (e)=>{
 		AUTO_UPDATE = false;
 
@@ -741,9 +747,84 @@ function init_ui(){
 				break;
 		}
 
+		set_vec( "base_pos", [0,0,0] );
+		set_vec( "base_rot", [0,0,0,1] );
+
 		AUTO_UPDATE = true;
 		App.render();
 	});
+
+	
+	btn_on_click( "btn_sphere", e=>{
+		AUTO_UPDATE = false;
+		set_rend_mode( 0 )
+		set_vec( "scl_top", [1,1,1] );
+		set_vec( "scl_mid", [1,1,1] );
+		set_vec( "scl_bot", [1,1,1] );
+		set_vec( "pos_top", [0,0,0] );
+		set_vec( "pos_mid", [0,0,0] );
+		set_vec( "pos_bot", [0,0,0] );
+		set_vec( "base_pos", [0,0,0] );
+		set_vec( "base_rot", [0,0,0,1] );
+		AUTO_UPDATE = true;
+		App.render();
+	});
+
+	btn_on_click( "btn_projectile", e=>{
+		AUTO_UPDATE = false;
+		set_rend_mode( 2 )
+		set_euler( "base_rot", [0,0,-90] );
+		set_vec( "base_pos", [0,0,0] );
+		set_vec( "scl_top", [1,1,1] );
+		set_vec( "pos_top", [0,1.5,0] );
+		set_vec( "scl_mid", [0.6,0.6,0.6] );
+		set_vec( "pos_mid", [0,-0.2,0] );
+		set_vec( "scl_bot", [0.2,0.2,0.2] );
+		set_vec( "pos_bot", [0,-1.5,0] );
+		AUTO_UPDATE = true;
+		App.render();
+	});
+
+	btn_on_click( "btn_canon", e=>{
+		AUTO_UPDATE = false;
+		set_rend_mode( 1 )
+		set_euler( "base_rot", [0,0,0] );
+		set_vec( "base_pos", [0,0,0] );
+		set_vec( "scl_top", [0.8,-1,0.8] );
+		set_vec( "pos_top", [0,2.1,0] );
+		set_vec( "scl_mid", [1,1,1] );
+		set_vec( "pos_mid", [0,0,0] );
+		set_vec( "scl_bot", [1.4,1.4,1.4] );
+		set_vec( "pos_bot", [0,-1,0] );
+		AUTO_UPDATE = true;
+		App.render();
+	});
+
+	btn_on_click( "btn_claw", e=>{
+		AUTO_UPDATE = false;
+		set_rend_mode( 2 )
+		set_euler( "base_rot", [0,0,0] );
+		set_vec( "base_pos", [0,0,0] );
+		set_vec( "scl_top", [1.2,1,1.2] );
+		set_vec( "pos_top", [0,1.5,0] );
+		set_vec( "scl_mid", [0.6,1,0.6] );
+		set_vec( "pos_mid", [0.9,-0.5,0] );
+		set_vec( "scl_bot", [0.2,0.2,0.2] );
+		set_vec( "pos_bot", [0,-1.5,0] );
+		AUTO_UPDATE = true;
+		App.render();
+	});
+}
+
+function set_rend_mode( i ){
+	document.getElementById( "rend_mode" ).selectedIndex = i;
+	$mat.set( "base_opt", i );
+}
+
+function set_euler( name, v ){
+	let q = new Quat().from_euler( v[0], v[1], v[2] );
+	document.getElementById( name ).value = v;
+	update_mat( name, q );
 }
 
 function update_mat( n, v ){
@@ -751,11 +832,22 @@ function update_mat( n, v ){
 	$mat.set( n, v );
 	if( AUTO_UPDATE ) App.render();
 }
+
+
 function elm_vec_input( elm_name ){
 	document.getElementById( elm_name )
 		.addEventListener( "input", 
 			(e)=>{ update_mat( elm_name, new Float32Array( e.detail ) ) }
 		);
+}
+
+function elm_euler_input( elm_name ){
+	document.getElementById( elm_name ).addEventListener( "input", (e)=>{
+		let v = e.detail;
+		let q = new Quat().from_euler( v[0], v[1], v[2] );
+		//let q = new Quat().from_euler_order( v[0] * Math.PI/180, v[1] * Math.PI/180, v[2] * Math.PI/180 );
+		update_mat( elm_name, q );
+	});
 }
 
 function elm_on_input( name, fn ){
@@ -764,6 +856,10 @@ function elm_on_input( name, fn ){
 
 function elm_on_click( name, fn ){
 	document.getElementById( name ).addEventListener( "click", (e)=>{ fn( parseFloat( e.srcElement.value ) ); });
+}
+
+function btn_on_click( name, fn ){
+	document.getElementById( name ).addEventListener( "click", fn );
 }
 
 function elm_on_change( name, fn ){
@@ -786,7 +882,7 @@ function set_vec( name, v ){
 			<option value="1">Capped Curve</option>
 			<option value="2">Full Curve</option>
 		</select>
-		<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="0.1"></prop-vector>
+		<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="5"></prop-vector>
 		<prop-vector label="Offset"		id="base_pos" value="0,0,0" step="0.1"></prop-vector>
 		
 		<prop-group label="TOP DOME">
@@ -821,7 +917,10 @@ function set_vec( name, v ){
 		-->
 
 		<prop-group label="Shapes">
-			<button id="p_rest"> Relaxed </button>
+			<button id="btn_sphere"><b>SPHERE</b></button>
+			<button id="btn_projectile"><b>PROJECTILE</b></button>
+			<button id="btn_canon"><b>ARM CANNON</b></button>
+			<button id="btn_claw"><b>CLAW / FANG</b></button>
 		</prop-group>
 	</prop-panel>
 </body></html>

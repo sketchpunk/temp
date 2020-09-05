@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html><script>
+	// https://www.wintellect.com/how-to-implement-the-observer-pattern-with-objects-and-arrays-in-pure-javascript/
+	// https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver
+	// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy
+	// https://refreshless.com/nouislider/
+	let model = {
+		woot:""
+	};
+
+	window.addEventListener( "load", e=>{
+		/*
+		let elm = document.getElementById( "inText" );
+		elm.addEventListener( "input", function(e){
+			console.log( e.srcElement.value );
+		});
+
+		let o = {
+			set		: function( obj, key, val ){
+				console.log( obj, key, val );
+				obj[ key ] = val;
+				return true;
+			}
+		}
+
+		let p = new Proxy( model, o );
+		p.woot = "yo";
+
+		console.log( model, p );
+		*/
+
+		let p = new Prox( model );
+		p.add( "eep", "inText", "input" );
+		p.model.eep = "woot";
+
+		/*
+		let config	= { attributes:true, childList:true, subtree:true };
+		let fn		= function( mut_list, observer ){
+			console.log( mut_list, observer );
+		}
+		let o = new MutationObserver( fn );
+
+		o.observe( document.getElementById( "inText" ), config );
+		//o.disconnect();
+
+		console.log( "w00t" );
+		*/
+	});
+
+	// When Input changes, Save into Model
+	// If Model Changes, Update Input.
+	// When either changes, update material
+
+	class Prox {
+		constructor( model={} ){
+			this.evt 	= document.createElement( "i" );
+			this.data	= model;
+			this.map	= new Map();
+			this.model	= new Proxy( this.data, {
+				set	: this._on_proxy_set.bind( this ),
+			});
+
+			this._input_bind = this._on_input.bind( this );
+		}
+
+		on( evt, fn ){ this.evt.addEventListener( evt, fn ); return this; }
+		emit( eName, detail=null ){ 
+			this.evt.dispatchEvent( new CustomEvent( eName, { detail, bubbles:true, cancelable:true, composed:false } ) ); 
+			return this;
+		}
+
+		_on_proxy_set( obj, key, val ){
+			this.data[ key ] = val;
+			this.map.get( key ).value = val;
+			this.emit( "onSet", { key, new_val:val } );
+			return true;
+		}
+
+		_on_input( e ){
+			let elm				= e.srcElement;
+			let key				= elm.bind_var;
+			this.data[ key ]	= elm.value;
+			this.emit( "onInput", { key, new_val:elm.value } );
+		}
+
+		add( var_name, input_id, input_evt="input" ){
+			let elm = document.getElementById( input_id );
+			elm.bind_var = var_name;
+
+			switch( input_evt ){
+				case "input"	: elm.addEventListener( "input", this._input_bind ); break;
+				case "change"	: elm.addEventListener( "change", this._input_bind ); break;
+			}
+
+			this.map.set( var_name, elm );
+			return this;
+		}
+	}
+
+
+</script><body>
+
+<input type="text" id="inText">
+
+</body></html>

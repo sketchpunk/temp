@@ -292,6 +292,147 @@ window.customElements.define( "prop-vector", PropVector );
 
 //#############################################################################################
 
+class PropSlider extends HTMLElement{
+	constructor(){
+		super();
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.min_value	= 0;
+		this.max_value	= 10;
+
+		this.range 		= 10;
+		this.min		= 0;
+		this.max		= 10;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.width	= 0;
+		this.height	= 0;
+		this.canvas	= document.createElement( "canvas" );
+		this.ctx	= this.canvas.getContext("2d");
+		this.appendChild( this.canvas );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		this.observer = new ResizeObserver( this.on_resize.bind(this) );
+		this.observer.observe( this );
+	}
+
+	on_resize( ary ){
+		let cr						= ary[0].contentRect;
+		this.width					= cr.width;
+		this.height					= cr.height;
+		this.canvas.width			= this.width;
+		this.canvas.height			= this.height;
+		this.canvas.style.width		= this.width + "px";
+		this.canvas.style.height	= this.height + "px";
+		this.draw();
+	}
+
+	connectedCallback(){
+		this.draw();
+	}
+
+	draw(){
+		this.ctx.clearRect( 0, 0, this.width, this.height );
+		this.line();
+
+		let a = (this.min_value - this.min) / this.range;
+		let b = (this.max_value - this.min) / this.range;
+		let h = this.height/2;
+		let pad = 10;
+		let ww = this.width - pad * 2;
+
+		this.circle( pad + ww * a, h, 6 );
+		this.circle( pad + ww * b, h, 6 );
+	}
+
+	line(){
+		let h = this.height * 0.5 + 0.5;
+		this.ctx.beginPath();
+		this.ctx.moveTo( 0, h );
+		this.ctx.lineTo( this.width, h );
+		this.ctx.closePath();
+
+		this.ctx.lineWidth		= 1;
+		this.ctx.strokeStyle	= "green";
+		this.ctx.stroke();
+	}
+	
+	circle( x, y, r ){
+		const p2 = Math.PI * 2;
+		this.ctx.beginPath();
+		this.ctx.arc( x, y, r, 0, p2, false );
+		this.ctx.closePath();
+		this.ctx.fillStyle = "green";
+		this.ctx.fill();
+	}
+
+	//on_input( e ){
+		//e.stopPropagation(); //e.preventDefault();
+		//this.dispatchEvent( new CustomEvent( "input", { detail:this.value, bubbles:true, cancelable:true, composed:false } ) ); 
+	//}
+
+	//get value(){
+		//let ary = new Array();
+		//for( let elm of this.inputs ) ary.push( parseFloat( elm.value ) );
+		//return ary;
+	//}
+
+	//set value( ary ){
+		//let min = Math.min( ary.length, this.inputs.length );
+		//for( let i=0; i < min; i++ ) this.inputs[ i ].value = ary[ i ];
+	//}
+}
+window.customElements.define( "prop-slider", PropSlider );
+
+//#############################################################################################
+
+class PropProxy{
+	constructor( model={} ){
+		this.evt 	= document.createElement( "i" );
+		this.data	= model;
+		this.map	= new Map();
+		this.model	= new Proxy( this.data, {
+			set	: this._on_proxy_set.bind( this ),
+		});
+
+		this._input_bind = this._on_input.bind( this );
+	}
+
+	on( evt, fn ){ this.evt.addEventListener( evt, fn ); return this; }
+	emit( eName, detail=null ){ 
+		this.evt.dispatchEvent( new CustomEvent( eName, { detail, bubbles:true, cancelable:true, composed:false } ) ); 
+		return this;
+	}
+
+	_on_proxy_set( obj, key, val ){
+		this.data[ key ] = val;
+		this.map.get( key ).value = val;
+		this.emit( "onSet", { key, new_val:val } );
+		return true;
+	}
+
+	_on_input( e ){
+		let elm				= e.srcElement;
+		let key				= elm.bind_var;
+		this.data[ key ]	= elm.value;
+		this.emit( "onInput", { key, new_val:elm.value } );
+	}
+
+	add( var_name, input_id, input_evt="input" ){
+		let elm = document.getElementById( input_id );
+		elm.bind_var = var_name;
+
+		switch( input_evt ){
+			case "input"	: elm.addEventListener( "input", this._input_bind ); break;
+			case "change"	: elm.addEventListener( "change", this._input_bind ); break;
+		}
+
+		this.map.set( var_name, elm );
+		return this;
+	}
+}
+
+//#############################################################################################
+
 (function(){
 	let mod_path	= import.meta.url.substring( 0, import.meta.url.lastIndexOf("/") + 1 ),
 		link		= document.createElement( "link" );
@@ -304,3 +445,4 @@ window.customElements.define( "prop-vector", PropVector );
 })();
 
 export default PropPanel;
+export { PropProxy };

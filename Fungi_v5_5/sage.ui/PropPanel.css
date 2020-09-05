@@ -40,8 +40,9 @@ prop-checkstack.space45 label{ flex:1 1 45%; }
 prop-vector{ display:flex; flex-direction:row;; }
 prop-vector > input{ flex:1 1 auto; width:10px; }
 prop-vector > input:not( :first-of-type ){ margin-left:4px; }
-prop-vector > input:last-of-type ){ margin-left:0px; }
 
+prop-slider { display:flex; flex-direction:row; }
+prop-slider > canvas{ flex:1 1 auto; height:20px; }
 
 /* ========================================================== 
 BASIC THEME */
@@ -65,15 +66,19 @@ prop-panel.Theme > div{
 prop-panel.Theme > main button { cursor:pointer; background-color:#202020; color:#909090;
 	border-top:1px solid #373737;
 	border-width:1px 0px 0px 0px;
-	text-align:left; font-family : "Lucida Console", Monaco, monospace;
+	text-align:center; font-family : "Lucida Console", Monaco, monospace;
 	padding:6px 6px 6px 6px; font-size:13px;
+	display:flex;
 }
-prop-panel.Theme > main button:hover{ color:white; }
+prop-panel.Theme > main button b{ flex:1 1 auto; font-weight:400; }
+prop-panel.Theme > main button:hover { color:white; font-weight:900; }
+prop-panel.Theme > main button:hover b {letter-spacing: 2px }
 prop-panel.Theme > main button:before{ content:'[ '; }
 prop-panel.Theme > main button:after{ content:' ]'; }
 
 prop-panel.Theme > main button:active{ background-color:#404040; }
 prop-panel.Theme > main button:focus{ outline:0; }
+
 
 /* TEXT BOX */
 prop-panel.Theme input[ type="text" ],

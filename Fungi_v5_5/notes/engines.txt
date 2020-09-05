@@ -10,3 +10,8 @@ http://www.senchalabs.org/philogl/PhiloGL/examples/worldFlights/
 http://www.senchalabs.org/philogl/PhiloGL/examples/mercator/  // Ray Tracing Planet with Texture.
 
 https://github.com/tsherif/picogl.js
+
+
+https://redcamel.github.io/RedGPU/examples/
+https://github.com/redcamel/RedGPU
+https://github.com/redcamel/webgpu // Basic Examples
