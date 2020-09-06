@@ -102,9 +102,9 @@ function verts( lathe_cnt=6, arc_div=6, radius=1, side_step=5 ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// ASSIGN VERTEX GROUP IDS
 
-	let fvert	= FlatGeo.to_vec4( verts );	// Convert Vec3 buffer to Vec4, for Vertex Group Indexing
-	let step_h	= Math.round( side_step / 2 );		// How many points between arcs, In half
-	let arc_len	= arc_div - 1;				// How Many Points in the Arc
+	let fvert	= FlatGeo.to_vec4( verts );		// Convert Vec3 buffer to Vec4, for Vertex Group Indexing
+	let step_h	= Math.round( side_step / 2 );	// How many points between arcs, In half
+	let arc_len	= arc_div - 1;					// How Many Points in the Arc
 	
 	let j, idx;
 	for( i=0; i < lathe_cnt; i++ ){
@@ -131,7 +131,9 @@ function verts( lathe_cnt=6, arc_div=6, radius=1, side_step=5 ){
 	return{ vert:fvert, idx:new Uint16Array( indices ) };
 }
 
+// Create Geometry with Flat Arrays
 class FlatGeo{
+	// Create Points based on two Angles
 	static arc( angle_a, angle_b, div, radius=1 ){
 		let inc = 1 / (div-1),
 			out = new Array(),
@@ -148,6 +150,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Repeat Points in a circular ma
 	static lathe( flat_ary, steps=2, rot_axis="y", ary_offset=0 ){
 		let v_len	= flat_ary.length,
 			out		= new Array(), //new Vec3Buffer( v_len*steps ),
@@ -179,6 +182,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Move Verts by sepcific amount
 	static vert_offset( flat_ary, x=0, y=0, z=0 ){
 		for( let i=0; i < flat_ary.length; i+=3 ){
 			flat_ary[ i ]	+= x;
@@ -187,6 +191,7 @@ class FlatGeo{
 		}
 	}
 
+	// Make a Mirror Copy of Points
 	static mirror( flat_ary, x=1, y=-1, z=1 ){
 		let out = new Array();
 
@@ -201,6 +206,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Create points between two points
 	static line_lerp( a, b, steps, out=null ){
 		out = out || new Array();
 
@@ -218,6 +224,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Merge sets of Vert Arrays plus apply a Group ID to W component
 	static vert_group_merge(){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Compute How Many Verts
@@ -245,6 +252,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Create Indices for a Fan Shape
 	static fan_indices( c_idx, edge_ary, rev_quad=false, out=null ){
 		out = out || new Array();
 
@@ -259,6 +267,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Create Indices based on a Grid
 	static grid_indices( row_size, row_cnt, start_idx=0, do_loop=false, rev_quad=false, out=null ){
 		out = out || new Array();
 
@@ -289,6 +298,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Indices to stitch to endges together
 	static edge_stitch_indices( edge_a, edge_b, rev_quad=false, out=null ){
 		out = out || new Array();
 			
@@ -308,6 +318,7 @@ class FlatGeo{
 		return out;
 	}
 
+	// Convert Vec3 Flat Array into Vec4 Flat Array
 	static to_vec4( flat_ary ){
 		let vert_cnt	= flat_ary.length / 3,
 			out			= new Float32Array( vert_cnt * 4 ),

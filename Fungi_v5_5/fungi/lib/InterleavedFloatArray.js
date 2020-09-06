@@ -117,8 +117,7 @@ class InterleavedFloatArray{
 
 		for( i=0; i < args.length; i++ ){
 			v = this.var_config[ i ];
-
-			if( v.len == 1 ) 	this.buffer[ idx + v.offset ] = args[ i ];
+			if( v.size == 1 ) 	this.buffer[ idx + v.offset ] = args[ i ];
 			else				this.buffer.set( args[ i ], idx + v.offset );
 		}
 

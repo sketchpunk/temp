@@ -36,7 +36,7 @@ class Vec3 extends Float32Array{
 		
 		clone(){ return new Vec3( this ); }
 
-		clear(){ this[0] = 0; this[1] = 0; this[2] = 0; return this; }
+		reset(){ this[0] = 0; this[1] = 0; this[2] = 0; return this; }
 		
 		//-------------------------------------------
 
