@@ -37,6 +37,22 @@ class Vec3 extends Float32Array{
 		clone(){ return new Vec3( this ); }
 
 		reset(){ this[0] = 0; this[1] = 0; this[2] = 0; return this; }
+
+		to_string( rnd=0 ){
+			if( rnd == 0 ) return "[" + this.join(",") + "]";
+			else{
+				let s = "[";
+				for( let i=0; i < 3; i++ ){
+					switch( this[i] ){
+						case 0	: s += "0,"; break;
+						case 1	: s += "1,"; break;
+						default	: s += this[ i ].toFixed( rnd ) + ","; break;
+					}
+				}
+
+				return s.slice(0,-1) + "]";
+			}
+		}
 		
 		//-------------------------------------------
 
@@ -78,7 +94,6 @@ class Vec3 extends Float32Array{
 			t = Math.random(); this[ 2 ] = z0 * (1-t) + z1 * t;
 			return this;
 		}
-
 
 	////////////////////////////////////////////////////////////////////
 	// FROM SETTERS

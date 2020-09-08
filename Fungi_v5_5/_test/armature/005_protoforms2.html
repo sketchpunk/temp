@@ -1,11 +1,8 @@
 <!DOCTYPE html><script type="module">
 import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
-
 import FlatGeo		from "../../fungi/geo/FlatGeo.js";
 import ProtoForm, { ProtoFormSys, BoneConfig }	from "../../fungi.protoform2/ProtoForm.js";
-
-//import Capsule		from "../../fungi/geo/Capsule.js";
-//import ProtoForm	from "../../fungi.protoform/ProtoForm2.js";
+import PropPanel, { PropProxy }	from "../../sage.ui/PropPanel.js";
 
 //#####################################################
 App
@@ -22,15 +19,28 @@ App
 
 //#####################################################
 
+let Bone_cfg	= new BoneConfig();
+let Proxy 		= new PropProxy();
+let Bone_idx	= 0;
+let Entity		= null;
+
 async function init(){
 	App.ecs.systems.reg( ProtoFormSys, 810 );
-	let e = build();
 
+	let e = build();
+	Entity = e;
+
+	init_ui();
+
+
+
+	/*
 	let bc = new BoneConfig().as_shape_shere();
 	//bc.pos_top.y = 0.1;
 	e.proto
 		.set_bone_cfg( "Head", bc )
 		.update_config_buffer();
+	*/
 
 
 	/*
@@ -133,35 +143,27 @@ function build( use_preview=true ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// CREATE ARMATURE
-	let arm = App.ecs.add_com( e.id, "Armature" );
-	arm
+	e.arm = App.ecs.add_com( e.id, "Armature" );
+	e.arm
 		.load_config( MAXIMO_BONES )
 		.anchor_root_bones( e.node );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// BONE PREVIEW
 	if( use_preview ){
-		let bview = App.ecs.add_com( e.id, "BoneView" );
-		let mat = App.shader.new_material( "BoneView" ).set_depth_test( true );
-		bview.use_armature( arm );
-		e.draw.add( bview.mesh, mat, App.mesh.LINE );
+		e.bview = App.ecs.add_com( e.id, "BoneView" );
+		e.bview.use_armature( e.arm );
+		e.draw.add( e.bview.get_draw_item() );
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// PROTOFORM
-	let pro = new ProtoForm();
-	pro.use_armature( arm, null ).init();
-	e.draw.add( pro.get_draw_item() );
-	
-	//let pro = App.ecs.add_com( e.id, "ProtoForm" );
-	//pro.use_armature( arm, MAXIMO_CONFIG );
-	//e.draw.items.push( pro.get_draw_item() );
-
-	App.ecs.add_com( e.id, pro );
+	e.proto	= new ProtoForm(); //App.ecs.add_com( e.id, "ProtoForm" );
+	e.proto.use_armature( e.arm, null );
+	e.draw.add( e.proto.get_draw_item() );
+	App.ecs.add_com( e.id, e.proto );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	e.proto	= pro;
-	e.arm	= arm;
 	return e;
 }
 
@@ -341,7 +343,165 @@ const MAXIMO_BONES = [
 ];
 
 
+//#####################################################
+function init_ui(){
+	//console.log( Entity );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup Proxy to Update Data between Model and UI
+	Proxy.add( "scl_top", "scl_top", "input" );
+	Proxy.add( "scl_mid", "scl_mid", "input" );
+	Proxy.add( "scl_bot", "scl_bot", "input" );
+	Proxy.add( "pos_top", "pos_top", "input" );
+	Proxy.add( "pos_mid", "pos_mid", "input" );
+	Proxy.add( "pos_bot", "pos_bot", "input" );
+	Proxy.add( "base_pos", "base_pos", "input" );
+	Proxy.add( "base_rot", "base_rot", "input" );
+	Proxy.add( "mode", "rend_mode", "change" );
+	Proxy.add( "bone_sel", "bone_sel", "change" );
+
+	// User Input Handling
+	Proxy.on( "ui_input", e=>{
+		let i = e.detail,
+			v = i.new_val;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// How to handle specific variables
+		switch( i.key ){
+			case "mode"		: 
+				Bone_cfg.mode = parseInt( v );
+				update_mode();
+				update_ui();
+			break;
+			case "bone_sel"	: 
+				Bone_idx = parseInt( v );
+				get_protoform_bone();
+			break;
+			case "base_rot"	: Bone_cfg[ i.key ].from_euler( v[0], v[1], v[2] ); break;
+			default			: Bone_cfg[ i.key ].copy( v ); break;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Save Data back to ProtoForms & Render
+		set_protoform_bone();
+		App.render();
+	});
+
+	// Program Input Handling
+	Proxy.on( "model_input", e=>{
+		let i = e.detail,
+			v = i.new_val;
+
+		switch( i.key ){
+			case "base_rot"	: i.elm.value = v.get_euler( null, true ); break;
+			case "bone_sel"	: console.log( "model b sel"); break;
+			case "mode" 	: i.elm.selectedIndex = v; break;
+			default			: i.elm.value = v; break;
+		}
+	});
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Build Up Bone Selection Drop Down
+	let b, elm = document.getElementById( "bone_sel" );
+	for( b of Entity.arm.bones ){
+		elm[ b.idx ] = new Option( b.name, b.idx, false );
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	get_protoform_bone();
+}
+
+// Update ProtoForms Bone Config, push to GPU
+function set_protoform_bone(){
+	Entity.proto
+		.set_bone_cfg( Bone_idx, Bone_cfg )
+		.update_config_buffer();
+}
+
+// Get Bone Config from Protoforms, Update UI with new Data
+function get_protoform_bone(){
+	Entity.proto.get_bone_config( Bone_idx, Bone_cfg );
+	update_ui();
+
+	console.log( Bone_cfg.serialize() );
+}
+
+// Update the UI from Bone Config Data
+function update_ui(){
+	Proxy.model.mode		= Bone_cfg.mode;
+	Proxy.model.scl_top		= Bone_cfg.scl_top;
+	Proxy.model.scl_mid		= Bone_cfg.scl_mid;
+	Proxy.model.scl_bot		= Bone_cfg.scl_bot;
+	Proxy.model.pos_top		= Bone_cfg.pos_top;
+	Proxy.model.pos_mid		= Bone_cfg.pos_mid;
+	Proxy.model.pos_bot		= Bone_cfg.pos_bot;
+	Proxy.model.base_pos	= Bone_cfg.base_pos;
+	Proxy.model.base_rot	= Bone_cfg.base_rot;
+}
+
+// How to handle Capsule Morph Mode
+function update_mode(){
+	switch( Bone_cfg.mode ){
+		case 0:
+			Bone_cfg.pos_top.set(0,0.02,0);
+			Bone_cfg.pos_bot.set(0,0.02,0);
+			break;
+		case 1:
+			Bone_cfg.pos_top.set(0,0.02,0);
+			Bone_cfg.pos_bot.set(0,-0.02,0);
+			break;
+		case 2:
+			Bone_cfg.pos_top.set(0,0.03,0);
+			Bone_cfg.pos_bot.set(0,-0.03,0);
+			break;
+	}
+	Bone_cfg.scl_top.set(0.02,0.02,0.02);
+	Bone_cfg.scl_mid.set(0.02,0,0.02);
+	Bone_cfg.scl_bot.set(0.02,0.02,0.02);
+	Bone_cfg.pos_mid.set(0,0,0);
+	Bone_cfg.base_pos.set(0,0,0);
+	Bone_cfg.base_rot.set(0,0,0,1);
+}
 
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
-</head><body><canvas id="pg_canvas"></canvas></body></html>
+</head><body>
+	<canvas id="pg_canvas"></canvas>
+
+	<prop-panel id="PntProp" side="right" width="370px" class="Theme" open="true" top="10px">
+		<select label="Bone" id="bone_sel"></select>
+
+		<prop-group label="CAPSULE SETTINGS">
+			<select label="Morph Mode" id="rend_mode">
+				<option value="0">Linear Tube</option>
+				<option value="1">Capped Curve</option>
+				<option value="2">Full Curve</option>
+			</select>
+
+			<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="5"></prop-vector>
+			<prop-vector label="Offset"		id="base_pos" value="0,0,0" step="0.01"></prop-vector>
+		</prop-group>
+
+		<prop-group label="TOP DOME">
+			<prop-vector label="Scale"		id="scl_top" value="1,1,1" step="0.01"></prop-vector>
+			<prop-vector label="Position"	id="pos_top" value="0,1,0" step="0.01"></prop-vector>
+		</prop-group>
+
+		<prop-group label="MIDDLE ( Curve Modes )" open="false">
+			<prop-vector label="Scale"		id="scl_mid" value="1,1,1" step="0.01"></prop-vector>
+			<prop-vector label="Position"	id="pos_mid" value="0,0,0" step="0.01"></prop-vector>
+		</prop-group>
+
+		<prop-group label="BOTTOM DOME">
+			<prop-vector label="Scale"		id="scl_bot" value="1,1,1" step="0.01"></prop-vector>
+			<prop-vector label="Position"	id="pos_bot" value="0,1,0" step="0.01"></prop-vector>
+		</prop-group>
+
+		<prop-group label="Shapes" open="false">
+			<button id="btn_sphere"><b>SPHERE</b></button>
+			<button id="btn_projectile"><b>PROJECTILE</b></button>
+			<button id="btn_canon"><b>ARM CANNON</b></button>
+			<button id="btn_claw"><b>CLAW / FANG</b></button>
+		</prop-group>
+	</prop-panel>
+
+</body></html>

@@ -1,4 +1,4 @@
-import App from "../fungi/App.js";
+import App, { Draw } from "../fungi/App.js";
 
 class BoneView{
 	armature	= null;
@@ -41,6 +41,11 @@ class BoneView{
 		App.buffer.update_data( buf.get( "rot" ), this.rot_buffer );
 		App.buffer.update_data( buf.get( "pos" ), this.pos_buffer );
 		App.buffer.update_data( buf.get( "scl" ), this.scl_buffer );
+	}
+
+	get_draw_item(){
+		let mat = App.shader.new_material( "BoneView" ).set_depth_test( true );
+		return Draw.new_draw_item( this.mesh, mat, App.mesh.LINE );
 	}
 }
 

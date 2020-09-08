@@ -6,6 +6,7 @@ import Quat						from "../fungi/maths/Quat.js";
 
 
 class BoneConfig{
+	// #region MAIN
 	mode		= 0;
 	scl_top		= new Vec3();
 	scl_mid		= new Vec3();
@@ -15,6 +16,19 @@ class BoneConfig{
 	pos_bot		= new Vec3();
 	base_pos	= new Vec3();
 	base_rot	= new Quat();
+	// #endregion////////////////////////////////////////////////////
+
+	// #region MAIN
+	serialize(){
+		let ary	= [ "scl_top", "scl_mid", "scl_bot", "pos_top", "pos_mid", "pos_bot", "base_pos", "base_rot" ],
+			buf	= "{mode:" + this.mode + ", ",
+			i;
+		
+		for( i of ary ) buf += i + ":" + this[ i ].to_string( 4 ) + ", ";
+
+		return buf.slice( 0, -2 ) + "}";
+	}
+	// #endregion////////////////////////////////////////////////////
 
 	// #region MODES & SHAPES
 	as_linear(){
@@ -115,7 +129,9 @@ class ProtoForm{
 
 		this.armature = arm;
 
-		if( config ) this.from_config( config );
+		//if( config ) this.from_config( config );
+
+		this.init();
 
 		return this;
 	}
@@ -181,6 +197,34 @@ class ProtoForm{
 		);
 
 		return this;
+	}
+
+	get_bone_config( idx, cfg ){
+		if( typeof( idx ) == "string" ){
+			if( this.armature.names[ idx ] == undefined ){
+				console.error( "Bone Name not found for setting bone config: ", idx );
+				return this;
+			}else idx = this.armature.names[ idx ];
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let c = this.config_buffer;
+		let b = c.buffer;
+		let v = c.var_config;
+
+		idx *= c.stride_len;
+
+		cfg.scl_top.from_buf( b, idx + v[0].offset );
+		cfg.scl_mid.from_buf( b, idx + v[1].offset );
+		cfg.scl_bot.from_buf( b, idx + v[2].offset );
+		cfg.pos_top.from_buf( b, idx + v[3].offset );
+		cfg.pos_mid.from_buf( b, idx + v[4].offset );
+		cfg.pos_bot.from_buf( b, idx + v[5].offset );
+		cfg.base_rot.from_buf( b, idx + v[6].offset );
+		cfg.base_pos.from_buf( b, idx + v[7].offset );
+		cfg.mode = b[ idx + v[8].offset ];
+
+		return cfg;
 	}
 
 	update_config_buffer(){

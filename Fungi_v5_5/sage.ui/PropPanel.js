@@ -386,10 +386,11 @@ window.customElements.define( "prop-slider", PropSlider );
 //#############################################################################################
 
 class PropProxy{
-	constructor( model={} ){
+	constructor( data={} ){
 		this.evt 	= document.createElement( "i" );
-		this.data	= model;
+		this.data	= data;
 		this.map	= new Map();
+
 		this.model	= new Proxy( this.data, {
 			set	: this._on_proxy_set.bind( this ),
 		});
@@ -404,17 +405,21 @@ class PropProxy{
 	}
 
 	_on_proxy_set( obj, key, val ){
-		this.data[ key ] = val;
-		this.map.get( key ).value = val;
-		this.emit( "onSet", { key, new_val:val } );
+		//console.log( "proxy set", obj, key, val );
+		//this.data[ key ] = val;
+		//this.map.get( key ).value = val;
+		this.emit( "model_input", { 
+			elm : this.map.get( key ),
+			key,
+			new_val:val,
+		});
 		return true;
 	}
 
 	_on_input( e ){
 		let elm				= e.srcElement;
 		let key				= elm.bind_var;
-		this.data[ key ]	= elm.value;
-		this.emit( "onInput", { key, new_val:elm.value } );
+		this.emit( "ui_input", { elm, key, new_val:elm.value } );
 	}
 
 	add( var_name, input_id, input_evt="input" ){

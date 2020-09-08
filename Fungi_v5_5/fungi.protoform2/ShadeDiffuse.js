@@ -219,8 +219,8 @@ const vert_src = `#version 300 es
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Apply Capsule Morphing
 		if( mode == 0 ) pos = mode_linear( pos, grp );
-		//if( mode == 1 ) pos = mode_capped_curve( pos, grp );
-		//if( mode == 2 ) pos = mode_full_curve( pos, grp );
+		if( mode == 1 ) pos = mode_capped_curve( pos, grp );
+		if( mode == 2 ) pos = mode_full_curve( pos, grp );
 
 		// Apply Base Rotation and Translation
 		pos		= quat_mul_vec3( base_rot, pos );

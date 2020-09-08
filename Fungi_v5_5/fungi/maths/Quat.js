@@ -45,6 +45,8 @@ class Quat extends Float32Array{
 		reset(){ this[0] = this[1] = this[2] = 0; this[3] = 1; return this; }
 		clone(){ return new Quat(this); }
 
+		to_string(){ return "[" + this.join(",") + "]"; }
+
 		//-------------------------------------------
 		
 		from_struct( o ){ this[0] = o.x; this[1] = o.y; this[2] = o.z; this[3] = o.w; return this; }
