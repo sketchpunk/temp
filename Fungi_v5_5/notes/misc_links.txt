@@ -16,3 +16,13 @@ Matrix the World
 https://medium.com/@shahriyarshahrabi/shader-studies-matrix-effect-3d2ead3a84c5
 https://github.com/IRCSS/MatrixVFX
 https://twitter.com/IRCSS/status/1300538162406739974?s=20
+
+
+Boids
+https://bl.ocks.org/veltman/995d3a677418100ac43877f3ed1cc728
+https://github.com/hughsk/boids
+https://jumpoff.io/blog/implementing-boids-in-javascript-canvas ( Very interesting version )
+
+Explains Boids
+http://www.red3d.com/cwr/boids/
+https://www.lalena.com/AI/Flock/

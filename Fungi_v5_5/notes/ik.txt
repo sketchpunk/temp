@@ -1,1 +1,6 @@
 https://mykolbe.wordpress.com/2020/09/03/rig-fundamentals-polevector/
+
+https://tympanus.net/codrops/2019/10/14/how-to-create-an-interactive-3d-character-with-three-js/  // IK Look
+
+https://twitter.com/skaven_/status/1304042483240841216?s=20  // inertialization / motion matching
+https://www.youtube.com/watch?v=BYyv4KTegJI&feature=emb_logo

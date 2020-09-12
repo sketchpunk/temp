@@ -69,6 +69,25 @@ class Transform{
 			return this;
 		}
 
+		from_invert( t ){
+			// Invert Rotation
+			//t.rot.invert( this.rot );
+			this.rot.from_invert( t.rot );
+
+			// Invert Scale
+			this.scl.x = ( t.scl.x != 0 )? 1 / t.scl.x : 0;
+			this.scl.y = ( t.scl.y != 0 )? 1 / t.scl.y : 0;
+			this.scl.z = ( t.scl.z != 0 )? 1 / t.scl.z : 0;
+
+			// Invert Position : rotInv * ( invScl * invPos )
+			//t.pos.invert( this.pos ).mul( this.scl );
+			this.pos.from_invert( t.pos ).mul( this.scl ).transform_quat( this.rot );
+
+			//Vec3.transform_quat( this.pos, this.rot, this.pos );
+
+			return this;
+		}
+
 		// Computing Transforms, Parent -> Child
 		add( cr, cp, cs = null ){
 			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

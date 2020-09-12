@@ -78,7 +78,7 @@ class Matrix4 extends Float32Array{
 				// Calculate the determinant
 				det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
 
-			if (!det) return false;
+			if (!det) return this;
 			det = 1.0 / det;
 
 			this[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
@@ -296,6 +296,15 @@ class Matrix4 extends Float32Array{
 			out[1] = this[1] * x + this[5] * y + this[9]	* z + this[13] * w;
 			out[2] = this[2] * x + this[6] * y + this[10]	* z + this[14] * w;
 			out[3] = this[3] * x + this[7] * y + this[11]	* z + this[15] * w;
+			return out;
+		}
+
+		transform_vec3( v, out = null ){
+			let x = v[0], y = v[1], z = v[2];
+			out = out || v;
+			out[0] = this[0] * x + this[4] * y + this[8]	* z + this[12];
+			out[1] = this[1] * x + this[5] * y + this[9]	* z + this[13];
+			out[2] = this[2] * x + this[6] * y + this[10]	* z + this[14];
 			return out;
 		}
 

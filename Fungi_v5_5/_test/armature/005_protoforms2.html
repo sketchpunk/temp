@@ -27,7 +27,7 @@ let Entity		= null;
 async function init(){
 	App.ecs.systems.reg( ProtoFormSys, 810 );
 
-	let e = build();
+	let e = build( true );
 	Entity = e;
 
 	init_ui();
@@ -160,6 +160,7 @@ function build( use_preview=true ){
 	// PROTOFORM
 	e.proto	= new ProtoForm(); //App.ecs.add_com( e.id, "ProtoForm" );
 	e.proto.use_armature( e.arm, null );
+	e.proto.use_config( HUMAN_CONFIG );
 	e.draw.add( e.proto.get_draw_item() );
 	App.ecs.add_com( e.id, e.proto );
 
@@ -342,6 +343,14 @@ const MAXIMO_BONES = [
 	{ "name":"RightToeBase","len":0.1,"idx":51,"p_idx":50,"pos":[0,0.115,0],"rot":[0.4079799950122833,1.589943821045381e-7,-4.328248692786474e-8,0.9129908680915833] }
 ];
 
+const HUMAN_CONFIG = [
+	{"bone":"Hips", "base_opt":[1,0,1], "scl_top":[0.04,0.04,0.04], "scl_mid":[0.02,0,0.02], "scl_bot":[0.04,0.04,0.04], "pos_top":[0.04,0.07,0], "pos_mid":[0,0,0], "pos_bot":[0.04,-0.07,0], "base_pos":[0,0,0], "base_rot":[0,0,0.7071067690849304,0.7071067690849304]},
+	{"bone":"LeftUpLeg", "base_opt":[1,0,0], "scl_top":[0.03,0.03,0.03], "scl_mid":[0.01,0,0.01], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.39,0], "pos_mid":[0,0.19,0.02], "pos_bot":[0,-0.02,0], "base_pos":[0,0.02,0], "base_rot":[0,0,0,1]},
+	{"bone":"LeftLeg", "base_opt":[1,-0.18,0], "scl_top":[0.022,0.024,0.022], "scl_mid":[0.01,0,0.01], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.34,-0.01], "pos_mid":[0,0.29,0.01], "pos_bot":[0,-0.02,0], "base_pos":[0,0.05,0], "base_rot":[0,0,0,1]},
+	{"bone":"RightUpLeg", "base_opt":[1,0,0], "scl_top":[0.03,0.03,0.03], "scl_mid":[0.01,0,0.01], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.39,0], "pos_mid":[0,0.19,0.02], "pos_bot":[0,-0.02,0], "base_pos":[0,0.02,0], "base_rot":[0,0,0,1]},
+	{"bone":"RightLeg", "base_opt":[1,-0.18,0], "scl_top":[0.022,0.024,0.022], "scl_mid":[0.01,0,0.01], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.34,-0.01], "pos_mid":[0,0.29,0.01], "pos_bot":[0,-0.02,0], "base_pos":[0,0.05,0], "base_rot":[0,0,0,1]},
+	{"bone":"LeftFoot", "base_opt":[2.0000,0,1], "scl_top":[0.02,0.02,0.02], "scl_mid":[0.02,0,0.05], "scl_bot":[0.02,0.02,0.04], "pos_top":[0,0.09,0], "pos_mid":[0,0,0], "pos_bot":[0,0.05,-0.05], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
+];
 
 //#####################################################
 function init_ui(){
@@ -356,6 +365,7 @@ function init_ui(){
 	Proxy.add( "pos_bot", "pos_bot", "input" );
 	Proxy.add( "base_pos", "base_pos", "input" );
 	Proxy.add( "base_rot", "base_rot", "input" );
+	Proxy.add( "curve_1d", "curve_1d", "input" );
 	Proxy.add( "mode", "rend_mode", "change" );
 	Proxy.add( "bone_sel", "bone_sel", "change" );
 
@@ -376,6 +386,7 @@ function init_ui(){
 				Bone_idx = parseInt( v );
 				get_protoform_bone();
 			break;
+			case "curve_1d"	: Bone_cfg.set_curve( v[0], v[1] ); break;
 			case "base_rot"	: Bone_cfg[ i.key ].from_euler( v[0], v[1], v[2] ); break;
 			default			: Bone_cfg[ i.key ].copy( v ); break;
 		}
@@ -393,7 +404,7 @@ function init_ui(){
 
 		switch( i.key ){
 			case "base_rot"	: i.elm.value = v.get_euler( null, true ); break;
-			case "bone_sel"	: console.log( "model b sel"); break;
+			case "bone_sel"	: console.log( "model b sel", v ); break;
 			case "mode" 	: i.elm.selectedIndex = v; break;
 			default			: i.elm.value = v; break;
 		}
@@ -405,6 +416,13 @@ function init_ui(){
 	for( b of Entity.arm.bones ){
 		elm[ b.idx ] = new Option( b.name, b.idx, false );
 	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Button Events
+	document.getElementById( "btn_serial" ).addEventListener( "click", ()=>{
+		let elm = document.getElementById( "bone_sel" );
+		console.log( Bone_cfg.serialize( elm[ elm.selectedIndex ].text ) );
+	})
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	get_protoform_bone();
@@ -421,13 +439,12 @@ function set_protoform_bone(){
 function get_protoform_bone(){
 	Entity.proto.get_bone_config( Bone_idx, Bone_cfg );
 	update_ui();
-
-	console.log( Bone_cfg.serialize() );
 }
 
 // Update the UI from Bone Config Data
 function update_ui(){
 	Proxy.model.mode		= Bone_cfg.mode;
+	Proxy.model.curve_1d	= Bone_cfg.curve;
 	Proxy.model.scl_top		= Bone_cfg.scl_top;
 	Proxy.model.scl_mid		= Bone_cfg.scl_mid;
 	Proxy.model.scl_bot		= Bone_cfg.scl_bot;
@@ -440,6 +457,8 @@ function update_ui(){
 
 // How to handle Capsule Morph Mode
 function update_mode(){
+	console.log( "update mode", Bone_cfg.mode );
+
 	switch( Bone_cfg.mode ){
 		case 0:
 			Bone_cfg.pos_top.set(0,0.02,0);
@@ -460,6 +479,7 @@ function update_mode(){
 	Bone_cfg.pos_mid.set(0,0,0);
 	Bone_cfg.base_pos.set(0,0,0);
 	Bone_cfg.base_rot.set(0,0,0,1);
+	Bone_cfg.set_curve( 0, 1 );
 }
 
 </script>
@@ -468,8 +488,8 @@ function update_mode(){
 	<canvas id="pg_canvas"></canvas>
 
 	<prop-panel id="PntProp" side="right" width="370px" class="Theme" open="true" top="10px">
+		<button id="btn_serial"><b>SERIALIZE BONE</b></button>
 		<select label="Bone" id="bone_sel"></select>
-
 		<prop-group label="CAPSULE SETTINGS">
 			<select label="Morph Mode" id="rend_mode">
 				<option value="0">Linear Tube</option>
@@ -479,6 +499,7 @@ function update_mode(){
 
 			<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="5"></prop-vector>
 			<prop-vector label="Offset"		id="base_pos" value="0,0,0" step="0.01"></prop-vector>
+			<prop-vector label="Lerp Curve"	id="curve_1d" value="0,1" step="0.01"></prop-vector>
 		</prop-group>
 
 		<prop-group label="TOP DOME">

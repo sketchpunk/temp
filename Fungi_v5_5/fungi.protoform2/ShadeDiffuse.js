@@ -16,7 +16,7 @@ const vert_src = `#version 300 es
 	layout(location=11)	in vec3 pos_bot;
 	layout(location=12)	in vec4 base_rot;
 	layout(location=13)	in vec3 base_pos;
-	layout(location=14)	in float base_opt;
+	layout(location=14)	in vec3 base_opt;
 
 	uniform Global{ 
 		mat4	proj_view; 
@@ -73,6 +73,16 @@ const vert_src = `#version 300 es
 	}
 	vec3 qbezier_dxdy( vec3 a, vec3 b, vec3 c, float t ){
 		return 2.0 * ( 1.0 - t ) * ( b - a ) + 2.0 * t * ( c - b );
+	}
+
+	// CUBIC BEZIER CURVE
+	//https://blog.demofox.org/2014/08/28/one-dimensional-bezier-curves/
+	//http://www.demofox.org/bezcubic1d.html
+	//1D Cubic (3rd) Bezier through A, B, C, D where a Start and d is end are assumed to be 0 and 1.
+	float norm_bezier3( float b, float c, float t ){
+		float s		= 1.0 - t;
+		float t2	= t * t;
+		return (3.0 * b * s * s * t) + (3.0 * c * s * t2) + t2 * t;
 	}
 
 	//-------------------------
@@ -146,11 +156,11 @@ const vert_src = `#version 300 es
 			t		= ( pos.y + 1.0 ) / 2.0;
 			pos.y	= 0.0;	// Shift ring to origin
 
-			//if( grp <= 2 ) pos *= mix( scl_mid, scl_top, norm_bezier3( 0.0, 0.3, a_pos.y ) );
-			//if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, norm_bezier3( 0.0, 0.3, abs( a_pos.y ) ) );
+			if( grp <= 2 ) pos *= mix( scl_mid, scl_top, norm_bezier3( base_opt.y, base_opt.z, a_pos.y ) );
+			if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, norm_bezier3( base_opt.y, base_opt.z, abs( a_pos.y ) ) );
 
-			if( grp <= 2 ) pos *= mix( scl_mid, scl_top, a_pos.y );
-			if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, abs( a_pos.y ) );
+			//if( grp <= 2 ) pos *= mix( scl_mid, scl_top, a_pos.y );
+			//if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, abs( a_pos.y ) );
 		}
 
 		// Scale Top Dome
@@ -214,7 +224,7 @@ const vert_src = `#version 300 es
 	void main(void){
 		vec3 pos	= a_pos.xyz;
 		int grp		= int( a_pos.w );
-		int mode	= int( base_opt );
+		int mode	= int( base_opt.x );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Apply Capsule Morphing

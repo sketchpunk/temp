@@ -2,12 +2,13 @@ import App, { Draw }			from "../fungi/App.js";
 import InterleavedFloatArray	from "../fungi/lib/InterleavedFloatArray.js";
 import FlatGeo					from "../fungi/geo/FlatGeo.js";
 import Vec3						from "../fungi/maths/Vec3.js";
+import Vec2						from "../fungi/maths/Vec2.js";
 import Quat						from "../fungi/maths/Quat.js";
 
+const BC_LIST = [ "base_opt", "scl_top", "scl_mid", "scl_bot", "pos_top", "pos_mid", "pos_bot", "base_pos", "base_rot" ];
 
 class BoneConfig{
 	// #region MAIN
-	mode		= 0;
 	scl_top		= new Vec3();
 	scl_mid		= new Vec3();
 	scl_bot		= new Vec3();
@@ -16,23 +17,57 @@ class BoneConfig{
 	pos_bot		= new Vec3();
 	base_pos	= new Vec3();
 	base_rot	= new Quat();
-	// #endregion////////////////////////////////////////////////////
+	base_opt	= new Vec3(); // 0:Mode, 1,2: Lerp Curve Y0 Y1
+	// #endregion ////////////////////////////////////////////////////
 
-	// #region MAIN
-	serialize(){
-		let ary	= [ "scl_top", "scl_mid", "scl_bot", "pos_top", "pos_mid", "pos_bot", "base_pos", "base_rot" ],
-			buf	= "{mode:" + this.mode + ", ",
-			i;
+	// #region SETTERS / GETTERS
+	get mode(){ return this.base_opt[0]; }
+	set mode(v){ this.base_opt[0] = v; }
+
+	get curve(){ return [ this.base_opt[1], this.base_opt[2] ]; }
+	set_curve( a, b ){
+		this.base_opt[ 1 ] = a;
+		this.base_opt[ 2 ] = b;
+		return this;
+	}
+	// #endregion ////////////////////////////////////////////////////
+
+	// #region METHODS
+	serialize( bName="" ){
+		let buf	= ( bName )? '{"bone":"' + bName + '", ' : "{",
+			str, i;
 		
-		for( i of ary ) buf += i + ":" + this[ i ].to_string( 4 ) + ", ";
+		for( i of BC_LIST ){
+			str = this[ i ].to_string( 4 ).replaceAll( /(\d+\.\d+[1-9]+)(0+)/gi, '$1');
+			//console.log( i, str, str.replaceAll( /(\d+\.\d+[1-9]+)(0+)/gi, '$1') );
+			buf += '"' + i + '"' + ":" + str + ", ";
+		}
 
 		return buf.slice( 0, -2 ) + "}";
 	}
-	// #endregion////////////////////////////////////////////////////
+
+	deserialize( json ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Deal with Mode First, have it set the defaults for the mode
+		switch( json.mode ){
+			case 1	: this.as_cap_curve(); break;
+			case 2	: this.as_full_curve(); break;
+			default	: this.as_linear(); break;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let n, e;
+		for( n of BC_LIST ){
+			e = json[ n ];
+			if( e ) this[ n ].copy( e );
+		}
+
+		return this;
+	}
+	// #endregion ////////////////////////////////////////////////////
 
 	// #region MODES & SHAPES
 	as_linear(){
-		this.mode = 0;
 		this.scl_top.set( 1,1,1 );
 		this.scl_mid.set( 1,1,1 );
 		this.scl_bot.set( 1,1,1 );
@@ -41,11 +76,11 @@ class BoneConfig{
 		this.pos_bot.set( 0, 1, 0 );
 		this.base_pos.reset();
 		this.base_rot.reset();
+		this.base_opt.set( 0, 0, 1 );
 		return this;
 	}
 
 	as_cap_curve(){
-		this.mode = 1;
 		this.scl_top.set( 1,1,1 );
 		this.scl_mid.set( 1,1,1 );
 		this.scl_bot.set( 1,1,1 );
@@ -54,11 +89,11 @@ class BoneConfig{
 		this.pos_bot.set( 0, -1, 0 );
 		this.base_pos.reset();
 		this.base_rot.reset();
+		this.base_opt.set( 1, 0, 1 );
 		return this;
 	}
 
 	as_full_curve(){
-		this.mode = 2;
 		this.scl_top.set( 1,1,1 );
 		this.scl_mid.set( 1,1,1 );
 		this.scl_bot.set( 1,1,1 );
@@ -67,11 +102,11 @@ class BoneConfig{
 		this.pos_bot.set( 0, -1.5, 0 );
 		this.base_pos.reset();
 		this.base_rot.reset();
+		this.base_opt.set( 2, 0, 1 );
 		return this;
 	}
 
 	as_shape_shere( scl=0.02 ){
-		this.mode = 0;
 		this.scl_top.set( scl,scl,scl );
 		this.scl_mid.set( 1,1,1 );
 		this.scl_bot.set( scl,scl,scl );
@@ -80,13 +115,15 @@ class BoneConfig{
 		this.pos_bot.set( 0, 0, 0 );
 		this.base_pos.reset();
 		this.base_rot.reset();
+		this.base_opt.set( 0, 0, 1 );
 		return this;
 	}
-	// #endregion////////////////////////////////////////////////////
+	// #endregion ////////////////////////////////////////////////////
 }
 
 
 class ProtoForm{
+	// #region MAIN
 	armature		= null;	// Reference to Armature
 	mesh			= null;	// Instanced Mesh
 	trans_buffer	= null;	// Copy of World Space Pos / Rot from Armature Bones
@@ -95,6 +132,7 @@ class ProtoForm{
 	constructor(){
 	}
 
+	// #region START UP
 	use_armature( arm, config=null ){
 		let bcnt = arm.bones.length;
 
@@ -104,15 +142,6 @@ class ProtoForm{
 			{ name:"pos",	size:3 },
 			{ name:"scl",	size:3 },
 		], bcnt, 0, true );
-		
-		/*
-		this.config_buffer = new InterleavedFloatArray([
-			{ name:"top",	size:4 },
-			{ name:"bot",	size:4 },
-			{ name:"rot",	size:4 },
-			{ name:"pos",	size:3 },
-		], bcnt, 0 );
-		*/
 
 		this.config_buffer = new InterleavedFloatArray([
 			{ name:"scl_top",	size:3 },
@@ -123,15 +152,13 @@ class ProtoForm{
 			{ name:"pos_bot",	size:3 },
 			{ name:"base_rot",	size:4 },
 			{ name:"base_pos",	size:3 },
-			{ name:"base_opt",	size:1 },
+			{ name:"base_opt",	size:3 },
 		], bcnt, 0, true );
-
 
 		this.armature = arm;
 
-		//if( config ) this.from_config( config );
-
 		this.init();
+		if( config ) this.use_config( config );
 
 		return this;
 	}
@@ -146,12 +173,12 @@ class ProtoForm{
 				// Default for Linear Mode
 				//[1,1,1], [1,1,1], [1,1,1],	// Scl
 				//[0,1,0], [0,0,0], [0,1,0],	// Pos
-				//[0,0,0,1], [0,0,0], 0,		// Rot, Offset, Mode
+				//[0,0,0,1], [0,0,0], [0,0,1],		// Rot, Offset, Mode
 				
 				// Default for Linear Mode as Small Spheres
 				[0.02,0.02,0.02], [1,1,1], [0.02,0.02,0.02],	// Scl
-				[0,0.02,0], [0,0,0], [0,0.02,0],	// Pos
-				[0,0,0,1], [0,0,0], 0,		// Rot, Offset, Mode
+				[0,0.02,0], [0,0,0], [0,0.02,0],				// Pos
+				[0,0,0,1], [0,0,0], [0,0,1],					// Rot, Offset, Options( Mode, 1D Curve XY )
 			);
 		}
 
@@ -182,6 +209,33 @@ class ProtoForm{
 		return this;
 	}
 
+	use_config( ary ){
+		let a, i, bc = new BoneConfig();
+
+		for( a of ary ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			i = this.armature.names[ a.bone ];
+			if( i == undefined || i == null ){
+				console.error( "Bone Not Found Protoform Bone Config : ", a.bone );
+				continue;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			//console.log( a.bone, i );
+
+			bc.deserialize( a );
+			this.set_bone_cfg( i, bc );
+			
+			//console.log( bc );
+		}
+
+		this.update_config_buffer();
+		return this;
+	}
+	// #endregion ////////////////////////////////////////////////////
+
+
+	// #region GETTER / SETTERS
 	set_bone_cfg( idx, cfg ){
 		if( typeof( idx ) == "string" ){
 			if( this.armature.names[ idx ] == undefined ){
@@ -193,7 +247,7 @@ class ProtoForm{
 		this.config_buffer.set( idx,
 			cfg.scl_top, cfg.scl_mid, cfg.scl_bot,
 			cfg.pos_top, cfg.pos_mid, cfg.pos_bot,
-			cfg.base_rot, cfg.base_pos, cfg.mode
+			cfg.base_rot, cfg.base_pos, cfg.base_opt,
 		);
 
 		return this;
@@ -208,99 +262,34 @@ class ProtoForm{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let c = this.config_buffer;
-		let b = c.buffer;
-		let v = c.var_config;
+		let c = this.config_buffer;	// Interleaved Object
+		let b = c.buffer;			// Get its TypeArray
+		let v = c.var_config;		// Alias to Interleaved Configuration
 
-		idx *= c.stride_len;
+		idx *= c.stride_len;		// Convert to Float Index
 
-		cfg.scl_top.from_buf( b, idx + v[0].offset );
-		cfg.scl_mid.from_buf( b, idx + v[1].offset );
-		cfg.scl_bot.from_buf( b, idx + v[2].offset );
-		cfg.pos_top.from_buf( b, idx + v[3].offset );
-		cfg.pos_mid.from_buf( b, idx + v[4].offset );
-		cfg.pos_bot.from_buf( b, idx + v[5].offset );
-		cfg.base_rot.from_buf( b, idx + v[6].offset );
-		cfg.base_pos.from_buf( b, idx + v[7].offset );
-		cfg.mode = b[ idx + v[8].offset ];
-
+		cfg.scl_top.from_buf(	b, idx + v[0].offset );
+		cfg.scl_mid.from_buf(	b, idx + v[1].offset );
+		cfg.scl_bot.from_buf(	b, idx + v[2].offset );
+		cfg.pos_top.from_buf(	b, idx + v[3].offset );
+		cfg.pos_mid.from_buf(	b, idx + v[4].offset );
+		cfg.pos_bot.from_buf(	b, idx + v[5].offset );
+		cfg.base_rot.from_buf(	b, idx + v[6].offset );
+		cfg.base_pos.from_buf(	b, idx + v[7].offset );
+		cfg.base_opt.from_buf(	b, idx + v[8].offset );
 		return cfg;
-	}
-
-	update_config_buffer(){
-		App.buffer.update_data( this.mesh.buffers.get( "cfg" ), this.config_buffer.buffer );
-		return this;
-	}
-
-	// OLD
-	from_config( config ){
-		let cfg = this.config_buffer;
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Build capsule configuration buffer
-		let i, usetop, usebot,
-			default_pos	= [0,0,0],
-			default_rot	= [0,0,0,1],
-			top			= [0,0,0,0],
-			bot			= [0,0,0,0];
-
-        for( i of config ){
-			//--------------------------------------
-			if( i.top.length == 2 ){	// Simple Form [ scl, y ]
-				top[ 0 ] = top[ 1 ] = top[ 2 ] = i.top[ 0 ];	// Scale
-				top[ 3 ] = i.top[ 1 ];							// Move Y
-				usetop = top;
-			}else usetop = i.top;		// Complex Form [ scl_x, scl_y, scl_z, y ]
-
-			//--------------------------------------
-			if( i.bot.length == 2 ){	// Simple Form [ scl, y ]
-				bot[ 0 ] = bot[ 1 ] = bot[ 2 ] = i.bot[ 0 ];	// Scale
-				bot[ 3 ] = i.bot[ 1 ];							// Move Y
-				usebot = bot;
-			}else usebot = i.bot;		// Complex Form [ scl_x, scl_y, scl_z, y ]
-
-			//--------------------------------------
-            cfg.push( usetop, usebot, ( i.rot || default_rot ), ( i.pos || default_pos ) ); 
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		
-		// (arc_div-1) * lathe_cnt + 1 == Dome Vert Count
-		let geo 	= Capsule.geo( 10, 4, 0.5, 0 ); //Capsule.geo( lathe_cnt=8, arc_div=5, radius=0.5, height=0.25 )
-		
-		// Static Buffers
-		let vert_buf	= App.buffer.new_array( geo.vert );
-		let norm_buf	= App.buffer.new_array( geo.norm );
-		let idx_buf		= App.buffer.new_element( geo.idx );
-		
-		// Instanced Buffers
-		let cfg_buf		= App.buffer.new_array( this.config_buffer.buffer, this.config_buffer.stride_len, true );
-		let tran_buf	= App.buffer.new_array( this.trans_buffer.buffer, this.trans_buffer.stride_len, false );
-
-		
-		let bconfig = [
-			// Static
-			{ name:"indices", buffer:idx_buf },
-			{ name:"vertices", buffer:vert_buf, attrib_loc:App.shader.POS_LOC, instanced:false, },
-			{ name:"normal", buffer:norm_buf, attrib_loc:App.shader.NORM_LOC, instanced:false, },
-			// Instances
-			{ name:"cfg", buffer:cfg_buf, instanced:true, interleaved: this.config_buffer.generate_config( 6 ) },
-			{ name:"tran", buffer:tran_buf, instanced:true, interleaved: this.trans_buffer.generate_config( 3 ) },
-		];
-
-		this.mesh = App.mesh.from_buffer_config( bconfig, "PRMesh", geo.idx.length, cfg.len );
-
-		//console.log( bconfig );
-		//console.log( this.mesh );
-
-		/**/
-
-		return this;
 	}
 
 	get_draw_item(){ 
 		let mat = App.shader.new_material( "ProtoForm" );
 		return Draw.new_draw_item( this.mesh, mat, App.mesh.TRI );
+	}
+	// #endregion ////////////////////////////////////////////////////
+	
+	// #region GPU BUFFERS
+	update_config_buffer(){
+		App.buffer.update_data( this.mesh.buffers.get( "cfg" ), this.config_buffer.buffer );
+		return this;
 	}
 
 	update_buffers(){
@@ -321,6 +310,7 @@ class ProtoForm{
 		App.buffer.update_data( buf.get( "tran" ), this.trans_buffer.buffer );
 		//App.buffer.update_data( buf.get( "cfg" ), this.config_buffer.buffer );
 	}
+	// #endregion ////////////////////////////////////////////////////
 }
 
 //#################################################################
