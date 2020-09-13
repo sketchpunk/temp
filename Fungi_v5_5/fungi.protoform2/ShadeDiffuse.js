@@ -205,12 +205,12 @@ const vert_src = `#version 300 es
 		vec4 q 		= quat_unit_vecs( UP, dir );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		//if( grp <= 2 ) pos *= mix( sb, sc, norm_bezier3( 0.5, 1.3, pos.y / 1.5 ) );
-		//if( grp >= 3 ) pos *= mix( sb, sa, norm_bezier3( 0.2, 0.7, abs( pos.y ) / 1.5 ) );
-
 		// Apply Scale based from the mid point scale to either TOP or BOTTOM Scale.
-		if( grp <= 2 ) pos *= mix( scl_mid, scl_top, pos.y / 1.5 );
-		if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, abs( pos.y ) / 1.5 );
+		if( grp <= 2 ) pos *= mix( scl_mid, scl_top, norm_bezier3( base_opt.y, base_opt.z, pos.y / 1.5 ) );
+		if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, norm_bezier3( base_opt.y, base_opt.z, abs( pos.y ) / 1.5 ) );
+
+		//if( grp <= 2 ) pos *= mix( scl_mid, scl_top, pos.y / 1.5 );
+		//if( grp >= 3 ) pos *= mix( scl_mid, scl_bot, abs( pos.y ) / 1.5 );
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		pos.y		= 0.0;											// Vert belongs to a ring, shift it to height origin
