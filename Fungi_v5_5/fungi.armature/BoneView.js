@@ -43,8 +43,8 @@ class BoneView{
 		App.buffer.update_data( buf.get( "scl" ), this.scl_buffer );
 	}
 
-	get_draw_item(){
-		let mat = App.shader.new_material( "BoneView" ).set_depth_test( true );
+	get_draw_item( depth=false ){
+		let mat = App.shader.new_material( "BoneView" ).set_depth_test( depth );
 		return Draw.new_draw_item( this.mesh, mat, App.mesh.LINE );
 	}
 }
@@ -110,7 +110,7 @@ function build_mesh( bv ){
 
 //####################################################################
 function LoadShader(){
-	App.shader
+	let sh = App.shader
 		.new( "BoneView", v_src, f_src, null, App.ubo.get_array( "Global","Model" ) )
 		.set_depth_test( false )
 		.set_blend( true )

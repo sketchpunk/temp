@@ -101,6 +101,38 @@ class Armature{
 	}
 
 	new_pose( name="undefined_pose" ){ return new Pose( this, name ); }
+
+	// Serialize the Bone Data
+	serialize_bones( inc_scale = false, rtn_str=true ){
+		let out	= new Array( this.bones.length ),
+			i 	= 0,
+			b;
+
+		for( b of this.bones ){
+			out[ i ] = {
+				name	: b.name,
+				len		: b.len,
+				idx		: b.idx,
+				p_idx 	: b.p_idx,
+				pos		: Array.from( b.local.pos ),
+				rot		: Array.from( b.local.rot ),
+			};
+			if( inc_scale ) out[ i ].scl = Array.from( b.local.scl );		
+			i++;
+		}
+
+		if( rtn_str ){
+			let buf = "[\n";
+			for( let i=0; i < out.length; i++ ){
+				if( i != 0 ) buf += ",\n";
+				buf += JSON.stringify( out[ i ] );
+			}
+			buf += "\n]";
+			return buf;
+		}
+
+		return out;
+	}
 	// #endregion /////////////////////////////////////////////////////////////
 
     // #region COMPUTE
