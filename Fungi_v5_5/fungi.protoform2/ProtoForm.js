@@ -6,6 +6,10 @@ import Vec2						from "../fungi/maths/Vec2.js";
 import Quat						from "../fungi/maths/Quat.js";
 
 const BC_LIST = [ "base_opt", "scl_top", "scl_mid", "scl_bot", "pos_top", "pos_mid", "pos_bot", "base_pos", "base_rot" ];
+const LATHE_STEPS	= 12;
+const ARC_STEPS		= 8
+
+
 
 class BoneConfig{
 	// #region MAIN
@@ -106,6 +110,19 @@ class BoneConfig{
 		return this;
 	}
 
+	as_simple_curve(){
+		this.scl_top.set( 1,1,1 );
+		this.scl_mid.set( 1,1,1 );
+		this.scl_bot.set( 1,1,1 );
+		this.pos_top.set( 0, 1.5, 0 );
+		this.pos_mid.set( 0, 0, 0 );
+		this.pos_bot.set( 0, -1.5, 0 );
+		this.base_pos.reset();
+		this.base_rot.reset();
+		this.base_opt.set( 3, 0, 1 );
+		return this;
+	}
+
 	as_shape_shere( scl=0.02 ){
 		this.scl_top.set( scl,scl,scl );
 		this.scl_mid.set( 1,1,1 );
@@ -183,7 +200,7 @@ class ProtoForm{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		let geo			= capsule_geo(); //lathe_cnt=6, arc_div=6, radius=1, side_step=5
+		let geo			= capsule_geo( LATHE_STEPS, ARC_STEPS ); //lathe_cnt=6, arc_div=6, radius=1, side_step=5
 
 		// Static Buffers
 		let vert_buf	= App.buffer.new_array( geo.vert, 4 );

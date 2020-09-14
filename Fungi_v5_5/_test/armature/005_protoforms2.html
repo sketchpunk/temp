@@ -3,7 +3,7 @@ import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
 import FlatGeo		from "../../fungi/geo/FlatGeo.js";
 import ProtoForm, { ProtoFormSys, BoneConfig }	from "../../fungi.protoform2/ProtoForm.js";
 import PropPanel, { PropProxy }	from "../../sage.ui/PropPanel.js";
-import EyeBall from "../../fungi.protoform/rigs/EyeBall.js";
+//import EyeBall from "../../fungi.protoform/rigs/EyeBall.js";
 
 //#####################################################
 App
@@ -167,11 +167,10 @@ function build( use_preview=true ){
 	}
 
 
-	let eye = EyeBall();
-		//eye.node.set_scl( 0.21 ).set_pos( 0, 0.082, 0.02 );
-	eye.node.set_scl( 0.2 ).set_pos( 0, 0.5, 0.27 );
-	e.arm.attach_to_bone( "Head", eye.node );
-	e.eye = eye;
+	//let eye = EyeBall();
+	//eye.node.set_scl( 0.2 ).set_pos( 0, 0.5, 0.27 );
+	//e.arm.attach_to_bone( "Head", eye.node );
+	//e.eye = eye;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	return e;
@@ -458,7 +457,7 @@ const GUARDIAN_CONFIG = [
 	{"bone":"arm_a_6", "base_opt":[0,0,1], "scl_top":[0.1,0.1,0.1], "scl_mid":[1,1,1], "scl_bot":[0.1,0.1,0.1], "pos_top":[0,0,0], "pos_mid":[0,0,0], "pos_bot":[0,0,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
 
 	{"bone":"hand_a_a0", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.06,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.04,0], "base_rot":[0,0,0,1]},
-	{"bone":"hand_a_a1", "base_opt":[1,0,1], "scl_top":[0.01,0.02,0.01], "scl_mid":[0.02,0,0.02], "scl_bot":[0.03,0.03,0.03], "pos_top":[0.04,0.08,0], "pos_mid":[0,0.06,0], "pos_bot":[0,-0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"hand_a_a1", "base_opt":[3.0000,0,0.56], "scl_top":[0.01,0.02,0.01], "scl_mid":[0.03,-0.01,0.02], "scl_bot":[0.03,0.01,0.03], "pos_top":[0.06,0.13,0], "pos_mid":[0,0.09,0], "pos_bot":[0,0.03,0], "base_pos":[0,-0.025,0], "base_rot":[0,0,0,1]},
 
 	{"bone":"hand_a_c0", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.06,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.04,0], "base_rot":[0,0,0,1]},
 	{"bone":"hand_a_c1", "base_opt":[1,0,1], "scl_top":[0.01,0.02,0.01], "scl_mid":[0.02,0,0.02], "scl_bot":[0.03,0.03,0.03], "pos_top":[-0.04,0.08,0], "pos_mid":[0,0.06,0], "pos_bot":[0,-0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
@@ -572,15 +571,15 @@ function update_mode(){
 	console.log( "update mode", Bone_cfg.mode );
 
 	switch( Bone_cfg.mode ){
-		case 0:
+		case 0: // Linear
 			Bone_cfg.pos_top.set(0,0.02,0);
 			Bone_cfg.pos_bot.set(0,0.02,0);
 			break;
-		case 1:
+		case 1: // Capped Curve
 			Bone_cfg.pos_top.set(0,0.02,0);
 			Bone_cfg.pos_bot.set(0,-0.02,0);
 			break;
-		case 2:
+		case 2: case 3: // Full and Simple Curve
 			Bone_cfg.pos_top.set(0,0.03,0);
 			Bone_cfg.pos_bot.set(0,-0.03,0);
 			break;
@@ -603,10 +602,11 @@ function update_mode(){
 		<button id="btn_serial"><b>SERIALIZE BONE</b></button>
 		<select label="Bone" id="bone_sel"></select>
 		<prop-group label="CAPSULE SETTINGS">
-			<select label="Morph Mode" id="rend_mode">
+			<select label="Deform Mode" id="rend_mode">
 				<option value="0">Linear Tube</option>
 				<option value="1">Capped Curve</option>
 				<option value="2">Full Curve</option>
+				<option value="3">Simple Curve</option>
 			</select>
 
 			<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="5"></prop-vector>

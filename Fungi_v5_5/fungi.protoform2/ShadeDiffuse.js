@@ -219,6 +219,38 @@ const vert_src = `#version 300 es
 		return pos;
 	}
 
+	vec3 mode_simple_curve( vec3 pos, int grp ){
+		//vec3 pos_top = vec3( 0.0, 1.5, 0.0 );
+		//vec3 pos_mid = vec3( 0.0, 0.0, 0.0 );
+		//vec3 pos_bot = vec3( 0.0, -1.5, 0.0 );
+		//vec3 scl_top = vec3( 1.0 );
+		//vec3 scl_mid = vec3( 1.0 );
+		//vec3 scl_bot = vec3( 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Remap Capsule height from -1.5 > 1.5 to 0.0 > 3.0
+		// Then normalize the vert height in relation to total height.
+		float t		= ( 1.5 + a_pos.y ) / 3.0;
+
+		// Using the Norm Height, use that as T for bezier curve's first derivative/
+		vec3 dir	= normalize( qbezier_dxdy( pos_bot, pos_mid, pos_top, t ) );
+
+		// Create Rotation between UP and the curve point's direction.
+		vec4 q 		= quat_unit_vecs( UP, dir );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Apply Scale based from bottom to top
+
+		pos *= mix( scl_bot, scl_top, norm_bezier3( base_opt.y, base_opt.z, t ) );
+		//pos *= mix( scl_bot, scl_top, t );
+	
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		pos.y		= 0.0;											// Vert belongs to a ring, shift it to height origin
+		pos			= quat_mul_vec3( q, pos );						// Then rotate it toward the curve point direction
+		pos 		+= qbezier_at( pos_bot, pos_mid, pos_top, t );	// Then move the ring to the curve's position.
+		return pos;
+	}
+
 	//-------------------------
 
 	void main(void){
@@ -231,7 +263,8 @@ const vert_src = `#version 300 es
 		if( mode == 0 ) pos = mode_linear( pos, grp );
 		if( mode == 1 ) pos = mode_capped_curve( pos, grp );
 		if( mode == 2 ) pos = mode_full_curve( pos, grp );
-
+		if( mode == 3 ) pos = mode_simple_curve( pos, grp );
+		
 		// Apply Base Rotation and Translation
 		pos		= quat_mul_vec3( base_rot, pos );
 		pos		+= base_pos;
