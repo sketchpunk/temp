@@ -301,7 +301,7 @@ const frag_src = `#version 300 es
 	in vec3 frag_wpos;
 
 	const vec3 color 				= vec3( 1.0, 1.0, 1.0 );
-	const vec3 lightPosition 		= vec3( 0.0, 5.0, 0.0 );
+	const vec3 lightPosition 		= vec3( 3.0, 10.0, 0.0 );
 	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
 	const float uAmbientStrength	= 0.5;
 	const float uDiffuseStrength	= 0.5;

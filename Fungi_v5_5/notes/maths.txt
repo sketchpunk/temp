@@ -31,3 +31,7 @@ If the line is horizontal, then this returns true if the point is above the line
 is perpendicular to the line,
 x = y1-y2;
 y = x2-x1;
+
+
+https://twitter.com/Gelada/status/1305890934681460737
+Four different views of the function f(x,y) = x^3-2xy^2+y^3.

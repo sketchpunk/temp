@@ -10,3 +10,6 @@ https://halisavakis.com/my-take-on-shaders-cel-shading/
 
 Fog
 https://webglfundamentals.org/webgl/lessons/webgl-fog.html
+
+toon lighting
+https://www.patreon.com/posts/toon-lighting-41620461

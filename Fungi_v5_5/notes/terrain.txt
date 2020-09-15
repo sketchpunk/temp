@@ -3,3 +3,6 @@ https://www.redblobgames.com/maps/terrain-from-noise/
 https://www.gamasutra.com/view/feature/131841/continuous_lod_terrain_meshing_.php?page=2
 
 http://www.shamusyoung.com/twentysidedtale/?p=11991
+
+https://halisavakis.com/my-take-on-shaders-cliff-terrain-shader/
+https://twitter.com/HarryAlisavakis/status/1305843600186585088
