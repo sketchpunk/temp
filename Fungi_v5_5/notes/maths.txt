@@ -35,3 +35,39 @@ y = x2-x1;
 
 https://twitter.com/Gelada/status/1305890934681460737
 Four different views of the function f(x,y) = x^3-2xy^2+y^3.
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+https://discourse.threejs.org/t/camera-zoom-to-fit-object/936/24
+function fitCameraToSelection( camera, controls, selection, fitOffset = 1.2 ) {
+  
+  const box = new THREE.Box3();
+  
+  for( const object of selection ) box.expandByObject( object );
+  
+  const size = box.getSize( new THREE.Vector3() );
+  const center = box.getCenter( new THREE.Vector3() );
+  
+  const maxSize = Math.max( size.x, size.y, size.z );
+  const fitHeightDistance = maxSize / ( 2 * Math.atan( Math.PI * camera.fov / 360 ) );
+  // const fitHeightDistance = maxSize / ( 2 * Math.atan( (camera.fov * Math.PI / 180) / 2 ) ); // also works
+  const fitWidthDistance = fitHeightDistance / camera.aspect;
+  const distance = fitOffset * Math.max( fitHeightDistance, fitWidthDistance );
+  
+  const direction = controls.target.clone()
+    .sub( camera.position )
+    .normalize()
+    .multiplyScalar( distance );
+
+  controls.maxDistance = distance * 10;
+  controls.target.copy( center );
+  
+  camera.near = distance / 100;
+  camera.far = distance * 100;
+  camera.updateProjectionMatrix();
+
+  camera.position.copy( controls.target ).sub(direction);
+  
+  controls.update();
+  
+}

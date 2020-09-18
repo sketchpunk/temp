@@ -6,3 +6,11 @@ http://www.shamusyoung.com/twentysidedtale/?p=11991
 
 https://halisavakis.com/my-take-on-shaders-cliff-terrain-shader/
 https://twitter.com/HarryAlisavakis/status/1305843600186585088
+
+
+
+https://twitter.com/EuriGilberto/status/1306484229925109760 WFC with Graphs
+https://twitter.com/EuriGilberto/status/1306484231917506560\
+The Graph seems to tell which cells have which tile sets to use. Then 
+the lines arrows connecting cells might create constraints of how the
+tiles need to connect.

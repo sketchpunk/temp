@@ -5,15 +5,19 @@ import ProtoForm, { ProtoFormSys, BoneConfig }	from "../../fungi.protoform2/Prot
 import PropPanel, { PropProxy }	from "../../sage.ui/PropPanel.js";
 import EyeBall from "../../fungi.protoform/rigs/EyeBall.js";
 
+import ProtoSkeleton	from "../../fungi.protoform2/rigs/ProtoSkeleton.js";
+import ProtoAnxious		from "../../fungi.protoform2/rigs/ProtoAnxious.js";
+import ProtoDino		from "../../fungi.protoform2/rigs/ProtoDino.js";
+
 //#####################################################
 App
 	.init( true )
 	.use_debug()
 	.load_pkg( { name:"fungi.armature", bone_view:true, mat:false } )
-	//.load_pkg( { name:"fungi.protoform", mat:"Halftone" } )
+	.load_pkg( { name:"fungi.protoform2" } )
 	//.load_shaders( "LowPoly.js" )
 	//.load_shaders( "BaseColor.js" )	
-	.load_shaders( "../fungi.protoform2/ShadeDiffuse.js" )	
+	//.load_shaders( "../fungi.protoform2/ShadeDiffuse.js" )	
 	.set_camera( 60, 10, 4, 0, 1.0, 0 )
 	//.set_camera( 0, 10, 2, 0, 0.5, 0 )
 	.task( init )
@@ -27,15 +31,26 @@ let Bone_idx	= 0;
 let Entity		= null;
 
 async function init(){
-	App.ecs.systems.reg( ProtoFormSys, 810 );
+	//App.ecs.systems.reg( ProtoFormSys, 810 );
 
-	let e = build( true );
-	Entity = e;
+	let e = ProtoDino();
+	e.node.set_pos( -0.7, 0, 0 );
+
+	e = ProtoAnxious();
+
+	e = ProtoSkeleton();
+	e.node.set_pos( 0.5, 0, 0 );
+
+
+
+	//let e = build( true );
+	//Entity = e;
+
 	//e.arm.get_node( "arm.l.0" ).rot_by( 45, "z" );
 	//e.arm.get_node( "arm.l.1" ).rot_by( -45, "x" );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	init_ui();
+	//init_ui();
 	//App.render_by( 1, on_render );
 	return true;
 }
@@ -428,7 +443,7 @@ const DINO_BONES = [
 	{"name":"toe_b0.R","len":0.1053,"idx":44,"p_idx":41, "pos":[0,0.1677,0],"rot":[6.5607981269977245e-9,-6.273558028624393e-7,-3.607205425879738e-15,1] },
 	{"name":"toe_b1.R","len":0.1,"idx":45,"p_idx":44,"pos":[0,0.1053,0],"rot":[-4.531177921762719e-8,5.318430567058385e-7,2.924194225520718e-14,1]},
 	{"name":"toe_c0.R","len":0.0921,"idx":46,"p_idx":41,"pos":[-0.0699,0.1537,0],"rot":[2.8437952437343483e-7,-0.0000010440704727443517,0.23078593611717224,0.9730045795440674]},
-	{"name":"toe_c1.R","len":0.1,"idx":47,"p_idx":46,"pos":[0,0.0921,0],"rot":[-2.697945491146603e-13,0.0000010533635759202298,-2.5324561647721566e-7,1] }
+	{"name":"toe_c1.R","len":0.1,"idx":47,"p_idx":46,"pos":[0,0.0921,0],"rot":[-2.697945491146603e-13,0.0000010533635759202298,-2.5324561647721566e-7,1] },
 ];
 
 const DINO_CONFIG = [
@@ -438,17 +453,51 @@ const DINO_CONFIG = [
 	{"bone":"neck", "base_opt":[1,0.53,0.58], "scl_top":[0.17,0.17,0.17], "scl_mid":[0.2000,0,0.2000], "scl_bot":[0.22,0.19,0.22], "pos_top":[0,0.18,0], "pos_mid":[0,-0.06,0.02], "pos_bot":[0,-0.22,0], "base_pos":[0,0.22,0], "base_rot":[0,0,0,1]},
 	{"bone":"head", "base_opt":[1,0.53,1], "scl_top":[0.18,0.15,0.18], "scl_mid":[0.24,0.24,0.24], "scl_bot":[0.28,0.26,0.28], "pos_top":[0,0.46,-0.11], "pos_mid":[0,0.16,-0.06], "pos_bot":[0,-0.02,0], "base_pos":[0,0.18,0], "base_rot":[0,0,0,1]},
 
-	{"bone":"tail0", "base_opt":[1,0.48,0.8000], "scl_top":[0.21,0.08,0.23], "scl_mid":[0.24,0,0.27], "scl_bot":[0.28,0.41,0.31], "pos_top":[0,0.14,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.21,0], "base_pos":[0,0.19,0], "base_rot":[0,0,0.017452457919716835,0.999847711325989]},
-	{"bone":"tail1", "base_opt":[0,0,1], "scl_top":[0.18,0.18,0.18], "scl_mid":[1,1,1], "scl_bot":[0.18,0.18,0.18], "pos_top":[0,0.26,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
-	{"bone":"tail2", "base_opt":[0,0,1], "scl_top":[0.15,0.15,0.15], "scl_mid":[1,1,1], "scl_bot":[0.15,0.15,0.15], "pos_top":[0,0.3000,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
-	{"bone":"tail3", "base_opt":[0,0,1], "scl_top":[0.11,0.11,0.11], "scl_mid":[1,1,1], "scl_bot":[0.11,0.11,0.11], "pos_top":[0,0.25,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
-	{"bone":"tail4", "base_opt":[0,0,1], "scl_top":[0.07,0.07,0.07], "scl_mid":[1,1,1], "scl_bot":[0.07,0.07,0.07], "pos_top":[0,0.24,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
-	{"bone":"tail5", "base_opt":[0,0,1], "scl_top":[0.04,0.04,0.04], "scl_mid":[1,1,1], "scl_bot":[0.04,0.04,0.04], "pos_top":[0,0.17,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
-	{"bone":"tail6", "base_opt":[0,0,1], "scl_top":[0.02,0.02,0.02], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.08,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0,0], "base_rot":[0,0,0,1]},
+	{"bone":"tail0", "base_opt":[1,0.48,0.8], "scl_top":[0.21,0.08,0.23], "scl_mid":[0.24,0,0.27], "scl_bot":[0.28,0.41,0.31], "pos_top":[0,0.14,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.21,0], "base_pos":[0,0.19,0], "base_rot":[0,0,0.017452457919716835,0.999847711325989]},
+	{"bone":"tail1", "base_opt":[1,0.42,1], "scl_top":[0.17,0.1000,0.17], "scl_mid":[0.19,0,0.19], "scl_bot":[0.2000,0.2000,0.21], "pos_top":[0,0.2000,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.21,0], "base_pos":[0,0.23,0], "base_rot":[0,0,0,1]},
+	{"bone":"tail2", "base_opt":[1,0.35,1], "scl_top":[0.14,0.05,0.13], "scl_mid":[0.15,0,0.14], "scl_bot":[0.16,0.16,0.16], "pos_top":[0,0.22,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.2000,0], "base_pos":[0,0.22,0], "base_rot":[0,0,0,1]},
+	{"bone":"tail3", "base_opt":[1,0.42,1], "scl_top":[0.1000,0.04,0.1000], "scl_mid":[0.11,0,0.11], "scl_bot":[0.12,0.12,0.12], "pos_top":[0,0.16,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.16,0], "base_pos":[0,0.19,0], "base_rot":[0,0,0,1]},
+	{"bone":"tail4", "base_opt":[1,0.4000,1], "scl_top":[0.07,0.03,0.07], "scl_mid":[0.08,0,0.08], "scl_bot":[0.09,0.09,0.09], "pos_top":[0,0.13,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.15,0], "base_pos":[0,0.17,0], "base_rot":[0,0,0,1]},
+	{"bone":"tail5", "base_opt":[1,0.4000,1], "scl_top":[0.04,0.02,0.04], "scl_mid":[0.05,0,0.05], "scl_bot":[0.06,0.06,0.06], "pos_top":[0,0.11,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.09,0], "base_pos":[0,0.1000,0], "base_rot":[0,0,0,1]},
+	{"bone":"tail6", "base_opt":[1,0.3000,0.47], "scl_top":[0.018,0.02,0.018], "scl_mid":[0.025,0,0.025], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.02,0], "base_pos":[0,0.04,0], "base_rot":[0,0,0,1]},
+
+	{"bone":"arm_up.L", "base_opt":[1,0.6000,1], "scl_top":[0.04,0.04,0.04], "scl_mid":[0.04,0,0.04], "scl_bot":[0.06,0.06,0.06], "pos_top":[0,0.09,0], "pos_mid":[0,-0.02,-0.01], "pos_bot":[0,-0.08,0], "base_pos":[0,0.09,0], "base_rot":[0,0,0,1]},
+	{"bone":"arm_fore.L", "base_opt":[1,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[0.03,0,0.03], "scl_bot":[0.04,0.04,0.04], "pos_top":[0,0.12,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.1000,0], "base_pos":[0,0.12,0], "base_rot":[0,0,0,1]},
+	{"bone":"hand.L", "base_opt":[0,0,1], "scl_top":[0.08,0.04,0.04], "scl_mid":[1,1,1], "scl_bot":[0.05,0.03,0.04], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,0.04,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_a0.L", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.03,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_a1.L", "base_opt":[3,0,1], "scl_top":[0.008,0.01,0.008], "scl_mid":[0.02,0,0.02], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0.01], "pos_bot":[0,-0.06,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_b0.L", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.03,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_b1.L", "base_opt":[3,0,1], "scl_top":[0.008,0.01,0.008], "scl_mid":[0.02,0,0.02], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0.01], "pos_bot":[0,-0.06,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+
+	{"bone":"arm_up.R", "base_opt":[1,0.6000,1], "scl_top":[0.04,0.04,0.04], "scl_mid":[0.04,0,0.04], "scl_bot":[0.06,0.06,0.06], "pos_top":[0,0.09,0], "pos_mid":[0,-0.02,-0.01], "pos_bot":[0,-0.08,0], "base_pos":[0,0.09,0], "base_rot":[0,0,0,1]},
+	{"bone":"arm_fore.R", "base_opt":[1,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[0.03,0,0.03], "scl_bot":[0.04,0.04,0.04], "pos_top":[0,0.12,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.1000,0], "base_pos":[0,0.12,0], "base_rot":[0,0,0,1]},
+	{"bone":"hand.R", "base_opt":[0,0,1], "scl_top":[0.08,0.04,0.04], "scl_mid":[1,1,1], "scl_bot":[0.05,0.03,0.04], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,0.04,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_a0.R", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.03,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_a1.R", "base_opt":[3,0,1], "scl_top":[0.008,0.01,0.008], "scl_mid":[0.02,0,0.02], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0.01], "pos_bot":[0,-0.06,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_b0.R", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.03,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"finger_b1.R", "base_opt":[3,0,1], "scl_top":[0.008,0.01,0.008], "scl_mid":[0.02,0,0.02], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0.01], "pos_bot":[0,-0.06,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
 
 	{"bone":"leg_0.L", "base_opt":[1,0.29,0.65], "scl_top":[0.19,0.19,0.19], "scl_mid":[0.25,0,0.27], "scl_bot":[0.23,0.26,0.28], "pos_top":[0,0.25,0], "pos_mid":[0,-0.12,0.05], "pos_bot":[0,-0.28,0], "base_pos":[0,0.33,0], "base_rot":[0,0,0,1]},
 	{"bone":"leg_1.L", "base_opt":[1,0,1.11], "scl_top":[0.11,0.11,0.11], "scl_mid":[0.19,0,0.18], "scl_bot":[0.17,0.1000,0.17], "pos_top":[0,0.23,0], "pos_mid":[0,-0.16,0.04], "pos_bot":[0,-0.32,0], "base_pos":[0,0.29,0], "base_rot":[0,0,0,1]},
 	{"bone":"leg_2.L", "base_opt":[1,0,0.98], "scl_top":[0.05,0.05,0.05], "scl_mid":[0.06,0,0.06], "scl_bot":[0.09,0.09,0.09], "pos_top":[0,0.13,0], "pos_mid":[0,0,-0.03], "pos_bot":[0,-0.19,0], "base_pos":[0,0.21,0], "base_rot":[0,0,0,1]},
+	{"bone":"foot.L", "base_opt":[1,0.43,1], "scl_top":[0.09,0.03,0.04], "scl_mid":[0.075,0,0.04], "scl_bot":[0.06,0.05,0.04], "pos_top":[0,0.09,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.05,0], "base_pos":[0,0.04,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_a0.L", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_a1.L", "base_opt":[3,0,1], "scl_top":[0.005,0.02,0.005], "scl_mid":[0.02,0,0.1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,-0.005], "pos_mid":[0,0.01,0.015], "pos_bot":[0,-0.05,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_b0.L", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.05,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_b1.L", "base_opt":[3,0,1], "scl_top":[0.005,0.02,0.005], "scl_mid":[0.02,0,0.1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,-0.005], "pos_mid":[0,0.01,0.015], "pos_bot":[0,-0.05,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_c0.L", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_c1.L", "base_opt":[3,0,1], "scl_top":[0.005,0.02,0.005], "scl_mid":[0.02,0,0.1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,-0.005], "pos_mid":[0,0.01,0.015], "pos_bot":[0,-0.05,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+
+	{"bone":"leg_0.R", "base_opt":[1,0.29,0.65], "scl_top":[0.19,0.19,0.19], "scl_mid":[0.25,0,0.27], "scl_bot":[0.23,0.26,0.28], "pos_top":[0,0.25,0], "pos_mid":[0,-0.12,0.05], "pos_bot":[0,-0.28,0], "base_pos":[0,0.33,0], "base_rot":[0,0,0,1]},
+	{"bone":"leg_1.R", "base_opt":[1,0,1.11], "scl_top":[0.11,0.11,0.11], "scl_mid":[0.19,0,0.18], "scl_bot":[0.17,0.1000,0.17], "pos_top":[0,0.23,0], "pos_mid":[0,-0.16,0.04], "pos_bot":[0,-0.32,0], "base_pos":[0,0.29,0], "base_rot":[0,0,0,1]},
+	{"bone":"leg_2.R", "base_opt":[1,0,0.98], "scl_top":[0.05,0.05,0.05], "scl_mid":[0.06,0,0.06], "scl_bot":[0.09,0.09,0.09], "pos_top":[0,0.13,0], "pos_mid":[0,0,-0.03], "pos_bot":[0,-0.19,0], "base_pos":[0,0.21,0], "base_rot":[0,0,0,1]},
+	{"bone":"foot.R", "base_opt":[1,0.43,1], "scl_top":[0.09,0.03,0.04], "scl_mid":[0.075,0,0.04], "scl_bot":[0.06,0.05,0.04], "pos_top":[0,0.09,0], "pos_mid":[0,0,0], "pos_bot":[0,-0.05,0], "base_pos":[0,0.04,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_a0.R", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_a1.R", "base_opt":[3,0,1], "scl_top":[0.005,0.02,0.005], "scl_mid":[0.02,0,0.1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,-0.005], "pos_mid":[0,0.01,0.015], "pos_bot":[0,-0.05,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_b0.R", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.05,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_b1.R", "base_opt":[3,0,1], "scl_top":[0.005,0.02,0.005], "scl_mid":[0.02,0,0.1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,-0.005], "pos_mid":[0,0.01,0.015], "pos_bot":[0,-0.05,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_c0.R", "base_opt":[0,0,1], "scl_top":[0.03,0.03,0.03], "scl_mid":[1,1,1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.03,0], "base_rot":[0,0,0,1]},
+	{"bone":"toe_c1.R", "base_opt":[3,0,1], "scl_top":[0.005,0.02,0.005], "scl_mid":[0.02,0,0.1], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.04,-0.005], "pos_mid":[0,0.01,0.015], "pos_bot":[0,-0.05,0], "base_pos":[0,0.06,0], "base_rot":[0,0,0,1]},
 ];
 
 const JINX_BONES = [
@@ -491,7 +540,7 @@ const JINX_BONES = [
 	{"name":"tail.2","len":0.08,"idx":32,"p_idx":31,"pos":[0,0.08,0],"rot":[0,0,0,1]},
 	{"name":"tail.3","len":0.08,"idx":33,"p_idx":32,"pos":[0,0.08,0],"rot":[0,0,0,1]},
 	{"name":"tail.4","len":0.08,"idx":34,"p_idx":33,"pos":[0,0.08,0],"rot":[0,0,0,1]},
-	{"name":"tail.5","len":0.08,"idx":35,"p_idx":34,"pos":[0,0.08,0],"rot":[0,0,0,1]}
+	{"name":"tail.5","len":0.08,"idx":35,"p_idx":34,"pos":[0,0.08,0],"rot":[0,0,0,1]},
 	
 ];
 

@@ -9,8 +9,6 @@ const BC_LIST = [ "base_opt", "scl_top", "scl_mid", "scl_bot", "pos_top", "pos_m
 const LATHE_STEPS	= 12;
 const ARC_STEPS		= 8
 
-
-
 class BoneConfig{
 	// #region MAIN
 	scl_top		= new Vec3();
@@ -137,7 +135,6 @@ class BoneConfig{
 	}
 	// #endregion ////////////////////////////////////////////////////
 }
-
 
 class ProtoForm{
 	// #region MAIN

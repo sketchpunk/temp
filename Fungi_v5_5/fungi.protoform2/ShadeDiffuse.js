@@ -324,11 +324,10 @@ const frag_src = `#version 300 es
 	}
 `;
 
-//export default function(){
-//	App.shader.new( "ProtoForm", vert_src, frag_src, null, App.ubo.get_array( "Global", "Model" ) );
-	//console.log( "[ Loaded ShaderDiffuse ]" );
-//}
+export default function(){
+	App.shader.new( "ProtoForm", vert_src, frag_src, null, App.ubo.get_array( "Global", "Model" ) );
+	console.log( "[ Loaded ShaderDiffuse ]" );
+};
 
-let sh	= App.shader.new( "ProtoForm", vert_src, frag_src, null , App.ubo.get_array( "Global","Model" ) );
-
-export default sh;
+//let sh	= App.shader.new( "ProtoForm", vert_src, frag_src, null , App.ubo.get_array( "Global","Model" ) );
+//export default sh;
