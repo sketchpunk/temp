@@ -70,4 +70,39 @@ function fitCameraToSelection( camera, controls, selection, fitOffset = 1.2 ) {
   
   controls.update();
   
+// Does a decent job of handling Width
+  y = 250 / ( 2 * Math.atan( fov * 0.5 * camera.aspect ) );
+  camera.position.y = y;
 }
+
+[ resizing while keeping zoom ]
+function updateViewport() {
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    camera.fov = window.innerHeight / window.screen.height;
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+
+
+[ ANOTHER ONE RELATED TO KEEPING THE SIZE DURING RESIZE ]
+http://jsfiddle.net/Q4Jpu/
+
+// remember these initial values
+var tanFOV = Math.tan( ( ( Math.PI / 180 ) * camera.fov / 2 ) );
+var windowHeight = window.innerHeight;
+
+// Event Listeners
+window.addEventListener( 'resize', onWindowResize, false );
+
+function onWindowResize( event ) {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    // adjust the FOV
+    camera.fov = ( 360 / Math.PI ) * Math.atan( tanFOV * ( window.innerHeight / windowHeight ) );
+    camera.updateProjectionMatrix();
+    camera.lookAt( scene.position );
+    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.render( scene, camera );
+
+
+renderer.setSize(window.innerWidth, window.innerHeight);
+camera.fov = Math.atan(window.innerHeight / 2 / camera.position.z) * 2 * THREE.Math.RAD2DEG;
+camera.aspect = window.innerWidth / window.innerHeight;
