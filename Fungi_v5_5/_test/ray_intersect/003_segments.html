@@ -1,0 +1,52 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 }	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 0.1, 0 )
+	.task( init )
+	.then();
+
+
+//#############################################################################
+
+let seg_a = new Vec3( -2, 1, -2 ),
+	seg_b = new Vec3( 3, 0.2, -1 );
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	App.Debug.ln( seg_a, seg_b, "green" );
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1] );
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let info = gRay.near_segment( seg_a, seg_b );
+	if( info != null ){
+		App.Debug
+			.pnt( info[0], "orange", 0.12, 2 )
+			.pnt( info[1], "orange", 0.12, 2 )
+			.ln( info[0], info[1], "orange" );
+	}
+
+	App.render();
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

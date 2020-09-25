@@ -226,6 +226,15 @@ class Launcher{
 		});
 		return this;
 	}
+
+	use_events(){
+		this.task( async()=>{
+			let mod = await import( "./lib/EventManager.js");
+			App.events = new mod.default();
+			return true;
+		});
+		return this;
+	}
 	// #endregion ///////////////////////////////////////////////////////////////
 }
 

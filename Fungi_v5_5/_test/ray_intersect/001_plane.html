@@ -1,0 +1,53 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 }	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App
+	.init( true )
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 0.1, 0 )
+	.task( init )
+	.then();
+
+//#############################################################################
+
+let plane_pos	= new Vec3( 0, 1, -1 );
+let plane_norm	= new Vec3( 0, 0, 1 );
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	App.Debug
+		.set_pnt_size( 0.08 )
+		.pnt( plane_pos, "orange", null, 1 )
+		.ln( plane_pos, Vec3.add( plane_pos, plane_norm ), "orange" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	
+	gRay.set_screen_mouse( pos[0], pos[1] );
+	
+	App.Debug.ln( gRay.origin, gRay.end );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let t = gRay.in_plane( plane_pos, plane_norm );
+	if( t != null ) App.Debug.pnt( gRay.get_pos( t ), "red", 0.13, 2 );
+
+	App.render();
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

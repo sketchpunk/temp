@@ -1,0 +1,65 @@
+<!DOCTYPE html><script type="module">
+import App, {Maths, Vec3}	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.task( init )
+	.then();
+
+
+//#############################################################################
+let plane_pos		= new Vec3( 0, 1, -1 );
+let plane_norm		= new Vec3( 0, 0, 1 );
+let plane_radius 	= 0.5;
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	App.Debug
+		.pnt( plane_pos, "green", 0.1, 1 )
+		.ln( plane_pos, Vec3.add( plane_pos, Vec3.scale( plane_norm, 0.5 ) ), "green" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Draw Circle
+	let seg = 16,
+		v0 	= new Vec3(),
+		v1 	= new Vec3();
+
+	Maths.plane_circle( plane_pos, Vec3.LEFT, Vec3.UP, 0, plane_radius, v0 );
+
+	for( let i=1; i <= seg; i++ ){
+		Maths.plane_circle( plane_pos, Vec3.LEFT, Vec3.UP, Maths.PI_2 * i / seg, plane_radius, v1 );
+		
+		App.Debug.ln( v0, v1, "green" );
+		
+		v0.copy( v1 );
+	}
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1]  );
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let t = gRay.in_circle( plane_radius, plane_pos, plane_norm );
+	if( t != null ) App.Debug.pnt( gRay.get_pos( t ), "red", 0.1, 1 );
+
+	App.render();
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

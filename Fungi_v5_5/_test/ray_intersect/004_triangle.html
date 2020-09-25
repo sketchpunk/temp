@@ -1,0 +1,150 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 }	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App
+	.init()
+	.load_shaders( "./shaders/BaseColor.js" )
+	.use_debug()
+	.set_camera( 0, 20, 6, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#############################################################################
+let gShape, gPoints, gRayTri;
+
+function init(){
+
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	let verts 	= new Float32Array( [ 0, 2, 0,  -1, 0.2, 0,  1, 0.2, 0 ] );
+	let m 		= App.mesh.from_data( "Triangle", verts );
+	let mat 	= App.shader.new_material( "BaseColor", { color:"#909090" } );
+	let mat2 	= App.shader.new_material( "BaseColor", { color:"#101010" } );
+
+	gShape 	= App.mesh_entity( "gShape", m, mat );
+	gShape.draw.add( m, mat2, 2 );
+
+	gPoints = [
+		new Vec3( verts[0], verts[1], verts[2] ),
+		new Vec3( verts[3], verts[4], verts[5] ),
+		new Vec3( verts[6], verts[7], verts[8] ),
+	];
+
+	//gRayTri = ray_tri_closure();
+	gRayTri = Ray.ray_tri_closure();
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1]  );
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//inTri( gRay, gPoints[0], gPoints[1], gPoints[2] );
+	//gRayTri( gRay, gPoints[0], gPoints[1], gPoints[2] );
+
+	let v = new Vec3();
+	if( gRayTri( gRay, gPoints[0], gPoints[1], gPoints[2], v ) ){
+		App.Debug.pnt( v, "black", 0.15, 3 );
+	}else{
+		console.log( "No Hit" );
+	}
+
+	App.render();
+}
+
+
+//#############################################################################
+
+//https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/moller-trumbore-ray-triangle-intersection
+function inTri( ray, v0, v1, v2, cull_face=true ){
+	let v0v1 	= Vec3.sub( v1, v0 ),
+		v0v2 	= Vec3.sub( v2, v0 ),
+		pvec 	= Vec3.cross( ray.dir, v0v2 ),
+		det		= Vec3.dot( v0v1, pvec );
+
+	console.log( "det", det );
+	App.debug.line( v0, Vec3.add( v0, pvec ), 2 );
+
+	if( cull_face && det < 0.000001 ){
+		console.log( "BACKFACE" );
+		return false;
+	}
+
+	let idet 	= 1 / det,
+		tvec 	= Vec3.sub( ray.origin, v0 ),
+		u 		= Vec3.dot( tvec, pvec ) * idet;
+
+	if( u < 0 || u > 1 ) return false;
+
+	let qvec 	= Vec3.cross( tvec, v0v1 ),
+		v 		= Vec3.dot( ray.dir, qvec ) * idet;
+
+	if( v < 0 || u+v > 1 ) return false;
+
+	let t = Vec3.dot( v0v2, qvec ) * idet;
+
+	console.log( "t", t );
+	let p = ray.get_by_len( t );
+	App.debug.point( p, 0 );
+
+	return true;
+}
+
+function ray_tri_closure( cull_face=true ){
+	let v0v1 = new Vec3(),
+		v0v2 = new Vec3(),
+		pvec = new Vec3(),
+		tvec = new Vec3(),
+		qvec = new Vec3(),
+		v, u, det, idet, len;
+
+	return ( ray, v0, v1, v2, out )=>{
+		v0v1.from_sub( v1, v0 );
+		v0v2.from_sub( v2, v0 );
+		pvec.from_cross( ray.dir, v0v2 );
+		det = Vec3.dot( v0v1, pvec );
+
+		console.log( "det", det );
+		App.debug.line( v0, Vec3.add( v0, pvec ), 2 );
+
+		if( cull_face && det < 0.000001 ){ console.log( "BACKFACE" ); return false; }
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		idet = 1 / det,
+		tvec.from_sub( ray.origin, v0 ),
+		u = Vec3.dot( tvec, pvec ) * idet;
+
+		if( u < 0 || u > 1 ) return false;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		qvec.from_cross( tvec, v0v1 ),
+		v = Vec3.dot( ray.dir, qvec ) * idet;
+
+		if( v < 0 || u+v > 1 ) return false;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		out = out || new Vec3();
+
+		len = Vec3.dot( v0v2, qvec ) * idet;
+		console.log( "t", len );
+		ray.get_by_len( len, out );
+		App.debug.point( out, 0 );
+
+		return true;
+	}
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

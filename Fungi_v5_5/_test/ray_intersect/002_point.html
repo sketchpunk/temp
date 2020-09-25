@@ -1,0 +1,60 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 }	from "../../fungi/App.js";
+import Ray	from "../../fungi.ray/Ray.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 0.1, 0 )
+	.task( init )
+	.then();
+
+//#############################################################################
+let pnts = [];
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	let p;
+	for( let i=0; i < 10; i++ ){
+		p = new Vec3().rnd( -3, 3, 0, 1, -3, 2 );
+		App.Debug.pnt( p, "green", 0.1, 1 );
+		pnts.push( p );
+	}
+
+	return true;
+}
+
+
+//#############################################################################
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+
+	gRay.set_screen_mouse( pos[0], pos[1] );
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let t, p = new Vec3();
+
+	for( let i=0; i < pnts.length; i++ ){
+		t = gRay.near_point( pnts[ i ], 0.2 );
+		if( t == null ) continue;
+
+		gRay.get_pos( t, p );
+		
+		App.Debug
+			.pnt( p, "green", 0.12, 2 )
+			.ln( p, pnts[ i ], "green" );
+	}
+
+	App.render();
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

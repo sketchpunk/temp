@@ -1,0 +1,88 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths }			from "../../fungi/App.js";
+import Ray			from "../../fungi.ray/Ray.js";
+import BoundingBox	from "../../fungi.ray/BoundingBox.js";
+
+//#####################################################
+App
+	.init()
+	.load_shaders( "./shaders/BaseColor.js" )
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 1.0, 0 )
+	.task( init )
+	.then();
+
+
+//#############################################################################
+let gShape, gSpec;
+
+function init(){
+	App.gl.canvas.addEventListener( "mouseup", onRightClick );
+
+	gSpec 		= new BoundingBox( [-0.5,-0.5,-0.5], [0.5,0.5,0.5] );
+	
+	let verts 	= vec_box( gSpec.localBounds[0], gSpec.localBounds[1] );
+	let mesh	= App.mesh.from_data( name, new Float32Array( verts ) );
+	let mat 	= App.shader.new_material( "BaseColor", { color:"#909090" } );
+
+	gShape 		= App.mesh_entity( "gShape", mesh, mat, App.mesh.LINE );
+	gShape.node.set_pos( 1, 1, 0 );
+	gShape.node.local.rot.rot_x( Maths.to_rad(-30) );
+	gShape.node.local.rot.rot_z( Maths.to_rad(-50) );
+
+	return true;
+}
+
+//#############################################################################
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1], true  ); // Prepare for AABB Optimization
+	App.Debug.ln( gRay.origin, gRay.end, "red" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let info = {};
+	if( gRay.in_obb( gSpec, gShape.node.local, info ) ){
+		//console.log(info);
+
+		App.Debug
+			.pnt( gRay.get_pos( info.min ), "green", 0.05, 1 )
+			.pnt( gRay.get_pos( info.max ), "red", 0.05, 1 );
+	}
+
+	App.render();
+}
+
+
+//#############################################################################
+function vec_box( v1, v2 ){ return raw_box( v1[0], v1[1], v1[2], v2[0],v2[1],v2[2] ); }
+function raw_box( x1, y1, z1, x2, y2, z2 ){ // Min -> Max to creating a bounding box.		
+	//TopLeft,TopRight,BotRight,BotLeft
+	let d = [],
+		b = [	[x1,y1,z1], [x2,y1,z1],		//Bottom
+				[x2,y1,z2], [x1,y1,z2] ],
+		t = [	[x1,y2,z1], [x2,y2,z1],		//Top
+				[x2,y2,z2], [x1,y2,z2] ],
+		i, ii;
+
+	for(i=0; i < 4; i++){
+		ii = (i+1) % 4;
+		d.push(
+			b[i][0],	b[i][1],	b[i][2],	//Draw Bottom
+			b[ii][0],	b[ii][1],	b[ii][2],
+			t[i][0],	t[i][1],	t[i][2],	//Draw Top
+			t[ii][0],	t[ii][1],	t[ii][2],
+			b[i][0],	b[i][1],	b[i][2],	//Draw Sides
+			t[i][0],	t[i][1],	t[i][2]
+		);
+	}
+	return d;
+}
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

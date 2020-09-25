@@ -1,0 +1,52 @@
+<!DOCTYPE html><script type="module">
+import App		from "../../fungi/App.js";
+import Ray		from "../../fungi.ray/Ray.js";
+import Maths, { Vec3 } from "../../fungi/maths/Maths.js";
+import GizmoMove from "../../fungi.misc/GizmoMove.js";
+
+//#####################################################
+App
+	.init()
+	.use_events()
+	.set_camera( 0, 20, 2, 0, 0.0, 0 )
+	.task( init )
+	.then();
+//#####################################################
+let eGizmo;
+
+function init(){
+	App.gl.canvas.addEventListener( "mousedown", onRightClick );
+	GizmoMove.init(  );
+
+	eGizmo = GizmoMove.new_entity();
+	eGizmo.node.set_pos( 0, 0.1, 0 );
+
+	/*
+	let e = App.mesh_entity( "GizmoMove" );
+	let g = App.ecs.add_com( e.id, "GizmoMove" ).init();
+	console.log( g );
+	e.node.set_pos( 0, 0.1, 0 );
+	eGizmo = e;
+	eGizmo.gizmo = g;
+	*/
+	//eGizmo = GizmoMove.$();
+	//eGizmo.info.active = false;
+	return true;
+}
+
+let gRay = new Ray();
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+
+	let pos = App.input.toCoord( e );
+	gRay.set_screen_mouse( pos[0], pos[1] ).prepare_aabb();
+
+	if( eGizmo.gizmo.is_hit( gRay ) ){
+		console.log("GizmoHit");
+	}
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

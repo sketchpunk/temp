@@ -68,6 +68,7 @@ class Armature{
 		
 		// Setup the Inverted Bind Pose
 		this.compute_bind_pose();
+		return this;
 	}
 	
 	load_config( config ){

@@ -47,6 +47,13 @@ class BoneView{
 		let mat = App.shader.new_material( "BoneView" ).set_depth_test( depth );
 		return Draw.new_draw_item( this.mesh, mat, App.mesh.LINE );
 	}
+
+	apply_draw_item( depth=false ){
+		let draw	= App.ecs.get_com( this._entity_id, "Draw" );
+		let mat		= App.shader.new_material( "BoneView" ).set_depth_test( depth );
+		draw.add( this.mesh, mat, App.mesh.LINE );
+		return this;
+	}
 }
 
 function BoneViewSys( ecs ){

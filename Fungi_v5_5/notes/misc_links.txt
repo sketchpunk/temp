@@ -26,3 +26,8 @@ https://jumpoff.io/blog/implementing-boids-in-javascript-canvas ( Very interesti
 Explains Boids
 http://www.red3d.com/cwr/boids/
 https://www.lalena.com/AI/Flock/
+
+
+Shield FX
+https://www.clicktorelease.com/tmp/threejs/shield-vfx/
+https://github.com/spite/shield-vfx

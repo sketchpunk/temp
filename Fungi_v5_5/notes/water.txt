@@ -1,2 +1,8 @@
 https://martinrenou.github.io/threejs-caustics/
 https://github.com/martinRenou/threejs-caustics
+
+https://www.youtube.com/watch?v=zD6GV6bZenM&feature=youtu.be
+
+https://halisavakis.com/my-take-on-shaders-stylized-water-shader/
+
+https://halisavakis.com/my-take-on-shaders-water-shader/

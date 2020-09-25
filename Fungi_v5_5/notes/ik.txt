@@ -4,3 +4,40 @@ https://tympanus.net/codrops/2019/10/14/how-to-create-an-interactive-3d-characte
 
 https://twitter.com/skaven_/status/1304042483240841216?s=20  // inertialization / motion matching
 https://www.youtube.com/watch?v=BYyv4KTegJI&feature=emb_logo
+
+https://www.alanzucconi.com/2020/09/14/inverse-kinematics-in-3d/ // Interesting
+
+https://os.mbed.com/users/ms523/notebook/3d-inverse-kinematics/
+http://theorangeduck.com/page/simple-two-joint
+https://www.gamasutra.com/view/news/129168/Inverse_Kinematics_two_joints_for_foot_placement.php
+
+multi end effectors
+https://drive.google.com/file/d/0B8NceKcllVYrOHRKcjVrUV93Qlk/view
+
+https://jsantell.github.io/THREE.IK/examples/#multi-effector
+
+https://github.com/TheAllenChou/unity-physics-constraints
+
+
+Unreals IK Rig and Physics Driven Animation
+https://www.youtube.com/watch?time_continue=1&v=N1tDjbFXeOo&feature=emb_logo
+
+
+https://forums.unrealengine.com/unreal-engine/announcements-and-releases/1814986-unreal-engine-4-26-preview
+Fullbody IK Node (Experimental). For users who need to procedurally modify character poses at runtime, 
+the Fullbody IK solver has been added. Based on Jacobian Pseduoinverse Damped Least Squares, the 
+Fullbody IK Control Rig node has additional properties for controlling stiffness, bone limits, 
+pole vectors, and other solver parameters.
+
+https://www.math.ucsd.edu/~sbuss/ResearchWeb/ikmethods/iksurvey.pdf
+https://www.math.ucsd.edu/~sbuss/ResearchWeb/ikmethods/SdlsPaper.pdf
+
+https://www.unrealengine.com/marketplace/en-US/product/control-rig-mannequin/
+
+https://github.com/jsdf/BussIK-js
+https://github.com/mljs/levenberg-marquardt
+http://www.zallus.com/levenberg-marquardt-solver-and-maths-js/
+
+https://github.com/jesse-y/Jacobian-Transpose-IK-Solver
+
+https://medium.com/unity3danimation/overview-of-jacobian-ik-a33939639ab2
