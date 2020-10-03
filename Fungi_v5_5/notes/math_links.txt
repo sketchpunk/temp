@@ -22,3 +22,7 @@ https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
 
 Linkages
 https://mindbleach.com/words/tag/mechanical-logic/
+
+
+CURVES
+https://observablehq.com/@pamacha/chaikins-algorithm

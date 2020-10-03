@@ -33,10 +33,10 @@ const frag_src = `#version 300 es
 	in vec3 w_pos;
 	flat in vec3 cam_pos;
 
-	uniform vec3 color;
+	uniform vec4 color;
 	out vec4 out_color;
 
-	const vec3 lightPosition 		= vec3( 6.0, 10.0, 1.0 );
+	const vec3 lightPosition 		= vec3( 20.0, 0.0, 2.0 );
 	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
 	const float uAmbientStrength	= 0.5;
 	const float uDiffuseStrength	= 0.5;
@@ -60,13 +60,13 @@ const frag_src = `#version 300 es
 		float specular		= pow( max( dot(reflectVector,camVector) ,0.0), uSpecularShininess ); //Angle of reflected light and camera eye
 		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
 
-		out_color = vec4( color * (cAmbient + cDiffuse + cSpecular), 1.0 );
+		out_color = vec4( color.rgb * (cAmbient + cDiffuse + cSpecular), color.a );
 	}`;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 let sh	= App.shader.new( "LowPoly", vert_src, frag_src, [
-	{ name:"color", type:"rgb", value:"#ff7f7f" }
+	{ name:"color", type:"rgba", value:"#ff7f7fff" }
 	], App.ubo.get_array( "Global","Model" )
 );
 

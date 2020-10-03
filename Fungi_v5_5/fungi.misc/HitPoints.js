@@ -119,12 +119,14 @@ class HitPoints{
 		return this.points[ idx ];		
 	}
 
-    get_pos( idx=null ){ 
+    get_pos( idx=null, out=null ){ 
 		if( idx == null ){
 			if( this.sel_idx == null ){ console.error("No Index or Selected Index to get position"); return null; }
 			idx = this.sel_idx;
 		}
-		return this.points[ idx ].pos;
+		return ( out )? 
+			out.copy( this.points[ idx ].pos ) :
+			this.points[ idx ].pos;
 	}
 
 	get_pos_array(){

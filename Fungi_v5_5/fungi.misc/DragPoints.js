@@ -55,6 +55,10 @@ export default {
 	pnt					: function(){ ePnt.hitpoints.add.apply( ePnt.hitpoints, arguments ); return this; },
 	move				: function( pos, idx=null ){ ePnt.hitpoints.move( pos, idx ); return this; },
 	set_move_handler	: function( fn ){ Gizmo_Move_Handler = fn; return this; },
+
+	set_select_color	: function( c ){ ePnt.hitpoints.sel_color = c; return this; },
+
+	get_pos				: function(){ ePnt.hitpoints.get_pos.apply( ePnt.hitpoints, arguments ); return this; },
 };
 
 //get_pos_array 		: function(){ return ePnt.hitpoints.get_pos_array(); },

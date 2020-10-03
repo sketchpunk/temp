@@ -1,1 +1,11 @@
 https://sites.google.com/site/letsmakeavoxelengine/home
+
+
+DualContouring
+https://vanruesc.github.io/rabbit-hole/public/docs/file/src/isosurface/dual-contouring/DualContouring.js.html
+https://github.com/Domenicobrz/Dual-Contouring-javascript-implementation
+http://ngildea.blogspot.com/2014/11/implementing-dual-contouring.html
+https://www.mattkeeter.com/projects/contours/
+https://stackoverflow.com/questions/6485908/basic-dual-contouring-theory
+
+https://swiftcoder.wordpress.com/planets/isosurface-extraction/

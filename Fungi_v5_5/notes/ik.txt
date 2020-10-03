@@ -41,3 +41,10 @@ http://www.zallus.com/levenberg-marquardt-solver-and-maths-js/
 https://github.com/jesse-y/Jacobian-Transpose-IK-Solver
 
 https://medium.com/unity3danimation/overview-of-jacobian-ik-a33939639ab2
+
+
+https://www.youtube.com/watch?v=g-uXLNz7-70&t=1114s different hind leg Bone Rigs
+
+Mirror Rigging
+https://twitter.com/wtelford/status/1311077921063407616?s=20
+https://github.com/wtelford/maya-python-plugins/blob/master/mirror_matrix.py

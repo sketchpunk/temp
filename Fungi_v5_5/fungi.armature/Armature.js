@@ -101,6 +101,12 @@ class Armature{
 		return this.nodes[ idx ];
 	}
 
+	get_bone( bname ){
+		let idx = this.names[ bname ];
+		if( idx == null ){ console.error( "Armature.get_bone - Bone name not found : %s", bname ); return null; }
+		return this.bones[ idx ];
+	}
+
 	new_pose( name="undefined_pose" ){ return new Pose( this, name ); }
 
 	// Serialize the Bone Data

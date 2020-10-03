@@ -160,7 +160,7 @@ let v_src = `#version 300 es
  
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		v_color		= a_color;
-		w_pos		= model.view_matrix * w_pos;
+		//w_pos		= model.view_matrix * w_pos;
 		gl_Position	= global.proj_view * w_pos;
 		//gl_PointSize = 10.0;
 	}`;

@@ -1,7 +1,11 @@
 <!DOCTYPE html><script type="module">
 import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
-import ArmFactory from "../../fungi.armature/ArmFactory.js";;
-import DragPoints from "../../fungi.misc/DragPoints.js";
+import ArmFactory	from "../../fungi.armature/ArmFactory.js";;
+import DragPoints	from "../../fungi.misc/DragPoints.js";
+
+import Chain		from "../../fungi.ik/Chain.js";
+import Target		from "../../fungi.ik/Target.js";
+import SwingTwistSolver from "../../fungi.ik/solvers/SwingTwistSolver.js";
 
 //#####################################################
 App
@@ -9,13 +13,16 @@ App
 	.load_pkg( { name:"fungi.armature", bone_view:true, mat:false } )
 	.use_events()
 	.use_debug()
-	.set_camera( 0, 20, 3, 0, 0.0, 0 )
+	.set_camera( 45, 20, 3, 0, 0.0, 0 )
 	.task( init )
 	.then();
 
 //#####################################################
 
-let $chain, $tpose, $pose;
+let $entity, $tpose, $pose, $chain;
+
+let $end_effector	= new Vec3();
+let $pole_effector	= new Vec3();
 
 async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -24,21 +31,66 @@ async function init(){
 
 	// IK Targets
 	DragPoints.pnt( [0, 0.8, 0 ], null, "cyan", 1, 0.06 );
-	DragPoints.pnt( [0, 0.2, 0.4 ], null, "yellow", 1, 0.06 );
+	DragPoints.pnt( [0, 0.2, 0.4 ], null, "yellow", 3, 0.06 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Armature
-	$chain	= ArmFactory.chain( [ 0.2, 0.2, 0.2 ] );
-	$tpose	= $chain.arm.new_pose();
-	$pose	= $chain.arm.new_pose();
+	let name_ary = new Array();
+	$entity	= ArmFactory.chain( [ 0.2, 0.2, 0.2 ], name_ary );
+	$tpose	= $entity.arm.new_pose();
+	$pose	= $entity.arm.new_pose();
+
+	$entity.node.set_pos( 0, 0.05, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$chain = new Chain().from_armature( $entity.arm, name_ary );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//$pose.root_offset.copy( $entity.node.local );
+	
+	DragPoints.get_pos( 0, $end_effector );
+	DragPoints.get_pos( 1, $pole_effector );
+	
+	/*
+	let pt = new Transform();
+	let ct = new Transform();
+	$pose.get_parent_world( $chain.first(), pt, ct, $entity.node.local );
+
+	//App.Debug.pnt( ct.pos );
+
+	//console.log( $entity.node.local.pos, ct.pos );
+	let pole_dir = Vec3.sub( $pole_effector, ct.pos );
+	let ik = new Target().from_pos( ct.pos, $end_effector, pole_dir );
+	//ik.debug( App.Debug );
+
+	SwingTwistSolver.apply_chain( ik, $chain, $tpose, $pose, pt );
+	$pose.apply();
+	*/
 
 	return true;
 }
 
 function on_pnt_move( idx, pos ){
-	console.log( idx, pos );
+	switch( idx ){
+		case 0: $end_effector.copy( pos ); break;
+		case 1: $pole_effector.copy( pos ); break;
+	}
+
+	apply_ik();
 }
 
+function apply_ik(){
+	let pt = new Transform();
+	let ct = new Transform();
+
+	$pose.get_parent_world( $chain.first(), pt, ct, $entity.node.local );
+
+	let pole_dir	= Vec3.sub( $pole_effector, ct.pos );
+	let ik			= new Target().from_pos( ct.pos, $end_effector, pole_dir );
+
+	SwingTwistSolver.apply_chain( ik, $chain, $tpose, $pose, pt );
+	$pose.apply();
+}
 
 //#####################################################
 </script>
