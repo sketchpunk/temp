@@ -1,11 +1,20 @@
-import { Transform, Quat, Vec3 } from "../../fungi/maths/Maths.js";
-import App from "../../fungi/App.js";
+import { Quat, Vec3 } from "../../fungi/maths/Maths.js"; // Transform,
+// import App from "../../fungi/App.js";
 
 class SwingTwistSolver{
+
 	static apply_chain( ik, chain, tpose, pose, p_wt ){
-		let rot	= Quat.mul( p_wt.rot, tpose.get_local_rot( chain.first() ) ), // Get WS Rotation of First Bone
-			q	= new Quat(),
+		let rot = new Quat();
+		this.get_world_rot( ik, chain, tpose, p_wt, rot );		// Compute IK
+		rot.pmul_invert( p_wt.rot );							// To Local Space
+		pose.set_local_rot( chain.bones[0].idx, rot );			// Save to Pose
+	}
+
+	static get_world_rot( ik, chain, tpose, p_wt, rot ){
+		let	q	= new Quat(),
 			dir	= new Vec3();
+
+		rot.from_mul( p_wt.rot, tpose.get_local_rot( chain.first() ) ); // Get WS Rotation of First Bone
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Swing
@@ -18,14 +27,11 @@ class SwingTwistSolver{
 		dir.from_quat( rot, chain.pole_dir );		// Get WS Pole Direction of Chain
 		q.from_unit_vecs( dir, ik.axis.y );			// Rotation to IK Pole Direction
 		rot.pmul( q );								// Apply to Bone WS Rot + Swing
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		rot.pmul_invert( p_wt.rot );				// To Local Space
-		pose.set_local_rot( chain.bones[0].idx, rot );
 	}
+
 }
 
-
+/*
 function apply_look_twist( rig, b_info, ik ){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let bind 	= rig.tpose.bones[ b_info.idx ],
@@ -106,29 +112,7 @@ function _aim_bone( chain, tpose, p_wt, out ){
 	//if( Quat.dot( out, rot ) < 0 ) out.negate();	
 
 	//console.log( Quat.dot( rot, out ) );
-
-/*
-
-q.from_unit_vecs( Vec3.FORWARD, p_fwd )			// Rotation Difference From True FWD and Pose FWD, Swing Rotation
-.mul( tb.world.rot );						// Apply Swing to TPose WS Rotation, gives Swing in WS
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-let s_up	= Vec3.transform_quat( t_up, q ),	// Get UP Direction of the Swing Rotation
-twist	= Vec3.angle( s_up, p_up );			// Swing+Pose have same Fwd, Use Angle between both UPs for twist
-
-if( twist <= (0.01 * Math.PI / 180) ){
-twist = 0; // If Less the .01 Degree, dont bother twisting.
-}else{
-// Swing FWD and Pose FWD Should be the same in ws, So no need to calc it,
-// So using Pose Fwd and Swing up to get Swing left
-// Is the Angle going to be Negative?, use Swing Left to determine if 
-// its in the left or right side of UP
-let s_lft = Vec3.cross( s_up, p_fwd ).norm();
-if( Vec3.dot( s_lft, p_up ) >= 0 )	twist = -twist; 
 }
-
 */
-	
-}
 
 export default SwingTwistSolver;
