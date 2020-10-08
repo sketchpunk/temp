@@ -13,3 +13,9 @@ https://webglfundamentals.org/webgl/lessons/webgl-fog.html
 
 toon lighting
 https://www.patreon.com/posts/toon-lighting-41620461
+
+water color shader
+https://cyangamedev.wordpress.com/2020/10/06/watercolour-shader-experiments/
+
+
+https://spite.github.io/sketch/cross-hatch-v/index.html
