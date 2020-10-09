@@ -18,7 +18,7 @@ App
 	//.load_shaders( "LowPoly.js" )
 	//.load_shaders( "BaseColor.js" )	
 	//.load_shaders( "../fungi.protoform2/ShadeDiffuse.js" )	
-	.set_camera( 60, 10, 4, 0, 1.0, 0 )
+	.set_camera( 0, 10, 2, 0, 1.0, 0 )
 	//.set_camera( 0, 10, 2, 0, 0.5, 0 )
 	.task( init )
 	.then();
@@ -33,6 +33,7 @@ let Entity		= null;
 async function init(){
 	//App.ecs.systems.reg( ProtoFormSys, 810 );
 
+	/*
 	let e = ProtoDino();
 	e.node.set_pos( -0.7, 0, 0 );
 
@@ -40,17 +41,17 @@ async function init(){
 
 	e = ProtoSkeleton();
 	e.node.set_pos( 0.5, 0, 0 );
+	*/
 
 
-
-	//let e = build( true );
-	//Entity = e;
+	let e = build( false );
+	Entity = e;
 
 	//e.arm.get_node( "arm.l.0" ).rot_by( 45, "z" );
 	//e.arm.get_node( "arm.l.1" ).rot_by( -45, "x" );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//init_ui();
+	init_ui();
 	//App.render_by( 1, on_render );
 	return true;
 }
@@ -62,7 +63,7 @@ function build( use_preview=true ){
 	// CREATE ARMATURE
 	e.arm = App.ecs.add_com( e.id, "Armature" );
 	e.arm
-		.load_config( DINO_BONES ) // DINO_BONES, MAXIMO_BONES
+		.load_config( MUTANT_BONES ) // DINO_BONES, MAXIMO_BONES
 		//.load_config( JINX_BONES )
 		.anchor_root_bones( e.node );
 
@@ -70,9 +71,10 @@ function build( use_preview=true ){
 	// PROTOFORM
 	e.proto	= new ProtoForm(); //App.ecs.add_com( e.id, "ProtoForm" );
 	e.proto.use_armature( e.arm, null );
-	//e.proto.use_config( HUMAN_CONFIG );
+	e.proto.use_config( MUTANT_CONFIG );
+	//e.proto.use_config( SKELETON_CONFIG );
 	//e.proto.use_config( GUARDIAN_CONFIG );
-	e.proto.use_config( DINO_CONFIG );
+	//e.proto.use_config( DINO_CONFIG );
 	//e.proto.use_config( JINX_CONFIG );
 	e.draw.add( e.proto.get_draw_item() );
 	App.ecs.add_com( e.id, e.proto );
@@ -85,13 +87,13 @@ function build( use_preview=true ){
 		e.draw.add( e.bview.get_draw_item() );
 	}
 
-	/*
+	
 	let eye = EyeBall();
 	//eye.node.set_scl( 0.2 ).set_pos( 0, 0.5, 0.27 );
-	eye.node.set_scl( 0.3 ).set_pos( 0, 0.195, 0.13 );
+	eye.node.rot_by( -90, "x" ).set_scl( 0.04 ).set_pos( 0, 0.095, 0.0 );
 	e.arm.attach_to_bone( "head", eye.node );
 	e.eye = eye;
-	*/
+	/**/
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	return e;
@@ -274,7 +276,29 @@ const MAXIMO_BONES = [
 	{ "name":"RightToeBase","len":0.1,"idx":51,"p_idx":50,"pos":[0,0.115,0],"rot":[0.4079799950122833,1.589943821045381e-7,-4.328248692786474e-8,0.9129908680915833] }
 ];
 
-const HUMAN_CONFIG = [
+const MUTANT_BONES	= [
+	{ "name":"hips",	"len":0.1, "idx":0,"p_idx":null,"pos":[0,1,0], "rot":[0,0,0,1] },
+	{ "name":"spine",	"len":0.1, "idx":1,"p_idx":0,"pos":[0,0.1,0], "rot":[0,0,0,1]},
+	{ "name":"spine1",	"len":0.1, "idx":2,"p_idx":1,"pos":[0,0.1,0], "rot":[0,0,0,1]},
+	{ "name":"spine2",	"len":0.17, "idx":3,"p_idx":2,"pos":[0,0.1,0], "rot":[0,0,0,1]},
+
+	{ "name":"neck",	"len":0.1, "idx":4, "p_idx":3,"pos":[0,0.15,0.06],"rot":[0.3826834261417389,0,0,0.923879504237964]},
+	{ "name":"head",	"len":0.1, "idx":5, "p_idx":4,"pos":[0,0.1,0],"rot":[0.3826834261417389,0,0,0.923879504237964]},
+	
+	{ "name":"shoulder.l","len":0.1,"idx":6,"p_idx":3, "pos":[0.07,0.15,0],"rot":[0.7071067690849304,0.7071067690849304,5.338507236274381e-8,-5.338507236274381e-8]},
+	{ "name":"shoulder.r","len":0.1,"idx":7,"p_idx":3, "pos":[-0.07,0.15,0],"rot":[1.0185958743136325e-8,-1.0185956966779486e-8,0.7071067690849304,0.7071067690849304]},
+];
+
+const MUTANT_CONFIG	= [
+	{"bone":"hips", "base_opt":[0,0,1], "scl_top":[0.1000,0.1000,0.1000], "scl_mid":[1,1,1], "scl_bot":[0.1000,0.1000,0.1000], "pos_top":[0,0.01,0], "pos_mid":[0,0,0], "pos_bot":[0,0.01,0], "base_pos":[0,0.01,0], "base_rot":[0,0,0.707106769084934,0.707106769084934]},
+	{"bone":"spine", "base_opt":[0,0,1], "scl_top":[0.07,0.05,0.07], "scl_mid":[1,1,1], "scl_bot":[0.08,0.04,0.08], "pos_top":[0,0.03,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.04,0], "base_rot":[0,0,0,1]},
+	{"bone":"spine1", "base_opt":[0,0,1], "scl_top":[0.08,0.08,0.08], "scl_mid":[1,1,1], "scl_bot":[0.07,0.04,0.07], "pos_top":[0,0.02,0], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.05,0], "base_rot":[0,0,0,1]},
+	{"bone":"spine2", "base_opt":[1,0.41,0.4000], "scl_top":[0.09,0.1000,0.12], "scl_mid":[0.09,0,0.13], "scl_bot":[0.09,0.1000,0.12], "pos_top":[0,0.08,0], "pos_mid":[0.03,0,0], "pos_bot":[0,-0.08,0], "base_pos":[0,0.065,0], "base_rot":[0,0,0.707106769084934,0.707106769084934]},
+	{"bone":"neck", "base_opt":[1,0,1], "scl_top":[0.04,0.04,0.03], "scl_mid":[0.05,0,0.04], "scl_bot":[0.06,0.06,0.05], "pos_top":[0,0.04,0], "pos_mid":[0,0,-0.01], "pos_bot":[0,-0.05,0], "base_pos":[0,0.05,0], "base_rot":[0,0,0,1]},
+	{"bone":"head", "base_opt":[0,0,1], "scl_top":[0.065,0.06,0.07], "scl_mid":[1,1,1], "scl_bot":[0.06,0.05,0.06], "pos_top":[0,0.03,-0.01], "pos_mid":[0,0,0], "pos_bot":[0,0.02,0], "base_pos":[0,0.04,0.02], "base_rot":[0.6427876353263855,0,0,0.766444378852844]}
+];
+
+const SKELETON_CONFIG = [
 	{"bone":"Hips", "base_opt":[1,0,1], "scl_top":[0.06,0.04,0.06], "scl_mid":[0.025,0,0.04], "scl_bot":[0.06,0.04,0.06], "pos_top":[0.03,0.09,0], "pos_mid":[0,0,0], "pos_bot":[0.03,-0.09,0], "base_pos":[0,0.01,-0.01], "base_rot":[0,0,0.707106769084934,0.707106769084934]},
 	{"bone":"LeftUpLeg", "base_opt":[1,0,0], "scl_top":[0.03,0.03,0.03], "scl_mid":[0.01,0,0.01], "scl_bot":[0.03,0.04,0.03], "pos_top":[0,0.39,0], "pos_mid":[0,0.19,0.02], "pos_bot":[0,-0.02,0], "base_pos":[0,0.02,0], "base_rot":[0,0,0,1]},
 	{"bone":"LeftLeg", "base_opt":[1,-0.18,0], "scl_top":[0.03,0.03,0.03], "scl_mid":[0.01,0,0.01], "scl_bot":[0.03,0.03,0.03], "pos_top":[0,0.38,-0.01], "pos_mid":[0,0.29,0.01], "pos_bot":[0,-0.02,0], "base_pos":[0,0.05,0], "base_rot":[0,0,0,1]},
