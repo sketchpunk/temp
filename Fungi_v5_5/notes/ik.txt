@@ -38,13 +38,62 @@ https://github.com/jsdf/BussIK-js
 https://github.com/mljs/levenberg-marquardt
 http://www.zallus.com/levenberg-marquardt-solver-and-maths-js/
 
+https://github.com/robertjoosten/maya-spline-ik
+
 https://github.com/jesse-y/Jacobian-Transpose-IK-Solver
 
 https://medium.com/unity3danimation/overview-of-jacobian-ik-a33939639ab2
 
+https://github.com/wayneyip/splinify  // Spline IK
 
 https://www.youtube.com/watch?v=g-uXLNz7-70&t=1114s different hind leg Bone Rigs
 
 Mirror Rigging
 https://twitter.com/wtelford/status/1311077921063407616?s=20
 https://github.com/wtelford/maya-python-plugins/blob/master/mirror_matrix.py
+
+
+
+https://www.babylonjs-playground.com/#4HTBYP#2   IK Pole
+
+
+
+
+http://www.jimovelmen.com/TutorialPics/IK_solver_descr.htm
+
+https://en.wikipedia.org/wiki/Non-uniform_rational_B-spline
+
+http://nurbscalculator.in/
+
+https://www.cheetah3d.com/forum/index.php?threads/5374/
+
+https://blenderartists.org/t/ghost-ik-virtual-inverse-kinematics-bone-physic-bone-ik-c/1101771
+
+https://github.com/jdrese/maya-spline-ik
+https://github.com/robertjoosten/maya-spline-ik
+
+
+spline ik idea. sample curve and save distance at each t. can then use  sample length to find the spots on the curve that's easiest to connect too.
+
+https://subscription.packtpub.com/book/business_and_other/9781800208087/13
+
+https://medium.com/rive/using-jelly-bones-constraints-and-ik-to-rig-a-bow-in-nima-e240a24ba436
+
+https://web.archive.org/web/20160928033927/http://morganloomis.com/2011/the-hind-leg/
+
+https://www.gdcvault.com/play/1020056/Math-for-Game-Programmers-Inverse
+
+https://github.com/TheComet/ik
+
+http://www.1728.org/quadtrap.htm
+https://www.mathepower.com/en/trapezoid.php
+https://www.analyzemath.com/Geometry_calculators/trapezoid_calculator.html
+
+https://twitter.com/morganloomis_/status/1307262851145318400?s=20
+
+
+Full Body IK
+https://github.com/hacoo/rtik
+https://github.com/Stereoarts/SAFullBodyIK
+https://medium.com/unity3danimation/create-your-own-ik-in-unity3d-989debd86770
+https://github.com/yamahigashi/fabric-fabrik-fullbody-ik

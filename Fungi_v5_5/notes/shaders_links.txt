@@ -18,4 +18,6 @@ water color shader
 https://cyangamedev.wordpress.com/2020/10/06/watercolour-shader-experiments/
 
 
+https://github.com/spite/sketch/tree/master/cross-hatch-vii
+https://spite.github.io/sketch/cross-hatch-vii/index.html
 https://spite.github.io/sketch/cross-hatch-v/index.html

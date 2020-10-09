@@ -1,3 +1,5 @@
+http://worrydream.com/LadderOfAbstraction/
+http://mrob.com/pub/comp/xmorphia/
 
 Libray to reduce Keyframes
 https://github.com/robertjoosten/maya-keyframe-reduction
