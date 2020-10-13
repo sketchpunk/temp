@@ -59,7 +59,7 @@ class Armature{
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		return { idx, e_id, node }; // Named Tuple
+		return { idx, e_id, node, len }; // Named Tuple
     }
     
 	ready(){
