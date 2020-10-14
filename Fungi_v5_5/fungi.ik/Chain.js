@@ -13,6 +13,7 @@ class Chain{
 	len				= 0;
 	len_sqr			= 0;
 	count			= 0;
+	leaf_bone		= null;
 	effector_dir	= Vec3.UP.clone();
 	pole_dir		= Vec3.FORWARD.clone();
 	// #endregion ////////////////////////////////////////////////
@@ -32,6 +33,14 @@ class Chain{
 		}
 
 		this.len_sqr = this.len * this.len;
+		return this;
+	}
+
+	add_bone( idx, len ){
+		this.bones.push( new Link( idx, len ) );
+		this.count++;
+		this.len		+= len;
+		this.len_sqr	= this.len * this.len;
 		return this;
 	}
 

@@ -1,4 +1,4 @@
-import App, { Vec3 } from "../fungi/App.js";
+import App, { Vec3, Quat } from "../fungi/App.js";
 
 class ArmFactory{
 	static chain( len_ary, name_ary=null ){
@@ -30,22 +30,53 @@ class ArmFactory{
 		return e;
 	}
 
-	static append_chain( arm, bname, len_ary ){
-		let b		= arm.get_bone( bname );
-
+	static append_chain( arm, p_name, b_name, len_ary, name_ary=null ){
+		let b		= arm.get_bone( p_name );
 		let pos 	= new Vec3();
 		let n 		= 0;
 		let i;
 
 		for( i of len_ary ){
 			pos.set( 0, b.len, 0 );							// Set Position away from Parent Bone origins
-			name	= "b" + n;								// Create Bone name
+			name	= b_name + n;								// Create Bone name
 			b		= arm.add_bone( name, i, b.idx, pos );	// Create Bone
 			n++;
+
+			if( name_ary ) name_ary.push( name );
 		}
 
 		return this;
 	}
+
+
+	static append_chain_json( arm, json, name_ary ){
+		//parent	: "hips",
+		//name	: "leg.l",
+		//lengths	: [ 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1 ],
+		//pos		: [ 0.5, 0, 0 ],
+
+		let b		= arm.get_bone( json.parent );
+		let pos 	= new Vec3();
+		let n 		= 0;
+		let i;
+
+		for( i of json.lengths ){
+			pos.set( 0, b.len, 0 );							// Set Position away from Parent Bone origins
+			name	= json.name + n;								// Create Bone name
+			b		= arm.add_bone( name, i, b.idx, pos );	// Create Bone
+			n++;
+
+			//------------------------------------
+			if( name_ary ) name_ary.push( name );
+			if( n == 1 ){
+				if( json.pos ) b.node.set_pos( json.pos );
+				if( json.rot ) b.node.set_rot( json.rot );
+			}
+		}
+
+		return this;
+	}
+
 
 	static initial_config( arm, config ){
 		let i;
@@ -54,17 +85,6 @@ class ArmFactory{
 		}
 		return this;
 	}
-
-	/*
-		load_config( config ){
-		// [ { "name":"Hips", "len":0.105, "idx":0,"p_idx":null,"pos":[0,1.039,0.020], "rot":[2.4268916831715615e-7,0,0,1]  }, ]
-		let i;
-		for( i of config ) this.add_bone( i.name, i.len, i.p_idx, i.pos, i.rot );
-		this.ready();
-		return this;
-	}
-
-	*/
 }
 
 export default ArmFactory;

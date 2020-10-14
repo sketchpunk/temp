@@ -91,6 +91,7 @@ https://www.analyzemath.com/Geometry_calculators/trapezoid_calculator.html
 
 https://twitter.com/morganloomis_/status/1307262851145318400?s=20
 
+https://twitter.com/broken_rig/status/1310562704286003202?s=20  Different Leg IK Rigs
 
 Full Body IK
 https://github.com/hacoo/rtik

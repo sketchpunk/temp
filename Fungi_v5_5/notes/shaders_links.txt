@@ -14,6 +14,13 @@ https://webglfundamentals.org/webgl/lessons/webgl-fog.html
 toon lighting
 https://www.patreon.com/posts/toon-lighting-41620461
 
+
+https://twitter.com/csims314/status/1315360156780199936?s=20 // Really nice simple toon
+https://github.com/chrisloop/URP2020ToonShader
+
+https://twitter.com/minionsart/status/1313108649590566912?s=20
+https://www.patreon.com/posts/stylized-glass-42255564
+
 water color shader
 https://cyangamedev.wordpress.com/2020/10/06/watercolour-shader-experiments/
 
@@ -21,3 +28,20 @@ https://cyangamedev.wordpress.com/2020/10/06/watercolour-shader-experiments/
 https://github.com/spite/sketch/tree/master/cross-hatch-vii
 https://spite.github.io/sketch/cross-hatch-vii/index.html
 https://spite.github.io/sketch/cross-hatch-v/index.html
+
+https://twitter.com/thespite/status/1315696471275175936?s=20
+https://spite.github.io/sketch/patch-i/index.html
+https://github.com/spite/sketch/tree/master/patch-i
+
+https://twitter.com/thespite/status/1312832891714449410?s=20
+https://spite.github.io/sketch/lines-ii/
+https://github.com/spite/sketch/tree/master/lines-ii
+
+
+http://madebyevan.com/shaders/curvature/  SCREEN SPACE LIGHTING
+
+
+https://twitter.com/Sam_Makes_Games/status/1309983076714385408?s=20  Awesome Textureing, Water, Lava, etc
+
+
+https://roystan.net/articles/outline-shader.html
