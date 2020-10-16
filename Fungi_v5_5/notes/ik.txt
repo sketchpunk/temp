@@ -98,3 +98,11 @@ https://github.com/hacoo/rtik
 https://github.com/Stereoarts/SAFullBodyIK
 https://medium.com/unity3danimation/create-your-own-ik-in-unity3d-989debd86770
 https://github.com/yamahigashi/fabric-fabrik-fullbody-ik
+
+
+
+
+https://github.com/dtecta/motion-toolkit/tree/master/jointlimits
+
+http://number-none.com/product/IK%20with%20Quaternion%20Joint%20Limits/
+http://www.root-motion.com/finalikdox/html/page12.html

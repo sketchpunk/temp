@@ -45,3 +45,5 @@ https://twitter.com/Sam_Makes_Games/status/1309983076714385408?s=20  Awesome Tex
 
 
 https://roystan.net/articles/outline-shader.html
+
+https://playdeck.net/blog/blended-normals-or-soft-flat-shading

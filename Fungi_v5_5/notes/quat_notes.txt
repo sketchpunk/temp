@@ -1,0 +1,78 @@
+Given your quaternion q = ( x, y, z, w ). 
+You decompose into q = q_xy * q_z where 
+q_z = ( 0, 0, z, w ) / sqrt( z^2 + w^2 ) and 
+q_xy = q * conjugate( q_z ). 
+
+Then you apply the limit and multiply by q_xy.
+
+https://github.com/dtecta/motion-toolkit/tree/master/jointlimits
+
+http://number-none.com/product/IK%20with%20Quaternion%20Joint%20Limits/
+http://www.root-motion.com/finalikdox/html/page12.html
+https://assetstore.unity.com/packages/tools/animation/final-ik-14290
+
+https://stackoverflow.com/questions/3684269/component-of-a-quaternion-rotation-around-an-axis
+/**
+   Decompose the rotation on to 2 parts.
+   1. Twist - rotation around the "direction" vector
+   2. Swing - rotation around axis that is perpendicular to "direction" vector
+   The rotation can be composed back by 
+   rotation = swing * twist
+
+   has singularity in case of swing_rotation close to 180 degrees rotation.
+   if the input quaternion is of non-unit length, the outputs are non-unit as well
+   otherwise, outputs are both unit
+*/
+inline void swing_twist_decomposition( const xxquaternion& rotation,
+                                       const vector3&      direction,
+                                       xxquaternion&       swing,
+                                       xxquaternion&       twist)
+{
+    vector3 ra( rotation.x, rotation.y, rotation.z ); // rotation axis
+    vector3 p = projection( ra, direction ); // return projection v1 on to v2  (parallel component)
+    twist.set( p.x, p.y, p.z, rotation.w );
+    twist.normalize();
+    swing = rotation * twist.conjugated();
+}
+
+
+http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition/
+
+CurrentOrientation = RotateTowards(CurrentOrientation, TargetOrientation, 3.14f * deltaTime );
+quat RotateTowards(quat q1, quat q2, float maxAngle){
+
+	if( maxAngle < 0.001f ){
+		// No rotation allowed. Prevent dividing by 0 later.
+		return q1;
+	}
+
+	float cosTheta = dot(q1, q2);
+
+	// q1 and q2 are already equal.
+	// Force q2 just to be sure
+	if(cosTheta > 0.9999f){
+		return q2;
+	}
+
+	// Avoid taking the long path around the sphere
+	if (cosTheta < 0){
+	    q1 = q1*-1.0f;
+	    cosTheta *= -1.0f;
+	}
+
+	float angle = acos(cosTheta);
+
+	// If there is only a 2&deg; difference, and we are allowed 5&deg;,
+	// then we arrived.
+	if (angle < maxAngle){
+		return q2;
+	}
+
+	float fT = maxAngle / angle;
+	angle = maxAngle;
+
+	quat res = (sin((1.0f - fT) * angle) * q1 + sin(fT * angle) * q2) / sin(angle);
+	res = normalize(res);
+	return res;
+
+}

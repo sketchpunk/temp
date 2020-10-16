@@ -168,3 +168,21 @@ void anglesToAxes(const Vector3 angles, Vector3& left, Vector3& up, Vector3& for
     forward.y = -sx*cy;
     forward.z = cx*cy;
 }
+
+
+
+// SINGLE AXIS CONSTRAINT IDEA
+HingeConstraint( axis, min, max ){
+	this.axis	= axis;
+	this.min 	= min;
+	this.max 	= max;
+	this.w_min	= Math.cos( min * 0.5 );
+	this.w_max	= Math.cos( max * 0.5 );
+
+	apply( q ){
+		if( q[3] > this.w_max ) return q.from_axis_angle( this.axis, this.max );
+		if( q[3] < this.w_min ) return q.from_axis_angle( this.axis, this.min );
+
+		// How to check for axis??
+	}
+}
