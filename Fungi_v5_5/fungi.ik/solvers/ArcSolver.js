@@ -1,6 +1,6 @@
 import Maths, { Vec3, Quat }	from "../../fungi/maths/Maths.js"; // Transform, , Quat, 
 import SwingTwistSolver	from "./SwingTwistSolver.js";
-//import App from "../../fungi/App.js";
+import App from "../../fungi/App.js";
 
 //##############################################################################
 // if Scale <= 0.3 or >= 1, Offset is zero
@@ -26,6 +26,8 @@ function get_offset( t ){
 class ArcSolver{
 
 	static apply_chain( ik, chain, tpose, pose, p_wt ){
+		const BEND_DIR = 1;
+
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// SWING & TWIST the Root Bone Toward the End Effector.
 		let q = new Quat();
@@ -49,25 +51,25 @@ class ArcSolver{
 		let arc_ang = Maths.PI_2 * (1 - len_scl) + get_offset( len_scl );
 		
 		// Divide the Arc Angle how many bones on the chain.
-		let arc_inc	= arc_ang / chain.count;
+		let arc_inc	= arc_ang / chain.count * BEND_DIR;
 
 		// Use IK X Axis and Negative Arc Angle Increment as our Rotation
 		// to apply to each bone/
-		let q_inc	= Quat.axis_angle( ik.axis.x, -arc_inc );
+		let q_inc	= Quat.axis_angle( ik.axis.x, arc_inc );
 		let ws		= p_wt.clone();
 		
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Handle the First Bone in the chain, Need to Store
-		// The local rotation to use later in the alignment
+		// The world rotation to use later in the alignment
 		let b, i;
 		b = tpose.bones[ chain.bones[ 0 ].idx ];
-		q	.pmul( q_inc )
-			.pmul_invert( ws.rot );				// Apply Inc to WS Root
+		q.pmul( q_inc );						// Apply Inc to WS Root
+
+		let root_ws = q.clone();				// Root WS Rot, Save for Alignment
+		q.pmul_invert( ws.rot );				// To Local Space
 
 		pose.set_local_rot( b.idx, q );			// Save to Pose
 		ws.add( q, b.local.pos, b.local.scl );	// Set as new Parent Transform
-
-		let root_ls = q.clone();				// Root LS Rot, Save for Alignment
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		for( i=1; i < chain.count; i++ ){
@@ -91,8 +93,8 @@ class ArcSolver{
 		end_dir.from_sub( end_pos, ik.start_pos ).norm();	// Direction from Start to end of arc
 
 		q	.from_unit_vecs( end_dir, ik.axis.z )			// Rotation For Alignment
-			.pmul_invert( p_wt.rot )						// Move it to Root's Local Space
-			.mul( root_ls );								// Apply to LS Root Rotation
+			.mul( root_ws )									// Apply to WS Root Rotation
+			.pmul_invert( p_wt.rot );						// Move it to Root's Local Space
 
 		pose.set_local_rot( chain.bones[ 0 ].idx, q );		// Save to Pose
 	}

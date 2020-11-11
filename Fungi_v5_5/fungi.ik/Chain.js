@@ -1,4 +1,7 @@
 import Vec3 from "../fungi/maths/Vec3.js";
+import Quat from "../fungi/maths/Quat.js";
+
+//=========================================================================
 
 class Link{
 	constructor( idx, len ){
@@ -7,11 +10,15 @@ class Link{
 	}
 }
 
+//=========================================================================
+
 class Chain{
 	// #region MAIN
+	leaf_idx		= null;					// Some Chains have a Leaf bone thats shouldn't be a link
 	bones			= new Array();
 	len				= 0;
 	len_sqr			= 0;
+	len_max			= 0;
 	count			= 0;
 	leaf_bone		= null;
 	effector_dir	= Vec3.UP.clone();
@@ -21,6 +28,8 @@ class Chain{
 	// #region GETTERS / SETTERS
 	first(){ return this.bones[ 0 ].idx; }
 	last(){ return this.bones[ this.count-1 ].idx; }
+
+	get_len(){ return this.len_max || this.len; }
 
 	from_armature( arm, name_ary ){
 		let i, b;
@@ -62,87 +71,54 @@ class Chain{
 	// #endregion ////////////////////////////////////////////////
 }
 
-class Chainx{
+//=========================================================================
+
+class ChainEnds{
 	// #region MAIN
-	bones		= new Array();	// Index to a bone in an armature / pose
-	len			= 0;			// Chain Length
-	len_sqr		= 0;			// Chain Length Squared, Cached for Checks without SQRT
-	len_limit	= 0;			// Limit the Length of the chain.
-	bone_cnt	= 0;			// How many Bones in the chain
-	end_idx 	= null;			// Joint that Marks the true end of the chain
-	
-	// Alternate Direction and IK Stuff
-	alt_dir		= [ { fwd:Vec3.FORWARD.clone(), up:Vec3.UP.clone() } ];
-	ik_solver 	= null;
+	bones				= new Array();
+	len					= 0;
+	len_sqr				= 0;
+	count				= 0;
+	dirs				= new Array();
 	// #endregion ////////////////////////////////////////////////
 
 	// #region GETTERS / SETTERS
-	from_arm( arm, name_ary ){
-		/*
-		for( i of name_ary ){
-			b = this.tpose.get_bone( i );
-			ch.add_bone( b.idx, b.len );
-		}
-		*/
-	}
+	first(){ return this.bones[ 0 ].idx; }
+	last(){ return this.bones[ this.count-1 ].idx; }
 
 	add_bone( idx, len ){
-		let o = { idx, len };
-
-		this.bones.push( o );
-		this.bone_cnt++;
+		this.bones.push( new Link( idx, len ) );
+		this.count++;
 		this.len		+= len;
 		this.len_sqr	= this.len * this.len;
+
+		this.dirs.push({
+			effector	: Vec3.UP.clone(),
+			pole		: Vec3.FORWARD.clone(),
+		});
 		return this;
 	}
 
-	// Get Skeleton Index of Bones
-	first(){ return this.bones[0].idx; }
-	last(){ return this.bones[ this.bone_cnt-1 ].idx; }
-	idx( i ){ return this.bones[ i ].idx; }
+	set_directions( fwd, up, pose=null ){
+		if( pose ){
+			let dir, b, q = new Quat();
 
-	set_alt_dir( fwd, up, tpose=null, to_all=false ){
-		let i;
+			for( let i=0; i < this.bones.length; i++ ){
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				b = pose.bones[ this.bones[ i ].idx ];
+				q.from_invert( b.world.rot ); // Invert World Space Rotation
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Create Extra Elements for alts for all bones
-		if( to_all && this.alt_dir.length != this.bone_cnt ){
-			for( i=this.alt_dir.length; i < this.bone_cnt; i++ ){
-				this.alt_dir.push( { fwd:Vec3.FORWARD.clone(), up:Vec3.UP.clone() } );
-			}
-		}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		if( tpose ){
-			let b, q = new Quat();
-			
-			if( to_all ){	// Compute for All Bones
-				for( i in this.bones ){
-					b = tpose.bones[ this.bones[ i ].idx ],
-					q.from_invert( b.world.rot );	// Invert World Space Rotation 
-					
-					this.alt_dir[ i ].fwd.from_quat( q, fwd );	
-					this.alt_dir[ i ].up.from_quat( q, up );
-				}
-			}else{	// Compute for First Bone
-				b = tpose.bones[ this.bones[ 0 ].idx ],
-				q.from_invert( b.world.rot );	// Invert World Space Rotation 
-
+				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				// Use invert to get direction that will Recreate the real direction
-				this.alt_dir[ 0 ].fwd.from_quat( q, fwd );	
-				this.alt_dir[ 0 ].up.from_quat( q, up );
+				dir = this.dirs[ i ];
+				dir.effector.from_quat( q, fwd );
+				dir.pole.from_quat( q, up );
 			}
-
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		}else{
-			if( to_all ){ // Save to All Bones
-				for( i of this.alt_dir ){
-					i.fwd.copy( fwd );
-					i.up.copy( fwd );
-				}
-			}else{	// Save to First Bone
-				this.alt_dir[ 0 ].fwd.copy( fwd );
-				this.alt_dir[ 0 ].up.copy( up );
+			let dir;
+			for( i of this.dirs ){
+				dir.effector.copy( fwd );
+				dir.pole.copy( up );
 			}
 		}
 		return this;
@@ -150,4 +126,6 @@ class Chainx{
 	// #endregion ////////////////////////////////////////////////
 }
 
+//=========================================================================
 export default Chain;
+export { ChainEnds };

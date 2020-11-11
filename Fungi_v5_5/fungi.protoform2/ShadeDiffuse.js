@@ -275,7 +275,7 @@ const vert_src = `#version 300 es
 		pos		+= a_ins_pos;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		vec4 wpos = model.view_matrix * vec4( pos, 1.0 ); //
+		vec4 wpos = vec4( pos, 1.0 ); //model.view_matrix * 
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		frag_wpos		= wpos.xyz;

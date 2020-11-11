@@ -37,6 +37,15 @@ class Target{
 		this.axis.from_dir( dir, up_dir ); // Target Axis
 		return this;
 	}
+
+	from_dir( dir, up_dir ){
+		this.axis.from_dir( dir, up_dir );
+		this.len		= 1;
+		this.len_sqr	= 1;
+		this.start_pos.set( 0, 0, 0 );
+		this.end_pos.set( 0, 0, 0 );
+		return this;
+	}
 	// #endregion ///////////////////////////////////////////////////////////
 
 	debug( d, scl=1.0 ){ 

@@ -110,6 +110,8 @@ class Pose{
 		if( idx == null ){ console.error( "Armature.get_node - Bone name not found : %s", bname ); return null; }
 		return this.arm.nodes[ idx ];
 	}
+
+	set_offset( tr ){ this.root_offset.copy( tr ); return this; }
 	// #endregion /////////////////////////////////////////////////////////
 
 	// #region COMPUTE

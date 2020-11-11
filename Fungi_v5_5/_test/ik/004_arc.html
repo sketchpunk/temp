@@ -98,6 +98,7 @@ function on_pnt_move( idx, pos ){
 }
 
 function apply_ik(){
+	App.Debug.reset();
 	let pt = new Transform();
 	let ct = new Transform();
 	$pose.get_parent_world( $chain.first(), pt, ct, $entity.node.local );

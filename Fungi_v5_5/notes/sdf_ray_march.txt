@@ -4,3 +4,6 @@ http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
 https://threejs.org/examples/webgl2_volume_cloud.html
 https://threejs.org/examples/?q=volume#webgl2_volume_cloud
 https://threejs.org/examples/?q=volume#webgl2_volume_perlin
+
+
+https://www.alanzucconi.com/2016/07/01/signed-distance-functions/  VERY AWESOME, CREATE SNAIL WITH SDF

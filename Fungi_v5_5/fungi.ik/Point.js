@@ -1,3 +1,6 @@
+import Vec3	from "../fungi/maths/Vec3.js";
+import Quat	from "../fungi/maths/Quat.js";
+
 class Point{
 	// #region MAIN
 	idx				= null;
@@ -10,6 +13,8 @@ class Point{
 		this.len = len;
 	}
 	// #endregion ////////////////////////////////////////////////
+
+	first(){ return this.idx; }
 
 	set_directions( fwd, up, pose=null ){
 		if( pose ){

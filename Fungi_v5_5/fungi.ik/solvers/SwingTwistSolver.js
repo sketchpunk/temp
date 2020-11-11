@@ -1,13 +1,14 @@
-import { Quat, Vec3 } from "../../fungi/maths/Maths.js"; // Transform,
+import { Quat, Vec3, Transform } from "../../fungi/maths/Maths.js"; // Transform,
 // import App from "../../fungi/App.js";
 
 class SwingTwistSolver{
-
+	
+	// #region REGULAR CHAIN IMPLEMENTATION
 	static apply_chain( ik, chain, tpose, pose, p_wt ){
 		let rot = new Quat();
 		this.get_world_rot( ik, chain, tpose, p_wt, rot );		// Compute IK
 		rot.pmul_invert( p_wt.rot );							// To Local Space
-		pose.set_local_rot( chain.bones[0].idx, rot );			// Save to Pose
+		pose.set_local_rot( chain.first(), rot );			// Save to Pose
 	}
 
 	static get_world_rot( ik, chain, tpose, p_wt, rot ){
@@ -28,6 +29,94 @@ class SwingTwistSolver{
 		q.from_unit_vecs( dir, ik.axis.y );			// Rotation to IK Pole Direction
 		rot.pmul( q );								// Apply to Bone WS Rot + Swing
 	}
+	// #endregion /////////////////////////////////////////////////////////////////////
+
+	// #region OTHER IMPLEMENTATION
+	static apply_bone( ik, b_info, tpose, pose, p_wt ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let rot 	= Quat.mul( p_wt.rot, tpose.get_local_rot( b_info.idx ) ),
+			dir		= new Vec3(),
+			q 		= new Quat();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Swing
+		dir.from_quat( rot, b_info.effector_dir );		// Get WS Effector Direction of the Chain
+		q.from_unit_vecs( dir, ik.axis.z );				// Rotation TO IK Effector Direction
+		rot.pmul( q );									// Apply to Bone WS Rot
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Twist
+		dir.from_quat( rot, b_info.pole_dir );			// Get WS Pole Direction of Chain
+		q.from_unit_vecs( dir, ik.axis.y );				// Rotation to IK Pole Direction
+		rot.pmul( q );									// Apply to Bone WS Rot + Swing
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Finish
+		rot.pmul_invert( p_wt.rot );					// To Local Space
+		pose.set_local_rot( b_info.idx, rot );			// Save to Pose		
+	}
+
+	static apply_chain_ends( chain, tpose, pose, p_wt, start_effe, start_pole, end_effe, end_pole ){
+		// For the spline, we have the start and end IK directions. Since spines can have various
+		// amount of bones, the simplest solution is to lerp from start to finish. The first
+		// spine bone is important to control offsets from the hips, and the final one usually
+		// controls the chest which dictates where the arms and head are going to be located.
+		// Anything between is how the spine would kind of react.
+
+		// Since we are building up the Skeleton, We look at the pose object to know where the Hips
+		// currently exist in World Space.
+
+		let c_rot 	= new Quat();
+		let rot 	= new Quat();
+		let q 		= new Quat();
+		let end_idx = chain.count-1;
+
+		let ik_effe = new Vec3();
+		let ik_pole = new Vec3();
+
+		let dir	= new Vec3();
+
+		let i, t,
+			effe_dir,
+			pole_dir,
+			bind, 
+			b_idx;
+
+		for( i=0; i <= end_idx; i++ ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Prepare for the Iteration
+			b_idx	= chain.bones[ i ].idx;
+			bind	= tpose.bones[ b_idx ];		// Bind Values of the Bone
+			t		= ( i / end_idx ); // ** 2	// The Lerp Time, be 0 on first bone, 1 at final bone, Can use curves to distribute the lerp differently
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Lerp our Target IK Directions for this bone
+			ik_effe.from_lerp( start_effe,	end_effe, t );
+			ik_pole.from_lerp( start_pole,	end_pole, t );
+
+			// Get refernce to bones Alt Directions
+			effe_dir	= chain.dirs[ i ].effector;
+			pole_dir	= chain.dirs[ i ].pole;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			c_rot.from_mul( p_wt.rot, bind.local.rot );	// Get bone in WS that has yet to have any rotation applied
+			dir.from_quat( c_rot, effe_dir );			// What is the WS Effector Direction
+			rot
+				.from_unit_vecs( dir, ik_effe )			// Create our Swing Rotation
+				.mul( c_rot );							// Then Apply to our Bone, so its now swong to match the ik effector dir.
+
+			//-----------------------
+			dir.from_quat( rot, pole_dir );				// Get our Current Pole Direction from Our Effector Rotation
+			q.from_unit_vecs( dir, ik_pole  );			// Create our twist rotation
+			rot.pmul( q );								// Apply Twist so now it matches our IK Pole direction
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			rot.pmul_invert( p_wt.rot );				// To Local Space
+			pose.set_local_rot( b_idx, rot );			// Save back to pose
+			if( t != 1 ) p_wt.add( rot, bind.local.pos, bind.local.scl ); // Set WS Transform for Next Bone.
+		}
+	}
+	// #endregion /////////////////////////////////////////////////////////////////////
 
 }
 
