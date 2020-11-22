@@ -99,7 +99,9 @@ https://github.com/Stereoarts/SAFullBodyIK
 https://medium.com/unity3danimation/create-your-own-ik-in-unity3d-989debd86770
 https://github.com/yamahigashi/fabric-fabrik-fullbody-ik
 
-
+https://www.youtube.com/watch?v=mrXs8xLAr3k&feature=youtu.be // Quarduped IK
+https://www.youtube.com/watch?v=jfYZymr1svs
+https://www.youtube.com/watch?v=GTOs4XwzcME
 
 
 https://github.com/dtecta/motion-toolkit/tree/master/jointlimits

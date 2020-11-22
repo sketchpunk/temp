@@ -37,6 +37,11 @@ class Debug{
 		this.set_depth_test( false );
 	}
 
+	static set_priority( v ){ 
+		ln_draw.priority = v; 
+		pnt_draw.priority = v; 
+		return this;
+	}
 	static set_pnt_size( s ){ pnt_size = s; return this; }
 	static set_depth_test( s ){
 		pnt_draw.items[0].material.options.depthTest	= s;

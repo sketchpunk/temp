@@ -14,7 +14,10 @@ class Draw{
 
 	add( mesh, mat, mode=0 ){
 		if( mesh instanceof DrawItem)	this.items.push( mesh );
-		else 							this.items.push( new DrawItem( mesh, mat, mode ) );
+		else{
+			if( typeof mat == "string" ) mat = App.shader.new_material( mat );
+			this.items.push( new DrawItem( mesh, mat, mode ) );
+		}
 		return this;
 	}
 

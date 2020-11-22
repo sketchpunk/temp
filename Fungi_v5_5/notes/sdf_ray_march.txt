@@ -1,5 +1,9 @@
 http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
 
+http://www.pouet.net/topic.php?which=7931&page=1&x=3&y=14  SDF ToolBox
+
+https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
+
 
 https://threejs.org/examples/webgl2_volume_cloud.html
 https://threejs.org/examples/?q=volume#webgl2_volume_cloud
@@ -7,3 +11,23 @@ https://threejs.org/examples/?q=volume#webgl2_volume_perlin
 
 
 https://www.alanzucconi.com/2016/07/01/signed-distance-functions/  VERY AWESOME, CREATE SNAIL WITH SDF
+
+
+// Circle Noise, pretty cool looking.
+https://codepen.io/kyllaz/pen/jdbMOE
+
+
+https://www.shadertoy.com/view/wd3SzS // MetaBalls
+
+
+https://0xef.wordpress.com/2013/01/19/ray-marching-signed-distance-fields/ Perlin Noise Terrian
+
+https://www.shadertoy.com/view/XllGW4 // Big SDF Tutorial, lots of little things, include twisting, etc
+
+http://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html?m=1
+http://blog.hvidtfeldts.net/index.php/2011/06/distance-estimated-3d-fractals-part-i/
+
+https://www.iquilezles.org/www/articles/sdfbounding/sdfbounding.htm character tutorial of sort
+
+
+https://www.shadertoy.com/view/tdGSDd BUNCH OF 2D Shapes

@@ -84,6 +84,18 @@ class Vec2 extends Float32Array{
 		this[1] = ( z_plane )? v[2] : v[1];
 		return this;
 	}
+
+	from_max( a, b ){
+		this[ 0 ] = Math.max( a[ 0 ], b[ 0 ] );
+		this[ 1 ] = Math.max( a[ 1 ], b[ 1 ] );
+		return this
+	}
+
+	from_min( a, b ){
+		this[ 0 ] = Math.min( a[ 0 ], b[ 0 ] );
+		this[ 1 ] = Math.min( a[ 1 ], b[ 1 ] );
+		return this
+	}
 	// #endregion ///////////////////////////////////////////////////////////////////////
 
 	// #region MATH OPERATIONS
@@ -91,6 +103,7 @@ class Vec2 extends Float32Array{
 	add_raw( x, y ){ this[0] += x; this[1] += y; return this; }
 
 	sub( v ){ this[0] -= v[0]; this[1] -= v[1]; return this; }
+	sub_raw( x, y ){ this[0] -= x; this[1] -= y; return this; }
 	mul( v ){ this[0] *= [0]; this[1] *= [1]; return this; }
 
 	div( v ){

@@ -3,7 +3,8 @@ import App from "../App.js";
 class Renderer{
 	constructor(){
 		// Render Objects
-		this.frame_buffer 		= null;
+		this.handler			= null;
+		//this.frame_buffer 	= null;
 		this.material			= null;
 		this.shader				= null;
 		this.vao				= null;
@@ -41,7 +42,8 @@ class Renderer{
 
 	// #region FRAMES
 	begin_frame(){
-		App.gl.clear();
+		if( this.handler )	this.handler.begin_frame( this );
+		else				App.gl.clear();
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Reset State checks incase things where used before a frame render.
@@ -63,6 +65,8 @@ class Renderer{
 	}
 
 	end_frame(){
+		if( this.handler )	this.handler.end_frame( this );
+
 		App.gl.ctx.bindVertexArray( null );
 	}
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
@@ -119,6 +123,17 @@ class Renderer{
 		App.ubo.update( this.ubo_model );
 		return this;
 	}
+
+	load_mesh( m ){
+		if( this.vao !== m.vao ){
+			this.vao = m.vao;
+			App.gl.ctx.bindVertexArray( m.vao.id );
+		}
+
+		return this;
+	}
+
+
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
 
 	// #region DRAWING
@@ -142,6 +157,18 @@ class Renderer{
 				App.gl.ctx.drawElementsInstanced( di.draw_mode, m.element_cnt, m.element_type, 0, m.instance_cnt ); 
 			else
 				App.gl.ctx.drawArraysInstanced( di.draw_mode, 0, m.element_cnt, m.instance_cnt );
+		}
+
+		return this;
+	}
+
+	draw_mesh( m, draw_mode ){
+		if( !m.instanced ){
+			if( m.element_type )	App.gl.ctx.drawElements( draw_mode, m.element_cnt, m.element_type, 0 );
+			else					App.gl.ctx.drawArrays( draw_mode, 0, m.element_cnt );
+		}else{
+			if( m.element_type )	App.gl.ctx.drawElementsInstanced( draw_mode, m.element_cnt, m.element_type, 0, m.instance_cnt ); 
+			else					App.gl.ctx.drawArraysInstanced( draw_mode, 0, m.element_cnt, m.instance_cnt );
 		}
 
 		return this;

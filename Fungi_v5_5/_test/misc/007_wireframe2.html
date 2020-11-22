@@ -1,0 +1,52 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+import Wireframe    from "../../fungi/shaders/Wireframe.js";
+import UVSphere     from "../../fungi/geo/UVSphere.js";
+import Cube         from "../../fungi/geo/Cube.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( 45, 20, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Wireframe.init();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //let e = UVSphere( "sphere", "LowPoly" );
+	let geo			= UVSphere.geo();
+	let mesh		= App.mesh.from_data( "sphere", geo.vert, 3, geo.idx, geo.norm, geo.uv );
+	let e			= App.mesh_entity( "Sphere", mesh, "LowPoly", App.mesh.TRI_STRIP );
+	
+	let wf_verts	= Wireframe.from_tri_strip( geo.idx, geo.vert );
+	let wf_mesh		= App.mesh.from_data( "wf_sphere", wf_verts, 4 );
+	let mat         = App.shader.new_material( "Wireframe", { line_color:"#ffffffff", face_color:"#00000000", line_scale:1.0 } );
+    e.draw.add( wf_mesh, mat, App.mesh.TRI );
+    
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let c = Cube( "cube", "LowPoly" );
+	c.node.set_pos( -2, 0, 0 );
+    
+    geo = Cube.geo();
+	Wireframe.append_tri( c.draw, geo.idx, geo.vert );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+//#####################################################
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

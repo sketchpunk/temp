@@ -170,6 +170,14 @@ class Entities{
 		return e.id;
 	}
 
+	get( name ){
+		let i;
+		for( i of this.instances ){
+			if( i.name == name ) return i;
+		}
+		return null;
+	}
+
 	retire( id ){
 		let e = this.instances[ id ];
 		e.name		= "unknown";
@@ -238,6 +246,14 @@ class Systems{
 			}
 		}
 		return this;
+	}
+
+	get( sName ){
+		let i;
+		for( i=0; i < this.items.length; i++ ){
+			if( this.items[ i ].name == sName ) return this.items[ i ];
+		}
+		return null;
 	}
 
 	set_active( sName, state = true ){

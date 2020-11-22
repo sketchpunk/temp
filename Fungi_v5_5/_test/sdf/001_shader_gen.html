@@ -1,0 +1,162 @@
+<!DOCTYPE html><script type="module">
+import App, {} from "../../fungi/App.js";
+
+// https://www.alanzucconi.com/2016/07/01/volumetric-rendering/
+// https://github.com/smkplus/UnityRayMarching
+// https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+// https://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+
+//#####################################################
+App
+	.init( true )
+    .load_shaders( "LowPoly.js" )
+    .load_pkg( { name:"fungi.sdf" } )
+	.use_debug()
+	.set_camera( 45, 20, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+// https://www.shadertoy.com/view/4tcGDr // Make this shape
+
+async function init(){
+
+    App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+    App.Debug.set_depth_test( true ).set_priority( 0 );
+
+    let map_func = `
+    float map_func( vec3 p ){
+        float a = sdf_sphere( p, vec3(-.6,.5,.0), .5 );
+        float b = sdf_sphere( p, vec3(.4,.5,.0), .8 ); 
+        
+        float scl = 6.0;
+        float displacement = sin( scl * p.x) * sin( scl * p.y) * sin( scl * p.z ) * 0.15;
+        b += displacement;
+
+        
+
+        return sdf_smin( a, b, 32.0 );
+    }`;
+
+    App.sdf.shader.new( "Sdf", map_func );
+    
+    let mat = App.shader.new_material( "Sdf" );
+    let e   = App.sdf.volume( "vb", mat );
+    
+    e.node.set_scl( 2.0 );
+    App.sdf.volume.debug( e.node.local );
+
+    
+    
+    //console.log( e.node );
+
+    //App.Debug.box( vb.bound_min, vb.bound_max, "yellow", true );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//let geo = VolumeCube.geo();
+	//init_shader();
+	//volume_debug( geo );
+	//volume_entity( geo );
+
+	//App.Debug.set_depth_test( true ).set_priority( 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+
+
+//#####################################################
+
+let gUbo;
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"base_color", type:"rgba", value:"#DB00FFFF" },
+		//{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model", "Light" ) )
+	.set_blend( true );
+}
+
+// https://alexanderameye.github.io/simple-toon
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+    mat4 proj_view; 
+    mat4 camera_matrix;
+    vec3 camera_pos;
+    float delta_time;
+    vec2 screen_size;
+    float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+    vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_lpos 		= a_pos.xyz;
+    frag_wpos		= wpos.xyz;
+    frag_cam_pos	= global.camera_pos;
+    //frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+uniform Light{ 
+    vec3 pos;
+    vec3 color;
+} light;
+
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+//-------------------------
+
+void main( void ){
+
+
+}`;
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

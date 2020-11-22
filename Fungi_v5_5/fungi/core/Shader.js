@@ -168,6 +168,7 @@ class ShaderFactory{
 					//	if( !tmp )	console.error( "Shader.load_uniforms: Texture not found", itm.data );
 					//	else		itm.data = tmp;
 					//}
+					//console.log( itm.data.id );
 					gl.ctx.activeTexture(	gl.ctx.TEXTURE0 + tex_slot );
 					gl.ctx.bindTexture(		gl.ctx.TEXTURE_2D, itm.data.id );
 					gl.ctx.uniform1i(		itm.loc, tex_slot );

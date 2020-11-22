@@ -79,6 +79,11 @@ let App = {
 			App.render_loop.start();
 		}
 	},
+
+	find_entity_com : ( e_name, com_name )=>{
+		let e = App.ecs.entities.get( e_name );
+		return ( e )? App.ecs.get_com( e.id, com_name ) : null;
+	},
 };
 
 //################################################################################################
@@ -170,6 +175,7 @@ class Launcher{
 
 		e.node.rot_by( -90, "x" ).set_scl( 40 );
 		e.draw.priority = 900;
+		//e.draw.priority = 0;
 		return true;
 	}
 	// #endregion ///////////////////////////////////////////////////////////////

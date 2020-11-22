@@ -1,0 +1,206 @@
+<!DOCTYPE html><script type="module">
+import Canvas		from "../../fungi.test/Canvas.js";
+import Vec2			from "../../fungi/maths/Vec2.js";
+import RenderLoop	from "../../fungi/lib/RenderLoop.js";
+
+let $, $loop;
+
+window.addEventListener( "load", ()=>{
+	$		= new Canvas( "pg_canvas" ).center();
+	$loop	= new RenderLoop( Demo.draw.bind( Demo ) );
+
+	$loop.start( 1 );
+	//Demo.draw( 0, 0.2 );
+});
+
+
+// #region SDF 2D SHAPES
+
+class Circle{
+	radius	= 0;			// Radius of Circle
+	pos		= new Vec2();	// Center Position of Circle
+	_delta	= new Vec2();	// PreAllocated Math Object
+	constructor( x, y, r ){
+		this.pos.set( x, y );
+		this.radius = r;
+	}
+	
+	draw( cv ){ cv.circle_vec( this.pos, this.radius, 2 ); }
+
+	distance( p ){ return Math.abs( this._delta.from_sub( this.pos, p ).len() ) - this.radius; }
+}
+
+class Rect{
+	min = new Vec2();	// Top Left Corner Bounds
+	max = new Vec2();	// Bottom Right Corner Bounds
+	a	= new Vec2();	// Precached objects for math
+	b	= new Vec2();
+	d	= new Vec2();
+
+	constructor( x, y, hsize){
+		this.min.set( x - hsize, y - hsize );
+		this.max.set( x + hsize, y + hsize );
+	}
+
+	draw( cv ){ cv.rect_pnts( this.min, this.max, 2 ); return this; }
+	distance( p ){
+		/*
+		https://stackoverflow.com/questions/30545052/calculate-signed-distance-between-point-and-rectangle
+		float sdAxisAlignedRect(vec2 uv, vec2 tl, vec2 br){
+			vec2 d = max(tl-uv, uv-br);
+			return length( max( vec2(0.0), d) ) + min(0.0, max(d.x, d.y));
+		} 
+		*/
+		this.a.from_sub( this.min, p );
+		this.b.from_sub( p, this.max );
+		this.d.from_max( this.a, this.b );
+
+		let num = Math.min( 0, Math.max( this.d.x, this.d.y ) );
+		let len = this.d.from_max( this.d, [ 0, 0 ] ).len();
+		return len + num;
+	}
+}
+
+class Segment{
+	p0	= new Vec2();	// Start Position
+	p1	= new Vec2();	// End Position
+	dir	= new Vec2();	// Direction of Segment
+
+	constructor( x0,y0, x1,y1 ){
+		this.p0.set( x0, y0 );
+		this.p1.set( x1, y1 );
+		this.dir.from_sub( this.p1, this.p0 );
+	}
+	
+	draw( cv ){ cv.line_vec( this.p0, this.p1 ); }
+
+	distance( p ){
+		let v = this.dir; //Vec2.sub( this.p1, this.p0 );
+		let w = Vec2.sub( p, this.p0 );
+
+		let c1 = Vec2.dot( w, v );
+		if( c1 <= 0 ) return w.len();
+		
+		let c2 = Vec2.dot( v, v );
+		if( c2 <= c1 ) return Vec2.len( p, this.p1 );
+
+		let b	= c1 / c2;
+		let Pb	= Vec2.scale( v, b ).add( this.p0 );
+
+		return Vec2.len( p, Pb );
+		
+		/*
+		float distLine(vec2 point,vec2 start,vec2 end){
+			vec2 v = end-start;
+			vec2 w=point-start;
+
+			float c1 = dot(w,v);
+			if ( c1 <= 0.0 ) return length(point-start);
+
+			float c2 = dot(v,v);
+			if ( c2 <= c1 ) return length(point-end);
+
+			float b = c1 / c2;
+			vec2 Pb = start + b * v;
+			return length(point-Pb);
+		}
+		*/
+	}
+}
+
+// #endregion ///////////////////////////////////////////////////////////
+
+
+class Demo{
+	// #region VARIABLES
+	static range	= 500;			// Total Length of the Ray
+	static tries	= 20;			// How many possible steps to take while marching.
+	static min_dist = 4;			// Minimal Distance to count as hit.
+	static speed	= 0.4;			// How Fast to rotate the ray
+	static ray		= new Vec2();	// Direction of Ray
+	static pos		= new Vec2();	// Currnet Position on Ray
+
+	static shapes	= [				// List of SDF Shapes to Test in World Space.
+		new Circle( 170, -60, 30 ),
+		new Rect( -220, -130, 40 ),
+		new Segment( -60,160, 100,220 )
+	];
+	// #endregion //////////////////////////////////////////////
+
+	// #region DRAWING
+	static draw( dt, ss ){
+		let clock	= ss * this.speed;
+		this.ray.x	= Math.cos( clock );
+		this.ray.y	= Math.sin( clock );
+		this.pos.set( 0, 0 );
+		
+		$.clear();
+		this.draw_shapes();
+		this.draw_ray();
+		this.ray_march();
+	}
+
+	static draw_shapes( ss ){
+		$.stroke( "cyan" );
+		
+		let i;
+		for( i of this.shapes ) i.draw( $ );
+	}
+
+	static draw_ray(){
+		$.both( "lime" );
+		$.line( 0, 0, this.range * this.ray.x, this.range * this.ray.y );
+		$.circle( 0, 0, 10, 2 );
+	}
+	// #endregion //////////////////////////////////////////////
+
+	// #region MAIN ALGORITHM
+	static ray_march(){
+		let min_len		= Infinity,	// Shortest distance between Ray position and all shapes
+			distance	= 0,		// Total distance traveled from ray origin
+			t, i, len;
+
+		$.stroke( "#606060" ).fill( "yellow" ).dash();
+		for( t=0; t < this.tries; t++ ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Have we marched to far?
+			if( distance >= this.range ) break;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// At the current position on the ray, which shape
+			// are we closests too.
+			min_len = Infinity;
+			for( i of this.shapes ){
+				len = i.distance( this.pos );
+				if( len < min_len ) min_len = len;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Did we finally hit a shape?
+			distance += min_len;
+			if( min_len <= this.min_dist ){
+				$.fill( "white" ).circle_vec( this.pos, 6, 1 );
+				break;
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// No hit, draw the tested position and the range
+			// sphere to denote the closets object that was found.
+			$.circle_vec( this.pos, 4, 1 );
+			$.circle_vec( this.pos, min_len, 2 );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Skip position to the new position that is free
+			// from hitting anything.
+			this.pos.from_scale( this.ray, distance );
+		}
+
+		$.undash();
+	}
+	// #endregion //////////////////////////////////////////////
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; background-color:#363636; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

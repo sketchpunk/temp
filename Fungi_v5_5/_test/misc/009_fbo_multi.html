@@ -1,0 +1,267 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+import FboFactory from "../../fungi/core/Fbo.js";
+
+import FacedCube from "../../fungi/geo/FacedCube.js";
+
+//import Wireframe    from "../../fungi/shaders/Wireframe.js";
+//import Grid         from "../../fungi/geo/Grid.js";
+
+//import Noise        from "../../lib/Noise.js";
+
+//#####################################################
+App
+	.init( true )
+	//.load_shaders( "LowPoly.js" )
+	//.use_debug()
+	.set_camera( 30, 20, 15, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let e = FacedCube();
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    App.fbo = new FboFactory( App.gl );
+
+    let fboMulti = App.fbo.new( {
+        width   : App.gl.width,
+        height  : App.gl.height,
+        buffers : [
+            { attach:0, name:"color", type:"color", mode:"multi" },
+            { type:"depth", mode:"multi" },
+        ]
+    } );
+
+    let fboBlit = App.fbo.new( {
+        width   : App.gl.width,
+        height  : App.gl.height,
+        buffers : [
+            { attach:0, name:"color", type:"color", mode:"tex" },
+            { type:"depth", mode:"tex" },
+        ]
+    } );
+
+    init_shader();
+    let render = App.ecs.systems.get("DrawSys").cls.render;
+
+    render.handler = new FboRenderer( fboMulti, fboBlit );
+    
+    
+
+    console.log( render );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+class FboRenderer{
+    constructor( main, blit ){
+        this.main   = main;
+        this.blit   = blit;
+        this.quad   = PostQuad();
+        this.mat    = App.shader.new_material( "PostRender" );
+
+        this.mat.set( "buf_color", this.blit.buffers.color );
+        this.mat.set( "buf_depth", this.blit.buffers.depth );
+
+        console.log( this.mat );
+
+        console.log( this.quad );
+
+        //init_shader()
+    }
+
+    begin_frame( r ){
+        //App.gl.clear();
+        App.fbo.bind( this.main ).clear( this.main );
+    }
+
+    end_frame( r ){
+        //console.log( "CUSTOM END" );
+
+        //if(fboColorTex != null) FBO.blit(fboRender,fboColorTex);
+        App.fbo.unbind();
+        App.fbo.blit( this.main, this.blit );
+
+        r
+            .load_material( this.mat )
+            .load_mesh( this.quad )
+            .draw_mesh( this.quad, App.mesh.TRI );
+    }
+}
+
+//#####################################################
+
+function PostQuad(){
+    let buf_idx     = App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
+    let buf_vert    = App.buffer.new_array( new Float32Array(
+        [ -1,  1, 0,	0,0,
+          -1, -1, 0,	0,1,
+           1, -1, 0,	1,1, 
+           1,  1, 0,	1,0 ]
+    ));
+
+    let mesh = App.mesh.from_buffer_config([
+        { name: "indices", buffer: buf_idx },
+        { name: "quad", buffer: buf_vert, interleaved: [
+            { attrib_loc:0, size:3, stride_len:5 * 4, offset:0 * 4 },
+            { attrib_loc:2, size:2, stride_len:5 * 4, offset:3 * 4 },
+        ]}
+    ], "PostQuad", 6 );
+    
+    return mesh;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//gUbo = App.ubo.new( "Light", 10, [
+	//	{ name:"pos",	type:"vec3" },
+	//	{ name:"color",	type:"vec3" },
+	//]);
+
+	//gUbo
+	//	.set( "pos", [2,5,0] )
+	//	.set( "color", Colour.rgb_array( "#ffffff" ) );
+	//App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "PostRender", VERT_SRC, FRAG_SRC, [
+		{ name:"buf_color", type:"sampler2D", value:"null" },
+		{ name:"buf_depth", type:"sampler2D", value:"null" },
+		//{ name:"face_color", type:"rgba", value:"#70707099" },
+		
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global" ) ); //.set_blend( true ).set_alpha_coverage( true ).set_cullface( false );
+}
+
+const VERT_SRC = `#version 300 es
+    layout(location=0) in vec3 a_pos;
+    layout(location=2) in vec2 a_uv;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	out vec2 frag_uv;
+
+	void main(void){
+        frag_uv     = a_uv;
+        gl_Position = vec4( a_pos, 1.0 );
+	}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+	out vec4 out_color;
+	in vec2 frag_uv;
+
+	//------------------------
+
+    uniform sampler2D buf_color;
+	uniform sampler2D buf_depth;	
+
+	//-------------------------
+
+	float linearize_depth( float z ){ // Good to visualize Depth
+        float n = 0.1;      // camera z near
+        float f = 100.0;    // camera z far
+        return (2.0 * n) / (f + n - z * (f - n));	
+    }
+    
+    float map_depth_to_proj( float depth ){ // But better for Depth Testing
+        float PROJ_NEAR = 0.1;  //depth is should be between 0:1
+	    float PROJ_FAR  = 100.0;
+		float ndc       = 2.0 * depth - 1.0; // Normalized Device Space -1:1
+		return -(2.0 * PROJ_FAR * PROJ_NEAR) / (ndc * (PROJ_FAR - PROJ_NEAR) - PROJ_FAR - PROJ_NEAR);
+	}
+
+	void main( void ){
+        ivec2 fCoord    = ivec2( gl_FragCoord.xy );     // Get the Int of the current Screen pixel X,Y
+        ivec2 texSize   = textureSize( buf_color, 0 );	// Get Size of Texture
+        
+        vec4 color      = texelFetch( buf_color, fCoord , 0 );
+        float depth     = texelFetch( buf_depth, fCoord , 0 ).x;
+        
+        depth = linearize_depth( depth );
+        //depth = map_depth_to_proj( depth );
+          
+        //out_color = color * 1.8;
+        out_color.rgb = vec3( depth );
+
+
+        // Post Effect of Pixalating 
+        float pixelSize = 7.0;
+		float xMod		= mod( float( fCoord.x ), pixelSize );
+		float yMod		= mod( float( fCoord.y ), pixelSize );
+
+		if( xMod == 0.0 || yMod == 0.0 ) out_color = vec4(0.0,0.0,0.0,0.3);
+		else{
+			ivec2 pix = fCoord;
+			pix.x -= int( xMod );
+			pix.y -= int( yMod );
+			out_color = texelFetch( buf_color, pix , 0);
+        }
+        
+	}`;
+
+    /*
+    const float PROJ_NEAR = 0.1;
+	const float PROJ_FAR = 100.0;
+
+	float LinearizeDepth(float z){ 
+	  float n = 1.0; // camera z near
+	  float f = 100.0; // camera z far
+	  return (2.0 * n) / (f + n - z * (f - n));	
+	}
+
+	void main(void){
+		ivec2 fCoord = ivec2(gl_FragCoord.xy);		//Get the Int of the current Screen pixel X,Y
+		ivec2 texSize = textureSize(bufColor,0);	//Get Size of Texture
+
+		vec4 color = texelFetch(bufColor, fCoord , 0);
+		float depth = texelFetch(bufDepth, fCoord , 0).x;
+		depth = LinearizeDepth(depth);
+
+		//outColor = color;
+		//outColor = vec4(depth,depth,depth,1.0);
+
+		//if(depth < 0.4) outColor = vec4(1.0,0.0,0.0,1.0);
+
+		//Better Math for depth testing
+		//float ndc = 2.0 * texelFetch(bufDepth, fCoord, 0).r - 1.0;  //Normalized Device Space -1:1
+        //float depth2 = -(2.0 * PROJ_FAR * PROJ_NEAR) / (ndc * (PROJ_FAR - PROJ_NEAR) - PROJ_FAR - PROJ_NEAR);
+        //if(depth2 < 4.0 ) outColor = vec4(1.0,0.0,0.0,1.0);    
+		
+
+		//Pixel Grid
+		float pixelSize = 7.0;
+		float xMod		= mod(float(fCoord.x),pixelSize);
+		float yMod		= mod(float(fCoord.y),pixelSize);
+
+		if( xMod == 0.0 || yMod == 0.0 ) outColor = vec4(0.0,0.0,0.0,0.3);
+		else{
+			ivec2 pix = fCoord;
+			pix.x -= int( xMod );
+			pix.y -= int( yMod );
+			outColor = texelFetch(bufColor, pix , 0);
+		}
+		
+    }
+    */
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
