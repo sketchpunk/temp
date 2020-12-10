@@ -3,7 +3,7 @@ class Vec3 extends Float32Array{
 	constructor(ini){
 		super(3);
 
-		if(ini instanceof Vec3 || (ini && ini.length == 3)){
+		if( ini instanceof Vec3 || ini instanceof Float32Array || (ini && ini.length == 3)){
 			this[0] = ini[0]; this[1] = ini[1]; this[2] = ini[2];
 		}else if(arguments.length == 3){
 			this[0] = arguments[0]; this[1] = arguments[1]; this[2] = arguments[2];

@@ -37,7 +37,7 @@ class Node{
 	//----------------------------------
 
 	set_rot_axis( axis, ang ){ this.local.rot.from_axis_angle( axis, ang ); this.updated = true; return this; }
-	set_rot_look( dir, up=null ){ Quat.lookRotation( dir, up || Vec3.UP, this.local.rot ); this.updated = true; return this; }
+	set_rot_look( dir, up=null ){ this.local.rot.from_look( dir, up || Vec3.UP ); this.updated = true; return this; }
 	set_rot( q ){ this.local.rot.copy( q ); this.updated = true; return this; }
 	rot_by( deg, axis="y" ){ this.local.rot.rot_deg( deg, axis ); this.updated = true; return this; }
 

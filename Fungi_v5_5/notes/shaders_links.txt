@@ -40,6 +40,7 @@ https://github.com/spite/sketch/tree/master/lines-ii
 
 http://madebyevan.com/shaders/curvature/  SCREEN SPACE LIGHTING
 
+https://github.com/spite/sketch // AMAZING SCREEN SPACE TEXTURING
 
 https://twitter.com/Sam_Makes_Games/status/1309983076714385408?s=20  Awesome Textureing, Water, Lava, etc
 

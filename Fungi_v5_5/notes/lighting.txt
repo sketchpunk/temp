@@ -1,0 +1,2 @@
+https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
+https://github.com/spite/spherical-environment-mapping

@@ -339,6 +339,31 @@ class Maths{
 
 	
 
+	// Parabola that passes between 0 and 1
+	// p = 4 * x * ( 1 - x );
+	// p1 = pow( p, 2.0 * p ); // Curves the start and end
+	// p1 = pow( p, 4.0 * p ); // Curves more start and end
+	// p1 = pow( p, 8.0 * p ); // Curves more start and end
+	// p1 = pow( p, 12.0 * p ); // By this point creates a very sharp parabola
+ 
+	// S Curve
+	// x * x * ( 3 - 2 * x )
+	// if replace x with a color vec3, its like adding contrast, brighters and darkers.
+	// if too much clamp color before curve, might fix over exposure.
+
+	// Ripples from hieght
+	// gt = fract( time );
+	// len = length( a.xy-b.xy )
+	// h -= 0.1 *  // Amptitude
+	//		sin( gt * 10 + len * 3.0 ) * // Create a Wave
+	//		exp( -1 * l * l ) * // Exponetial of Distance
+	//		exp( -1 * gt ) * // Exponetial of Time, more time the weaker the wave
+	//		smoothstep( 0.0, 0.1, gt ); // Smooth out time near the beginning.
+
+
+	// Camera Shake
+	// pos += 0.05 * sin( time * 0.5 * vec3( 0, 2, 4 ) ); // Use Sin wave at different starting direction values.
+
 	//Maths.EPSILON_SQR	= Maths.EPSILON * Maths.EPSILON;
 
 

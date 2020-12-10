@@ -3,17 +3,25 @@ import App, { Vec3 } from "../fungi/App.js";
 let MESH;
 
 function VolumeCube( name = "VolumeCube", mat ){
+	if( !MESH ){
+		let geo = VolumeCube.geo();
+		MESH    = App.mesh.from_data( "VolCube", geo.vert, 3, geo.idx );
+	
+		set_bound( geo );	
+	}
+
     return App.mesh_entity( name, MESH, mat, App.mesh.TRI );
 }
 
-VolumeCube.init = function(){
-    let geo = VolumeCube.geo();
-    MESH    = App.mesh.from_data( "VolCube", geo.vert, 3, geo.idx );
-
-    set_bound( geo );
-
-    console.log( "[ SDF Volume Mesh Loaded ]" );
+VolumeCube.from_origin = function( name = "VolumeCube", mat ){
+	if( !MESH ){
+		let geo = VolumeCube.geo( 1, 1, 1, true );
+		MESH    = App.mesh.from_data( "VolCube", geo.vert, 3, geo.idx );
+		set_bound( geo );	
+	}
+	return App.mesh_entity( name, MESH, mat, App.mesh.TRI );
 }
+
 
 VolumeCube.debug = function( tran ){
     let min = Vec3.mul( VolumeCube.bound_min, tran.scl ).add( tran.pos );
@@ -21,8 +29,10 @@ VolumeCube.debug = function( tran ){
     App.Debug.box( min, max, "yellow", true );
 }
 
-VolumeCube.geo = function( ww=1, hh=1, dd=1 ){
+VolumeCube.geo = function( ww=1, hh=1, dd=1, center_origin=false ){
 	let x = 0, y = 0.501, z = 0;
+	if( center_origin ) y = 0;
+
 	let w = ww*0.5, h = hh*0.5, d = dd*0.5;
 	let x0 = x-w, 
 		x1 = x+w, 

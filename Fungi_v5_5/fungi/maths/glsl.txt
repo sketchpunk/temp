@@ -1,0 +1,36 @@
+mat4 viewMatrix(vec3 eye, vec3 center, vec3 up) {  //Look At
+	vec3 f = normalize(center - eye);
+	vec3 s = normalize(cross(f, up));
+	vec3 u = cross(s, f);
+	return mat4(
+		vec4(s, 0.0),
+		vec4(u, 0.0),
+		vec4(-f, 0.0),
+		vec4(0.0, 0.0, 0.0, 1)
+	);
+}
+
+mat4 rotateY(float theta) {
+    float c = cos(theta);
+    float s = sin(theta);
+
+    return mat4(
+        vec4(c, 0, s, 0),
+        vec4(0, 1, 0, 0),
+        vec4(-s, 0, c, 0),
+        vec4(0, 0, 0, 1)
+    );
+}
+
+//http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+float intersectSDF(float distA, float distB) {
+    return max(distA, distB);
+}
+
+float unionSDF(float distA, float distB) {
+    return min(distA, distB);
+}
+
+float differenceSDF(float distA, float distB) {
+    return max(distA, -distB);
+}

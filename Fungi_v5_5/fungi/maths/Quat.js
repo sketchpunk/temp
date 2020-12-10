@@ -222,6 +222,28 @@ class Quat extends Float32Array{
 			this.from_look( v, up || Vec3.UP );
 			return this;
 		}
+
+		to_polar(){
+			let fwd		= Vec3.transform_quat( Vec3.FORWARD, this );	// Forward Direction
+			let flat	= new Vec3( fwd.x, 0, fwd.z ).norm();			// Flatten Direction
+			let lon     = Vec3.angle( Vec3.FORWARD, flat );				// Lon Angle in Rads
+			let lat     = Vec3.angle( flat, fwd );						// Lat Angle in Rads
+			
+			let d_side	= Vec3.dot( fwd, Vec3.RIGHT );					// Right Hemi Test
+			let d_up	= Vec3.dot( fwd, Vec3.UP );						// Top Hemi Test
+
+			// Negitive Check
+			if( d_side < 0 )	lon = -lon;
+			if( d_up < 0 )		lat = -lat;
+
+			// If Point UP / Down, Can get Lon easily
+			// TODO, to fix this issue may need to sample 
+			// RIGHT Direction to compute LON.
+			if( d_up > 0.999 || d_up <= -0.999 ) lon = 0;
+			
+			const to_deg = 180 / Math.PI;
+			return [ lon * to_deg, lat * to_deg ];
+		}
 		
 		from_look( vDir, vUp ){
 			// Ported to JS from C# example at https://pastebin.com/ubATCxJY

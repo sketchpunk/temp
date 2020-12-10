@@ -8,8 +8,6 @@ import SDFShader	from "./SDFShader.js";
 //#####################################################################
 
 export default async( App, config )=>{
-	VolumeCube.init();
-
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	App.sdf = {
 		volume	: VolumeCube,

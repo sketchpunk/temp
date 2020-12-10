@@ -15,8 +15,8 @@ class Camera{
 	ratio		= 0;
 
 	// #region SETTERS / GETTERS
-	set_perspective( fov=45, near=0.1, far=100.0 ){
-		let ratio	= App.gl.width / App.gl.height;
+	set_perspective( fov=45, near=0.1, far=100.0, w=null, h=null ){
+		let ratio	= ( !w || !h )? App.gl.width / App.gl.height : w / h;
 		fov			= fov * Math.PI / 180;
 		
 		this.proj.from_perspective( fov, ratio, near, far );

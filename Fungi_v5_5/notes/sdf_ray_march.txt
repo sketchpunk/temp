@@ -31,3 +31,6 @@ https://www.iquilezles.org/www/articles/sdfbounding/sdfbounding.htm character tu
 
 
 https://www.shadertoy.com/view/tdGSDd BUNCH OF 2D Shapes
+
+
+https://github.com/spite/sdf-physics

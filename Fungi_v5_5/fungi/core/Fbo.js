@@ -9,7 +9,10 @@ class Fbo{
 }
 
 class FboFactory{
-    constructor( gl ){ this.gl = gl; }
+    constructor( gl ){
+		this.gl = gl;
+		gl.ctx.getExtension( 'EXT_color_buffer_float' ); // Need it to use Float Frame Buffers
+	}
 
     new( config ){
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -103,7 +106,7 @@ class FboFactory{
 
         switch( ci.mode ){
             case "multi":   buf = this.mk_color_multisample( fbo.width, fbo.height, ci.attach ); break;
-            case "tex":     buf = this.mk_color_tex( fbo.width, fbo.height, ci.attach ); break;
+            case "tex":     buf = this.mk_color_tex( fbo.width, fbo.height, ci.attach, ci.pixel ); break;
         }
 
         if( buf ) fbo.buffers[ ci.name ] = buf;
@@ -120,15 +123,36 @@ class FboFactory{
 		return buf;
     }
     
-    mk_color_tex( w, h, cAttachNum ){
+    mk_color_tex( w, h, cAttachNum, pixel="byte" ){
 		//Up to 16 texture attachments 0 to 15
         let ctx = this.gl.ctx;
 		let buf = { id: ctx.createTexture(), attach: ctx.COLOR_ATTACHMENT0 + cAttachNum, type:"tex" };
-		
+
 		ctx.bindTexture( ctx.TEXTURE_2D, buf.id );
-		ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA, w, h, 0, ctx.RGBA, ctx.UNSIGNED_BYTE, null );
-		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR ); //NEAREST
-		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR ); //NEAREST
+
+		switch( pixel ){
+			case "byte"	: ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA, w, h, 0, ctx.RGBA, ctx.UNSIGNED_BYTE, null ); break;
+			case "f16"	: ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA16F, w, h, 0, ctx.RGBA, ctx.FLOAT, null ); break;
+			case "f32"	: ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA32F, w, h, 0, ctx.RGBA, ctx.FLOAT, null ); console.log( "ep"); break;
+		}
+
+		//
+		//ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR ); //NEAREST
+		//ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR ); //NEAREST
+
+		//ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA16F, w, h, 0, ctx.RGBA, ctx.FLOAT, null );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.NEAREST );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE );
+
+		//ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA16F, w, h, 0, ctx.RGBA, ctx.FLOAT, null);
+		//ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA32F, w, h, 0, ctx.RGBA, ctx.FLOAT, null );
+		//ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST);
+		//ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.NEAREST);
+		//ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE);
+		//ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE);
+
 
 		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR);
 		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR);
@@ -253,10 +277,17 @@ class FBOx{
 		var buf = { texture:ctx.createTexture() };
 		
 		ctx.bindTexture(ctx.TEXTURE_2D, buf.texture);
-		ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA, this.fbo.frameWidth, this.fbo.frameHeight, 0, ctx.RGBA, ctx.UNSIGNED_BYTE, null);
-		ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR); //NEAREST
-		ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR); //NEAREST
+		//ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA, this.fbo.frameWidth, this.fbo.frameHeight, 0, ctx.RGBA, ctx.UNSIGNED_BYTE, null);
+		//ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA16F, this.fbo.frameWidth, this.fbo.frameHeight, 0, ctx.RGBA, ctx.FLOAT, null);
+		ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA32F, this.fbo.frameWidth, this.fbo.frameHeight, 0, ctx.RGBA, ctx.FLOAT, null);
+		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR); //NEAREST
+		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR); //NEAREST
 
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST);
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.NEAREST);
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE);
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE);
+		
 		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.LINEAR);
 		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.LINEAR);
 		//ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE);	//Stretch image to X position
