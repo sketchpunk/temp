@@ -11,33 +11,40 @@ App
 	.init( true )
 	.load_shaders( "LowPoly.js" )
 	.use_debug()
-	.set_camera( 30, 20, 15, 0, 0.5, 0 )
+	.set_camera( 30, 20, 3, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
 //#####################################################
 
 async function init(){
+    let TRI = "strip";  // tri, strip
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //geo( w=1, h=1, x_cells=2, y_cells=2, center_offset=false, tri="tri" )
 
-    let geo = Grid.geo( 10, 10, 40, 40, true );
+    let geo = Grid.geo( 20, 20, 40, 40, true, TRI );
     let scl = 0.2;
     let ymax = 2;
     let n;
+
+    
     //simplex2:simplex2, simplex3:simplex3, perlin2:perlin2
     for( let i=0; i < geo.vert.length; i+=3 ){
         n = Noise.simplex2( geo.vert[ i+0] * scl, geo.vert[ i+2] * scl );
         geo.vert[ i+1 ] = (n * 0.5 + 0.5 ) * ymax;
     }
+    /**/
 
     //Grid.debug_verts( geo.vert );
-
+    let d_mode  = ( TRI == "tri" )? App.mesh.TRI : App.mesh.TRI_STRIP;
     let mesh    = App.mesh.from_data( "Grid", geo.vert, 3, geo.idx );
     let mat     = App.shader.new_material( "LowPoly", null, { cullFace:false } );
-    let e       = App.mesh_entity( "Grid", mesh, mat, App.mesh.TRI );
+    let e       = App.mesh_entity( "Grid", mesh, mat, d_mode );
+    e.node.set_pos( 0, 0.1, 0 );
 
-
-    Wireframe.append_tri( e.draw, geo.idx, geo.vert, { line_color:"#ffffff55", face_color:"#00000000" } );
+    if( TRI == "tri" )  Wireframe.append_tri( e.draw, geo.idx, geo.vert, { line_color:"#ffffffff", face_color:"#00000000" } );
+    else                Wireframe.append_tri_strip( e.draw, geo.idx, geo.vert, { line_color:"#ffffffff", face_color:"#00000000" } );
+    
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	return true;

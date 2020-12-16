@@ -197,10 +197,10 @@ precision mediump float;
         depth = linearize_depth( depth );
         //depth = map_depth_to_proj( depth );
           
-        //out_color = color * 1.8;
-        out_color.rgb = vec3( depth );
+        out_color = color * 1.8;
+        //out_color.rgb = vec3( depth );
 
-
+        /*
         // Post Effect of Pixalating 
         float pixelSize = 7.0;
 		float xMod		= mod( float( fCoord.x ), pixelSize );
@@ -213,7 +213,7 @@ precision mediump float;
 			pix.y -= int( yMod );
 			out_color = texelFetch( buf_color, pix , 0);
         }
-        
+        */
 	}`;
 
     /*

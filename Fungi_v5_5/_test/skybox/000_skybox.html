@@ -1,0 +1,340 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+// https://medium.com/@jannik_boysen/procedural-skybox-shader-137f6b0cb77c
+// https://codinhood.com/post/create-skybox-with-threejs
+// https://www.patreon.com/posts/making-stylized-27402644
+// https://medium.com/@jannik_boysen/procedural-skybox-shader-137f6b0cb77c
+// https://halisavakis.com/my-take-on-shaders-sky-shader/
+
+//#####################################################
+App
+	.init( true )
+	.load_shaders( "LowPoly.js" )
+	//.use_debug()
+	.set_camera( 45, 20, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	//App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+	//App.Debug.set_depth_test( true ).set_priority( 0 );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	init_shader();
+	let e = SkyBox( "sb", "LowPoly" );
+	e.node.set_scl( 2 );
+
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+//#####################################################
+
+function SkyBox( name = "SkyBox", mat ){
+	let g = SkyBox.geo();
+	let m = App.mesh.from_data( "SkyBox", g.vert, 3, g.idx ); //, g.norm, g.uv
+	//let draw = new Draw().add( MESH, mat, App.mesh.TRI );
+    //return App.ecs.new_entity( name, "Node", draw );
+    return App.mesh_entity( name, m, mat, App.mesh.TRI );
+}
+
+SkyBox.geo = function( ww=1, hh=1, dd=1 ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let width = ww, height = hh, depth = dd, x = 0, y = 0, z = 0;
+	let w = width*0.5, h = height*0.5, d = depth*0.5;
+	let x0 = x-w, x1 = x+w, y0 = y-h, y1 = y+h, z0 = z-d, z1 = z+d;
+
+	//Starting bottom left corner, then working counter clockwise to create the front face.
+	//Backface is the first face but in reverse (3,2,1,0)
+	//keep each quad face built the same way to make index and uv easier to assign
+	let vert = [
+		x0, y1, z1, 	//0 Front
+		x0, y0, z1, 	//1
+		x1, y0, z1, 	//2
+		x1, y1, z1, 	//3 
+
+		x1, y1, z0, 	//4 Back
+		x1, y0, z0, 	//5
+		x0, y0, z0, 	//6
+		x0, y1, z0, 	//7 
+
+		x1, y1, z1, 	//3 Right
+		x1, y0, z1, 	//2 
+		x1, y0, z0, 	//5
+		x1, y1, z0, 	//4
+
+		x0, y0, z1, 	//1 Bottom
+		x0, y0, z0, 	//6
+		x1, y0, z0, 	//5
+		x1, y0, z1, 	//2
+
+		x0, y1, z0, 	//7 Left
+		x0, y0, z0, 	//6
+		x0, y0, z1, 	//1
+		x0, y1, z1, 	//0
+
+		x0, y1, z0, 	//7 Top
+		x0, y1, z1, 	//0
+		x1, y1, z1, 	//3
+		x1, y1, z0, 	//4
+	];
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//Build the index of each quad [0,1,2, 2,3,0]
+	let i, idx = [];
+	for( i=0; i < vert.length / 3; i+=2) idx.push(i, i+1, (Math.floor(i/4)*4)+((i+2)%4));
+
+	// Reverse Triangle Winding
+	/**/
+	let t;
+	for( let i=0; i < idx.length; i+=3 ){
+		t			= idx[ i ];
+		idx[ i ]	= idx[ i+2 ];
+		idx[ i+2 ]	= t;
+	}
+	
+	/*
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//Build UV data for each vertex
+	let uv = [];
+	for( i=0; i < 6; i++) uv.push( 0,0,	0,1, 1,1,  1,0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//Build Normal data for each vertex
+	
+	let norm = [
+		 0, 0, 1,	 0, 0, 1,	 0, 0, 1,	 0, 0, 1,		//Front
+		 0, 0,-1,	 0, 0,-1,	 0, 0,-1,	 0, 0,-1,		//Back
+		-1, 0, 0,	-1, 0, 0,	-1, 0, 0,	-1, 0, 0,		//Left
+		 0,-1, 0,	 0,-1, 0,	 0,-1, 0,	 0,-1, 0,		//Bottom
+		 1, 0, 0,	 1, 0, 0,	 1, 0, 0,	 1, 0, 0,		//Right
+		 0, 1, 0,	 0, 1, 0,	 0, 1, 0,	 0, 1, 0		//Top
+	];
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	return { vert:new Float32Array(vert), idx:new Uint16Array(idx) }; // , uv:new Float32Array(uv), norm:new Float32Array(norm) 
+}
+
+
+
+//#####################################################
+
+let gUbo;
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"base_color", type:"rgba", value:"#DB00FFFF" },
+		//{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model" ) );
+	//.set_blend( true );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+	vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_lpos 		= a_pos.xyz;
+	frag_wpos		= wpos.xyz;
+	frag_cam_pos	= global.camera_pos;
+	//frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+	
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+void main( void ){
+	out_color = vec4( 1.0, 0.0, .0, 1.0 );	
+}`;
+
+/*Shader "Skybox/SkyShader"
+{
+    Properties
+    {
+        [Header(Sky color)]
+        [HDR]_ColorTop("Color top", Color) = (1,1,1,1)
+        [HDR]_ColorMiddle("Color middle", Color) = (1,1,1,1)
+        [HDR]_ColorBottom("Color bottom", Color) = (1,1,1,1)
+ 
+        _MiddleSmoothness("Middle smoothness", Range(0.0,1.0)) = 1
+        _MiddleOffset("Middle offset", float) = 0
+        _TopSmoothness("Top smoothness", Range(0.0, 1.0)) = 1
+        _TopOffset("Top offset", float) = 0
+ 
+        [Header(Sun)]
+        _SunSize("Sun size", Range(0.0, 1.0)) = 0.1
+        [HDR]_SunColor("Sun color", Color) = (1,1,1,1)
+ 
+        [Header(Moon)]
+        _MoonSize("Moon size", Range(0,1)) = 0
+        [HDR]_MoonColor("Moon color", Color) = (1,1,1,1)
+        _MoonPhase("Moon phase", Range(0,1)) = 0
+         
+        [Header(Stars)]
+        _Stars("Stars", 2D) = "black" {}
+        _StarsIntensity("Stars intensity", float) = 0
+ 
+        [Header(Clouds)]
+        [HDR]_CloudsColor("Clouds color", Color) = (1,1,1,1)
+        _CloudsTexture("Clouds texture", 2D) = "black" {}
+        _CloudsThreshold("Clouds threshold", Range(0.0, 1.0)) = 0
+        _CloudsSmoothness("Clouds smoothness", Range(0.0, 1.0)) = 0.1
+        _SunCloudIntensity("Sun behind clouds intensity", Range(0, 1)) = 0
+        _PanningSpeedX("Panning speed X", float) = 0
+        _PanningSpeedY("Panning speed Y", float) = 0
+ 
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Background" "Queue"="Background" "PreviewType"="Quad"}
+        LOD 100
+ 
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+ 
+            #include "UnityCG.cginc"
+ 
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float3 uv : TEXCOORD0;
+            };
+ 
+            struct v2f
+            {
+                float3 uv : TEXCOORD0;
+                float4 vertex : SV_POSITION;
+            };
+ 
+            fixed4 _ColorBottom;
+            fixed4 _ColorMiddle;
+            fixed4 _ColorTop;
+ 
+            float _MiddleSmoothness;
+            float _MiddleOffset;
+            float _TopSmoothness;
+            float _TopOffset;
+ 
+            fixed4 _SunColor;
+            float _SunSize;
+ 
+            float _MoonSize;
+            fixed4 _MoonColor;
+            float _MoonPhase;
+ 
+            sampler2D _Stars;
+            float4 _Stars_ST;
+            float _StarsIntensity;
+ 
+            sampler2D _CloudsTexture;
+            float4 _CloudsTexture_ST;
+            fixed4 _CloudsColor;
+            float _CloudsSmoothness;
+            float _CloudsThreshold;
+            float _SunCloudIntensity;
+            float _PanningSpeedX;
+            float _PanningSpeedY;
+ 
+            v2f vert (appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = v.uv;
+                return o;
+            }
+ 
+ 
+            fixed4 frag (v2f i) : SV_Target
+            {
+                float2 uv = float2(atan2(i.uv.x,i.uv.z) / UNITY_TWO_PI, asin(i.uv.y) / UNITY_HALF_PI);
+                float middleThreshold = smoothstep(0.0, 0.5 - (1.0 - _MiddleSmoothness) / 2.0, i.uv.y - _MiddleOffset);
+                float topThreshold = smoothstep(0.5, 1.0 - (1.0 - _TopSmoothness) / 2.0 , i.uv.y - _TopOffset);
+                fixed4 col = lerp(_ColorBottom, _ColorMiddle, middleThreshold);
+                col = lerp(col, _ColorTop, topThreshold);
+ 
+                float cloudsThreshold = i.uv.y - _CloudsThreshold;
+                float cloudsTex = tex2D(_CloudsTexture, uv * _CloudsTexture_ST.xy + _CloudsTexture_ST.zw + float2(_PanningSpeedX, _PanningSpeedY) * _Time.y);
+                float clouds = smoothstep(cloudsThreshold, cloudsThreshold + _CloudsSmoothness, cloudsTex);
+ 
+                float stars = tex2D(_Stars, (i.uv.xz / i.uv.y) * _Stars_ST.xy) * _StarsIntensity * saturate(-_WorldSpaceLightPos0.y) * (1.0 - clouds);
+                stars *= smoothstep(0.5, 1.0 , i.uv.y);
+ 
+                float sunSDF = distance(i.uv.xyz, _WorldSpaceLightPos0);
+                float sun = max(clouds * _CloudsColor.a, smoothstep(0, _SunSize, sunSDF));
+ 
+                float moonSDF = distance(i.uv.xyz, -_WorldSpaceLightPos0);
+                float moonPhaseSDF = distance(i.uv.xyz - float3(0.0, 0.0, 0.1) * _MoonPhase, -_WorldSpaceLightPos0);
+                float moon = step(moonSDF, _MoonSize);
+                moon -= step(moonPhaseSDF, _MoonSize);
+                moon = saturate(moon * -_WorldSpaceLightPos0.y - clouds);
+                 
+                float cloudShading = smoothstep(cloudsThreshold, cloudsThreshold + _CloudsSmoothness + 0.1, cloudsTex) -
+                                     smoothstep(cloudsThreshold + _CloudsSmoothness + 0.1, cloudsThreshold + _CloudsSmoothness + 0.4, cloudsTex);
+                clouds = lerp(clouds, cloudShading, 0.5) * middleThreshold * _CloudsColor.a;
+ 
+                float silverLining = (smoothstep(cloudsThreshold, cloudsThreshold + _CloudsSmoothness, cloudsTex)
+                                    - smoothstep(cloudsThreshold + 0.02, cloudsThreshold + _CloudsSmoothness + 0.02, cloudsTex));
+                silverLining *=  smoothstep(_SunSize * 3.0, 0.0, sunSDF) * _CloudsColor.a;
+ 
+ 
+                col = lerp(_SunColor, col, sun);
+                fixed4 cloudsCol = lerp(_CloudsColor, _CloudsColor + _SunColor, cloudShading * smoothstep(0.3, 0.0, sunSDF) * _SunCloudIntensity);
+                col = lerp(col, cloudsCol, clouds);
+                col += silverLining * _SunColor;
+                col = lerp(col, _MoonColor, moon);
+                col += stars;
+ 
+                return col;
+            }
+            ENDCG
+        }
+    }
+}
+*/
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

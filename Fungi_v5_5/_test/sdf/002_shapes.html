@@ -1,0 +1,76 @@
+<!DOCTYPE html><script type="module">
+import App, {} from "../../fungi/App.js";
+
+// https://www.alanzucconi.com/2016/07/01/volumetric-rendering/
+// https://github.com/smkplus/UnityRayMarching
+// https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+// https://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+
+//#####################################################
+App
+	.init( true )
+    .load_shaders( "LowPoly.js" )
+    .load_pkg( { name:"fungi.sdf" } )
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+// https://www.shadertoy.com/view/4tcGDr // Make this shape
+
+async function init(){
+    App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+    App.Debug.set_depth_test( true ).set_priority( 0 );
+
+    App.sdf.shader.new( "Sdf", map_func );
+    
+    let mat = App.shader.new_material( "Sdf" );
+    let e   = App.sdf.volume( "vb", mat );
+    
+    e.node.set_scl( 2.0 );
+    App.sdf.volume.debug( e.node.local );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+
+//#####################################################
+let map_func = `
+float map_func( vec3 p ){
+    vec3 center     = vec3( 0, 1, 0 );
+    vec3 p_center   = p - center;
+
+    float cylinder  = sdf_cylinder( p_center, 1.0, 0.25 );
+    //float cylinder2  = sdf_cylinder( p_center * rot_x( 90.0 * DEG2RAD ), 1.0, 0.25 );
+    float cylinder2  = sdf_cylinder( p_center * ROT_X_90, 1.0, 0.25 );
+    float cylinder3  = sdf_cylinder( p_center * ROT_Y_90, 1.0, 0.25 );
+    float sphere    = sdf_sphere( p_center, 0.5 );
+    float cube      = sdf_cube( p_center, vec3( 0.8, 0.8, 0.8 ) );
+
+    //return cylinder2;
+    //return sdf_union_3( cylinder, cylinder2, cylinder3 );
+    //return sdf_difference( sdf_intersect( sphere, cube ), sdf_union_3( cylinder, cylinder2, cylinder3 ) );
+
+    // Testing the idea if Data came in as an Array of Configurations
+    // { shape:"sphere", center:[0,1,0], join:null }
+    // { shape:"cube", center:[0,1,0], join:"intersect" }
+    // { shape:"cylinder", center:[0,1,0], join:"sdf_difference", rot:"x90" }
+    float dist = sphere;
+    dist = sdf_intersect( dist, cube );
+    dist = sdf_difference( dist, cylinder );
+    dist = sdf_difference( dist, cylinder2 );
+    dist = sdf_difference( dist, cylinder3 );
+
+    return dist;
+}
+`;
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

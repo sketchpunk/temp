@@ -1,0 +1,68 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+import FboFactory from "../../fungi/core/Fbo.js";
+
+import FacedCube from "../../fungi/geo/FacedCube.js";
+
+//import Wireframe    from "../../fungi/shaders/Wireframe.js";
+//import Grid         from "../../fungi/geo/Grid.js";
+
+//import Noise        from "../../lib/Noise.js";
+
+//#####################################################
+App
+	.init( true )
+	//.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( 30, 20, 4, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+
+    let q = new Quat();
+    q.from_polar( 45, 90 );
+
+    let xx = q.to_polar();
+    console.log( xx );
+
+    /*
+    let fwd = Vec3.transform_quat( Vec3.FORWARD, q );
+    App.Debug.ln( Vec3.ZERO, fwd );
+
+    let flat = new Vec3( fwd.x, 0, fwd.z ).norm();
+    let lon     = Vec3.angle( Vec3.FORWARD, flat );
+    let lat     = Vec3.angle( flat, fwd );
+    let dot_up  = Vec3.dot( fwd, Vec3.UP );
+    let dot_side  = Vec3.dot( fwd, Vec3.RIGHT );
+
+    if( dot_side < 0 )  lon = -lon;
+    if( dot_up < 0 )    lat = -lat;
+
+
+    console.log( lon, lon * 180/Math.PI );
+    console.log( lat, lat * 180/Math.PI );
+    console.log( dot_up );
+    */
+
+
+    App.Debug.quat( q, [0,1,0] );
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+
+
+//#####################################################
+
+//#####################################################
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

@@ -1,0 +1,304 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+import QuadNS from "../../fungi/geo/QuadNS.js";
+
+// https://www.alanzucconi.com/2016/07/01/volumetric-rendering/
+// https://github.com/smkplus/UnityRayMarching
+// https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+// https://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+
+//#####################################################
+App
+	.init( false )
+    //.load_shaders( "LowPoly.js" )
+    //.load_pkg( { name:"fungi.sdf" } )
+	//.use_debug()
+	.set_camera( 0, 20, 8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let QUAD;
+
+async function init(){
+    init_shader();
+
+    let mat = App.shader.new_material( "TESTER" );
+    QUAD    = QuadNS( "screen_quad", mat );
+
+    App.input.on_input = ()=>{
+        console.log( "Input", App.input.arrowUp );
+    };
+
+    App.on_render = ( dt, ss )=>{
+        console.log( dt );
+    };
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //App.render_by( 1, null );
+	return true;
+}
+
+//#####################################################
+
+// Need to Pass in Camera Position, Plus View Axis
+class SDFCamera{
+    cam_pos     = new Vec3();   // Camera Position
+    tar_pos     = new Vec3();   // Target Position
+
+    fwd         = new Vec3();   // View Axis
+    lft         = new Vec3();
+    up          = new Vec3();
+
+    updated     = true;         // Dirty Flag
+
+    // #region SETTERS
+    set_tar( x, y, z ){
+        updated = true;
+        return this;
+    }
+    
+    set_pos( x, y, z ){
+        updated = true; return this;
+    }
+
+    set_zoom( v ){ 
+        updated = true;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////
+
+    // #region METHODS
+    update(){
+        updated = false;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////
+}
+
+class KBCamCtr{
+    cam = null;
+
+    get_on_input(){ return this.on_input.bind( this ); }
+    on_input(){
+        console.log( "Input", App.input.arrowUp );
+    }
+}
+
+/*
+vec3 getCameraRayDir(vec2 uv, vec3 camPos, vec3 camTarget)
+{
+    // Calculate camera's "orthonormal basis", i.e. its transform matrix components
+    vec3 camForward = normalize(camTarget - camPos);
+    vec3 camRight = normalize(cross(vec3(0.0, 1.0, 0.0), camForward));
+    vec3 camUp = normalize(cross(camForward, camRight));
+     
+    float fPersp = 2.0;
+    vec3 vDir = normalize(uv.x * camRight + uv.y * camUp + camForward * fPersp);
+ 
+    return vDir;
+}
+
+    // Compute View Axis of the camera looking at a target position.
+    vec3 tar    = vec3( 0.0, 0.5, 0.0 );    // Can add tar to origin to move the camera in relation to target
+    vec3 ro     = tar + vec3( 1.0 * sin( time ), 0.0, 2.0 * cos( time ) ); // Use Time to move the camera around in a circle
+
+    vec3 fwd    = normalize( tar - ro ); // Direction of camera to target
+    vec3 rit    = normalize( cross( fwd, vec3( 0.0, 1.0, 0.0 ) ) );
+    vec3 up     = normalize( cross( rit, fwd ) );
+
+    vec3 rd     = normalize( p.x*rit + p.y*up + 1.5*fwd );  // Compute Ray based, changing Z effects field of view.
+*/
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"coord_scale", type:"float", value:12.0 },
+		//{ name:"randomness", type:"float", value:1 },
+		//{ name:"light_strength", type:"float", value:0.66 },
+	], App.ubo.get_array( "Global" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+//out vec2 screen_uv;
+out vec2 frag_pos;
+
+void main(void){
+    gl_Position = vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Using a NS Quad, so can use it in fragment shader but needs to fix the X Stretch.
+    frag_pos    = vec2( a_pos.x * ( global.screen_size.x / global.screen_size.y ), a_pos.y );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SCREEN SPACE UV
+	//screen_uv.xy	= gl_Position.xy / gl_Position.w;
+	//screen_uv.x 	*= global.screen_size.x / global.screen_size.y;	// Fix X Stretch
+	//screen_uv.xy	= screen_uv.xy * 0.5 + 0.5;						// To -1,1 to 0,1
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+out vec4 out_color;
+in vec2 frag_pos;
+//in vec2 screen_uv;
+
+//-------------------------
+const int   MARCH_TRIES     = 512;      // How many attempt to march ray
+const float MARCH_EPSILON   = 0.001;    // Min Distance to SDF Surface
+const float MARCH_MAX_DIST  = 20.0;     // Max Distance to Travel on March
+const float MARCH_START     = 0.1;      // Starting Distance for Ro Marching
+float map_func( vec3 pos );
+
+bool ray_march( vec3 ro, vec3 rd, out vec3 hit_pos ){ //, out float ao
+    float d     = MARCH_START;  // How much distance on the ray traveled
+    float rng   = 0.0;          // Distance Range to next closets object
+
+    for( int i = 0; i < MARCH_TRIES && d < MARCH_MAX_DIST; i++ ){
+        rng = map_func( ro + rd * d );  // distance to the closets object
+        if( rng <= MARCH_EPSILON ){
+            hit_pos = ro + rd * d;
+            //ao      = 1.0 - float( i ) / float( MARCH_TRIES - 1 );
+            //ao      = 1.0 - d / MARCH_MAX_DIST;
+            return true;
+        }
+        d += rng;   // Add save distance for the next check.
+    }
+
+    return false;
+}
+
+// COMPILER'S OPTIMIZATION MIGHT CAUSE ISSUES WITH LARGE SETS OF SDF OBJECTS
+uniform int iFrame;
+vec3 normal_sdf( vec3 pos ){
+    #define ZERO min(iFrame,0)
+    vec3 n = vec3( 0.0 );
+    for( int i = ZERO; i < 4; i++ ){
+        vec3 e = 0.5773 * (2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+        n += e * map_func( pos + 0.0005 * e );
+    }
+    return normalize( n );
+}
+
+vec3 normal_sdfx( in vec3 pos ){
+    vec2 e = vec2(0.0005,0.0);
+    return normalize( vec3( 
+        map_func( pos + e.xyy ) - map_func( pos - e.xyy ),
+		map_func( pos + e.yxy ) - map_func( pos - e.yxy ),
+		map_func( pos + e.yyx ) - map_func( pos - e.yyx ) ) );
+}
+
+
+
+
+//-------------------------
+
+float sdf_sphere( vec3 p, float radius ){ return length( p ) - radius; }
+
+float sdf_ellipsoid( vec3 p, vec3 radii ){
+    float k0 = length( p / radii ); // Distort P, then later subtract unit length of 1.
+    float k1 = length( p / radii / radii ); // Used to help fix distortion
+    return k0 * ( k0 - 1.0  ) / k1;
+}
+
+//-------------------------
+
+float sdf_guy( vec3 pos ){
+    // Setup Animation by moving the center point, which is a 
+    float t     = fract( global.clock );
+    float y     = 4.0 * t * (1.0 - t); // Parabola, 0>1>0
+    //float dy    = 4.0 * (1.0 - 2.0*t); // Derivative of Parabola
+    vec3 cen    = vec3( 0.0, y, 0.0 );
+
+    
+    //float d     = sdf_sphere( pos-cen, 0.25 );
+
+    float sy    = 0.5 + 0.5 * y;    // squish by only half
+    float sz    = (1.0 / sy);       // stretch, inverse the squish
+    float d     = sdf_ellipsoid( pos-cen, vec3( 0.25 * sz, 0.25 * sy, 0.25 * sz ) );
+
+    return d;
+}
+
+float map_func( vec3 pos ){
+    float d     = sdf_guy( pos );
+    float d1    = pos.y - (-0.25);  // Floor, Need to add some offset else it'll clip half the screen. 
+
+    return min( d, d1 );
+}
+
+void main( void ){
+    float time  = 0.0; //global.clock;
+    //vec2 p    = ( 2.0 * gl_FragCoord.xy - global.screen_size ) / global.screen_size.y;
+    vec2 p      = frag_pos.xy; // Comuting in VERT Shader instead of here 
+    //vec3 ro   = vec3( 0.0, 0.0, 1.0 );
+    //vec3 rd   = normalize( vec3( p, -1.5 ) );
+    
+    // Compute View Axis of the camera looking at a target position.
+    vec3 tar    = vec3( 0.0, 0.5, 0.0 );    // Can add tar to origin to move the camera in relation to target
+    vec3 ro     = tar + vec3( 1.0 * sin( time ), 0.0, 2.0 * cos( time ) ); // Use Time to move the camera around in a circle
+
+    vec3 fwd    = normalize( tar - ro ); // Direction of camera to target
+    vec3 rit    = normalize( cross( fwd, vec3( 0.0, 1.0, 0.0 ) ) );
+    vec3 up     = normalize( cross( rit, fwd ) );
+
+    vec3 rd     = normalize( p.x*rit + p.y*up + 1.5*fwd );  // Compute Ray based, changing Z effects field of view.
+
+    // Sky Color is Default, Gradient based on Ray Direction's Height
+    vec3 color  = vec3( 0.4, 0.75, 1.0 ) - 0.7 * rd.y;
+    color       = mix( color, vec3( 0.7, 0.75, 0.8 ), exp( -10.0 * rd.y ) ); // Use Curve to apply a sky horizon
+
+    vec3 hit_pos;
+    if( ray_march( ro, rd, hit_pos ) ){
+
+        vec3 norm       = normal_sdf( hit_pos );
+
+        vec3 mate       = vec3( 0.18 ); // Default Color, All Lights will be mul by this as colors lights gets added up.
+
+        vec3 sun_dir    = normalize( vec3( 0.8, 0.4, 0.2 ) );        // To Sun Direction
+        float sun_dif   = clamp( dot( norm, sun_dir ), 0.0, 1.0 );   // Sub Diffuse Strength
+        float sky_dif   = clamp( 0.5 + 0.5 * dot( norm, vec3( 0.0, 1.0, 0.0 ) ), 0.0, 1.0 );    // sky diffuse, Shift range of -1,1 to 0,1, so light the bottom too.
+        float bon_dif   = clamp( 0.5 + 0.5 * dot( norm, vec3( 0.0, -1.0, 0.0 ) ), 0.0, 1.0 );   // Bounce light, reflecting light from the ground back up.
+
+        // Shadows of point toward the sun.
+        float sun_sha   = ( ray_march( hit_pos + norm * 0.001, sun_dir, hit_pos ) )? 0.0 : 1.0;
+
+        color =  mate * vec3( 7.0, 4.5, 3.0 ) * sun_dif * sun_sha;  // Sun Lighting, Yellow
+        color += mate * vec3( 0.5, 0.8, 0.9 ) * sky_dif;            // Light of the sky, Blue
+        color += mate * vec3( 0.7, 0.3, 0.2 ) * bon_dif;            // Bounce light from the ground.
+    }
+
+    out_color = vec4( pow( color, vec3(0.4545) ), 1.0 ); // Apply Gamma Correction, Makes the brights brighter
+
+    //if( gl_FragCoord.x < 500.0 ) out_color.g = 1.0;
+}`;
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

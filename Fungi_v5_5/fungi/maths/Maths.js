@@ -346,7 +346,7 @@ class Maths{
 	// p1 = pow( p, 8.0 * p ); // Curves more start and end
 	// p1 = pow( p, 12.0 * p ); // By this point creates a very sharp parabola
  
-	// S Curve
+	// S Curve ( Kinda like an ease in-out )
 	// x * x * ( 3 - 2 * x )
 	// if replace x with a color vec3, its like adding contrast, brighters and darkers.
 	// if too much clamp color before curve, might fix over exposure.

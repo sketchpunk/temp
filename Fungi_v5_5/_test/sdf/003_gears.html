@@ -1,0 +1,222 @@
+<!DOCTYPE html><script type="module">
+import App, {} from "../../fungi/App.js";
+
+// https://www.alanzucconi.com/2016/07/01/volumetric-rendering/
+// https://github.com/smkplus/UnityRayMarching
+// https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+// https://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+
+//#####################################################
+App
+	.init( true )
+    .load_shaders( "LowPoly.js" )
+    .load_pkg( { name:"fungi.sdf" } )
+	.use_debug()
+	.set_camera( 0, 20, 8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+// https://www.youtube.com/watch?v=sl9x19EnKng&feature=emb_logo
+
+async function init(){
+    App.find_entity_com( "GridFloor", "Draw" ).priority = 900;
+    App.Debug.set_depth_test( true ).set_priority( 0 );
+
+    App.sdf.shader.new( "Sdf", map_func );
+    
+    let mat = App.shader.new_material( "Sdf" );
+    let e   = App.sdf.volume.from_origin( "vb", mat );
+    
+    e.node.set_scl( 5.0 );
+    App.sdf.volume.debug( e.node.local );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.render_by( 1, null );
+	return true;
+}
+
+
+//#####################################################
+let map_func = `
+
+float sdfbox( vec3 p, vec3 size ){
+    return length( max( abs( p ) - size*0.5, 0.0 ) );
+}
+
+float sdfbox2d( vec2 p, vec2 size ){
+    return length( max( abs( p ) - size*0.5, 0.0 ) );
+}
+
+float sdfcross_a( vec3 p, vec3 size ){
+    float d1 = length( max( abs( p.xyz ) - size*0.5, 0.0 ) );   // verticle bar
+    float d2 = length( max( abs( p.zyx ) - size*0.5, 0.0 ) ); // Flip XZ to create horizontal bar 
+    return min( d1, d2 );
+}
+
+float sdfcross_b( vec3 p, vec3 size ){
+    p = abs( p );   // Only Evaluate if the point is positive
+    p.xz = ( p.z < p.x )? p.zx : p.xz; // Create a Diagnal that can be used define a plane, then mirror the point across that plane
+    return length( max( p - size*0.5, 0.0 ) );
+}
+
+float sdfcross( in vec2 p, in vec2 b, float r ){
+    p = abs(p);
+    p = ( p.y > p.x ) ? p.yx : p.xy;
+    
+	vec2  q = p - b;
+    float k = max( q.y, q.x );
+    vec2  w = ( k > 0.0 )? q : vec2( b.y - p.x , -k );
+    
+    return sign( k ) * length( max( w, 0.0 ) ) + r;
+}
+
+float sdTrapezoid( in vec2 p, in float r1, float r2, float he ){
+    vec2 k1 = vec2( r2, he );
+    vec2 k2 = vec2( r2 - r1, 2.0 * he );
+
+	p.x = abs( p.x );
+    vec2 ca = vec2( max( 0.0, p.x-((p.y<0.0)?r1:r2)), abs(p.y)-he);
+    vec2 cb = p - k1 + k2*clamp( dot(k1-p,k2)/dot(k2,k2), 0.0, 1.0 );
+    
+    float s = ( cb.x < 0.0 && ca.y < 0.0 ) ? -1.0 : 1.0;
+    
+    return s * sqrt( min( dot( ca, ca ) , dot( cb, cb ) ) );
+}
+
+
+
+//float sdfvert_stick( vec3 p, float h, float radius ){
+//    float d = max( p.y - h, 0.0 );
+//    return sqrt( p.x*p.x + p.z*p.z + d*d ) - radius;
+//}
+
+float sdfvertical_semicapsule( vec3 p, float h, float r ){
+    p.y = max( p.y-h, 0.0 );
+    return length( p ) - r;
+}
+
+float smax( float a, float b, float k ){ // K controls the transition size
+    float h = max( k - abs( a - b ), 0.0 );
+    return max( a, b ) + ( .25 / k ) * h * h;
+}
+
+
+float gear( vec3 p, float time, float offset ){
+    //vec3 center     = vec3( 0, 1, 0 );
+    //vec3 p_center   = p - center;
+    
+    //float dist    = sdf_sphere( p_center, 0.5 );
+    //float dist    = sdfbox( p_center + vec3(.7,.0,.0), vec3( 0.2, 0.1, 0.1 ) ) - 0.05; // SUB Distance Rounds the Edges
+
+
+    //float t = time + offset * PI_2 / 24.0; // Shift by half of the angle the teeth are divided by.
+    //p.xz            = mat2( cos(t), -sin(t), sin(t), cos(t) ) * p.xz; // Rotate the Point to make the gears animate.
+
+    float t = time * sign( p.y ) + offset * PI_2/ 24.0; // flip the time based on which side of the plane the point is.
+    float co = cos(t), si = sin(t);
+    p.xz = mat2( co, -si, si, co ) * p.xz;
+
+    p.y = abs( p.y ); // Mirror XZ Plane
+
+
+    float angle     = PI_2 / 12.0;
+    float sector    = round( atan( p.z, p.x ) / angle ); // Whole number of the slice of the 12 divided circle.
+    float an        = sector * angle;
+
+    vec3 q          = p; //p_center;
+    q.xz            = mat2( cos(an), -sin(an), sin(an), cos(an) ) * q.xz; 
+
+    //float dist      = sdfbox( q - vec3(.8,.0,.0), vec3( 0.2, 0.1, 0.1 ) ) - 0.03; // BUT SUB OFFSET, ADDING BREAKS IT
+    float dist        = sdfbox2d( q.xz - vec2(.8,.0), vec2( 0.2, 0.2 ) ) - 0.02;
+
+    float ring      = abs( length( p.xz ) - 0.7 ) - 0.1; // Inner Distance, substract to add thickness to create a ring.
+    //ring = max( ring, abs( p.y ) - 0.08 ); // clip the ring cylinder
+
+    dist = min( dist, ring );                       // This time using only 2D Objects that have infinite Y height
+
+    //dist = min( dist, sdfcross_a( p, vec3( 0.05, 0.15, 1.5 ) ) - 0.04 );
+    dist = min( dist, sdfcross_b( p - vec3(0.0, 2.1, 0.0 ), vec3( 0.05, 0.15, 1.5 ) ) - 0.04 ); // Better Version of making a cross
+    
+
+    //dist = max( dist, abs( p.y - 1.0 ) - 0.08 ); // Clip the Ring Cylinder AND Looped 2D Squares Together
+    //dist = smax( dist, abs( p.y  ) - 0.15, 0.08 ); // Using SmoothMax instead of max, we can round out the clipping instead of being sharp.
+    
+    float r = length( p );
+    dist = smax( dist, abs( r - 2.3 ) - 0.1 , 0.001 ); // Using a Sphere to do an outer and inner clipping. Might
+
+    dist = min( dist, sdfvertical_semicapsule( p, 2.2, 0.05 ) );
+
+    return dist;
+}
+
+vec2 rot_45( vec2 v ){
+    return vec2( v.x - v.y, v.y + v.x  ) * 0.707107; // Flipping the sign operators flips rotation to oposite direction
+}
+
+float map_func( vec3 p ){
+    /*  ONE WAY TO DO IT
+    float dist;
+    float d1 = gear( p );
+    float d2 = gear( p.zxy );
+    float d3 = gear( p.yzx );
+    dist = min( d3, min( d1, d2 ) );
+    return dist;
+    */
+
+    /*
+    float d1 = gear( p, time );
+    float d2 = gear( p.yzx, time ); d1 = ( d2 < d1 )? d2 : d1;
+          d2 = gear( p.zxy, time ); d1 = ( d2 < d1 )? d2 : d1;
+    */
+
+    //--------------
+    vec3 q = p;
+    vec3 pq = abs( p ); // Move Point to the same quadrant
+    
+    if( pq.x > pq.y && pq.x > pq.z ) q = p.zxy; // Depending which axis P is aligned too, shift point to mirror gear.
+    else if( pq.z > pq.y )           q = p.yzx;
+    else                             q = p.xyz; // * vec3( -1.0, 1.0, 1.0 ); // Change X to make the Gears rotate better
+
+    float d1 = gear( q, time, 0.1 );
+
+    //--------------
+    // X Symitry
+    vec3 qx = vec3( rot_45( p.zy ), p.x );
+    vec3 qy = vec3( rot_45( p.xz ), p.y );
+    vec3 qz = vec3( rot_45( p.yx ), p.z );
+
+    if( abs( qx.x ) > abs( qx.y ) ) qx = qx.zxy;
+    if( abs( qy.x ) > abs( qy.y ) ) qy = qy.zxy;
+    if( abs( qz.x ) > abs( qz.y ) ) qz = qz.zxy;
+
+
+    float d2 = gear( qx, time, 1.0 );
+    d1 = min( d1, d2 );
+
+    // Y Symitry
+    
+    
+
+    d2 = gear( qy, time, 1.0 );
+    d1 = min( d1, d2 );
+
+    // Z Symitry
+    
+    
+
+    d2 = gear( qz, time, 1.0 );
+    d1 = min( d1, d2 );
+
+    //--------------
+    d1 = min( d1, sdf_sphere( p, 0.4 ) );
+    return d1;
+}
+`;
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

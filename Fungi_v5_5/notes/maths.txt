@@ -186,3 +186,30 @@ HingeConstraint( axis, min, max ){
 		// How to check for axis??
 	}
 }
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Makes a fun shape in SDF, maybe good for weapons
+///////////////////////////////////////////////////////////////////////////////
+float easeInOutExpo( float x ){
+    return ( x <= 0.0 )? 0.0 :
+           ( x >= 1.0 )? 1.0 :
+           ( x < 0.5 )?
+                pow( 2.0, 20.0 * x - 10.0) * 0.5:
+                (2.0 - pow( 2.0, -20.0 * x + 10.0) ) * 0.5;
+}
+dd = sdf_stick_scurve3( xmp, elpos, hdpos, 0.08, 0.19, 0.16 );
+float sdf_stick_scurve3( vec3 p, vec3 a, vec3 b, float fa, float fb, float fc ){
+    vec3 ba = b - a;
+    vec3 pa = p - a;
+    float h = clamp( dot( pa, ba ) / dot( ba, ba ), 0.0, 1.0 );
+    float t = easeInOutExpo( h ) * 2.0 - 1.0;
+
+    //float r = ( t < 0.0 )? 
+    //    mix( fb, fa, abs(t) ):         // 0 > .5
+    //    mix( fb, fc, t  );   // .5 > 1
+
+    float r = mix( fb, fc, t  );
+    return length( pa - h * ba ) - r;
+}
