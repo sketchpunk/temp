@@ -1,0 +1,469 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3 } from "../../fungi/App.js";
+import QuadNS from "../../fungi/geo/QuadNS.js";
+
+// https://www.shadertoy.com/view/tljSDz
+
+//#####################################################
+App
+	.init( false )
+    //.load_shaders( "LowPoly.js" )
+    //.load_pkg( { name:"fungi.sdf" } )
+	//.use_debug()
+	.set_camera( 0, 20, 8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let QUAD, CAM, MAT, CTR;
+async function init(){
+    init_shader();
+
+    MAT     = App.shader.new_material( "TESTER" );  // SDF Shader
+    QUAD    = QuadNS( "screen_quad", MAT );         // Normalized Screen Space Quad
+    CAM     = new SDFOrbitCamera( MAT );            // Main Camera Object
+    CTR     = new KBOrbitCamCtr( CAM );             // Camera Keyboard Controller.
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.render_by( 1, null );                               // Turn on Render Loop
+
+    App.input.on_input  = CTR.get_on_input();               // Set Input Callback
+    App.on_render       = ( dt, ss )=>{ CAM.update(); };    // What to do before frame is rendered
+
+	return true;
+}
+
+//#####################################################
+
+// Need to Pass in Camera Position, Plus View Axis
+class SDFOrbitCamera{
+    // #region MAIN
+    cam_pos     = new Vec3( 0, 0.5, 2.0 );  // Camera Position
+    tar_pos     = new Vec3( 0, 0, 0 );      // Target Position
+    field       = 1.5;                      
+    distance    = Vec3.len( this.cam_pos, this.tar_pos );   // Distance between Cam+Target
+
+    fwd         = new Vec3();   // View Axis
+    lft         = new Vec3();
+    up          = new Vec3();   
+
+    mat         = null;         // Material to Update Camera Axis + Position
+    updated     = true;         // Dirty Flag
+
+    constructor( mat ){
+        this.mat = mat;
+    }
+    // #endregion /////////////////////////////////////////////////
+
+    // #region SETTERS    
+    move( v ){
+        CAM.tar_pos.add( v );
+        CAM.cam_pos.add( v );
+        this.updated = true;
+    }
+
+    orbit( x, y ){
+        let delta = Vec3.sub(  this.cam_pos, this.tar_pos ),
+            polar = Maths.cartesian_to_polar( delta );
+
+        if( x ) polar[ 0 ] += x;
+        if( y ) polar[ 1 ] = Maths.clamp( polar[ 1 ] + y, 0, 89.999999 );
+
+        let pos = Maths.polar_to_cartesian( polar[ 0 ], polar[ 1 ], this.distance );
+        this.cam_pos.from_add( pos, this.tar_pos );
+
+        this.updated = true;
+    }
+
+    zoom( i ){
+        let dir = Vec3.sub(  this.cam_pos, this.tar_pos );
+
+        this.distance = Math.max( 0.5, dir.len() + i );
+        this.cam_pos
+            .from_scale( dir.norm(), this.distance )
+            .add( this.tar_pos );
+
+        this.updated = true;
+    }
+    // #endregion /////////////////////////////////////////////////
+
+    // #region METHODS
+    update(){
+        if( !this.updated ) return;
+
+        // Compute the Axis of the Camera Looking Direction
+        this.fwd.from_sub( this.tar_pos, this.cam_pos ).norm();
+        this.lft.from_cross( this.fwd, Vec3.UP ).norm();
+        this.up.from_cross( this.lft, this.fwd ).norm();
+        this.fwd.scale( this.field ); // Apply Field of View to FWD Direction
+
+        // Update the Material with all the camera information
+        this.mat.set( "CAM_POS", this.cam_pos );
+        this.mat.set( "CAM_FWD", this.fwd );
+        this.mat.set( "CAM_LFT", this.lft );
+        this.mat.set( "CAM_UP", this.up );
+
+        this.updated = false;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////
+}
+
+// Updates the Camera based on user's Keyboard Input
+class KBOrbitCamCtr{
+    cam         = null; // Camera Object
+    move_scl    = 0.2;  // How  Much to scale the Axis Movement
+    orbit_inc   = 3;    // Angle Increment for Orbit Rotation
+    zoom_inc    = 0.1;  // Increment distance change between Cam and Target
+
+    constructor( c ){ this.cam = c; }
+
+    get_on_input(){ return this.on_input.bind( this ); }
+    on_input( e ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HANDLE MOVEMENT
+        let move    = new Vec3();
+        let tmp     = new Vec3();
+
+        // Compute Look Directions
+        let fwd     = Vec3.sub( this.cam.cam_pos, this.cam.tar_pos );
+        fwd.y = 0;
+        fwd.norm();
+        let lft = Vec3.cross( fwd, Vec3.UP ).norm();
+
+        if( App.input.arrowUp )     move.add( tmp.from_scale( fwd, -this.move_scl ) );
+        if( App.input.arrowDown )   move.add( tmp.from_scale( fwd, this.move_scl ) );
+        if( App.input.arrowRight )  move.add( tmp.from_scale( lft, -this.move_scl ) );
+        if( App.input.arrowLeft )   move.add( tmp.from_scale( lft, this.move_scl ) );
+
+        if( !move.is_zero() ) this.cam.move( move );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HANDLE ORBIT 
+        if( App.input.key_w ) this.cam.orbit( 0, this.orbit_inc );
+        if( App.input.key_s ) this.cam.orbit( 0, -this.orbit_inc );
+        if( App.input.key_a ) this.cam.orbit( this.orbit_inc, 0 );
+        if( App.input.key_d ) this.cam.orbit( -this.orbit_inc, 0 );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HANDLE ZOOM 
+        if( App.input.key_q ) this.cam.zoom( this.zoom_inc );
+        if( App.input.key_e ) this.cam.zoom( -this.zoom_inc );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //App.render();
+    }
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"CAM_POS", type:"vec3", value:null },
+        { name:"CAM_FWD", type:"vec3", value:null },
+        { name:"CAM_LFT", type:"vec3", value:null },
+        { name:"CAM_UP",  type:"vec3", value:null },
+	], App.ubo.get_array( "Global" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+out vec2 frag_pos;
+
+void main(void){
+    gl_Position = vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Using a NS Quad, so can use it in fragment shader but needs to fix the X Stretch.
+    frag_pos    = vec2( a_pos.x * ( global.screen_size.x / global.screen_size.y ), a_pos.y );
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform vec3 CAM_POS;
+uniform vec3 CAM_FWD;
+uniform vec3 CAM_LFT;
+uniform vec3 CAM_UP;
+
+out vec4 out_color;
+in vec2 frag_pos;
+
+//-------------------------
+// GOOD QUALITY, BAD PERFORMANCE WHEN VERY CLOSE : TRIES 60, MIN 0.001
+// MEDIUM QUALITY, BETTER PERFORMANCE CLOSE BY   : TRIES 30, MIN 0.005
+const int   MARCH_TRIES     = 200;      // How many attempt to march ray
+const float MARCH_EPSILON   = 0.001;    // Min Distance to SDF Surface
+const float MARCH_MAX_DIST  = 20.0;     // Max Distance to Travel on March
+const float MARCH_START     = 0.0;      // Starting Distance for Ro Marching
+
+float map_func( vec3 p );  // Forward Decoration
+
+struct SDFResult{
+    vec3   hit;
+    float  ao;
+    int    id;
+} SR;
+
+bool ray_march( vec3 ro, vec3 rd ){
+    float d     = MARCH_START;  // How much distance on the ray traveled
+    float rng   = 0.0;          // Distance Range to next closets object
+
+    for( int i = 0; i < MARCH_TRIES && d < MARCH_MAX_DIST; i++ ){
+        rng = map_func( ro + rd * d );  // distance to the closets object
+        
+        //if( rng <= MARCH_EPSILON ){
+        //if( abs( rng ) <= MARCH_EPSILON ){ // Help Fix some artifacts
+
+        if( abs( rng ) <= ( MARCH_EPSILON * d ) ){ // spend less time trying to detail long distance pixels. 
+            SR.hit = ro + rd * d;
+            //SR.ao      = 1.0 - float( i ) / float( MARCH_TRIES - 1 );
+            SR.ao      = 1.0 - d / MARCH_MAX_DIST;
+            return true;
+        }
+        d += rng;   // Add save distance for the next check.
+    }
+    return false;
+}
+
+// OTHER VERSION, COMPILER'S OPTIMIZATION MIGHT CAUSE ISSUES WITH LARGE SETS OF SDF OBJECTS
+uniform int iFrame;
+vec3 normal_sdf( vec3 pos ){
+    #define ZERO min(iFrame,0)
+    vec3 n = vec3( 0.0 );
+    for( int i = ZERO; i < 4; i++ ){
+        vec3 e = 0.5773 * (2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+        n += e * map_func( pos + 0.0005 * e );
+    }
+    return normalize( n );
+}
+
+//-------------------------
+
+float sdf_smin( float a, float b, float k ){
+    float h = max( k-abs(a-b), 0.0 );
+    return min( a, b ) - h*h / (k*4.0);
+}
+
+float sdf_sphere( vec3 p, float radius ){ return length( p ) - radius; }
+
+float sdf_ellipsoid( vec3 p, vec3 radii ){
+    float k0 = length( p / radii ); // Distort P, then later subtract unit length of 1.
+    float k1 = length( p / radii / radii ); // Used to help fix distortion
+    return k0 * ( k0 - 1.0  ) / k1;
+}
+
+//-------------------------
+
+float map_func( vec3 pos ){
+    float d, dd, time = global.clock;
+
+    //float d  = sdf_sphere( pos - vec3( 0.0, 0.3, 0.0 ), 0.2 );
+    //float dd = pos.y + 0.02;  // Floor, Need to add some offset else it'll clip half the screen.
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Ground
+    float hill  = -0.1 - 0.12 * ( sin( pos.x*2.7 ) + sin( pos.z*2.0 ) ); // Noise based on sin
+    d           = pos.y - hill;
+    SR.id       = 1;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Floater
+    /**/
+
+    // Split the world into a grid, 3x3 size. Subtract half to get the mid point of each cell.
+    vec3 grid  = vec3( mod( abs( pos.x ), 3.0 ) - 1.5, pos.y, mod( pos.z + 1.5, 3.0 ) - 1.5 );
+    
+    // Create Cell Coordinates
+    vec2 cell  = vec2( floor( pos.x / 3.0 ), floor( ( pos.z + 1.5 ) / 3.0 ) );
+
+    // pseudo like random number for each cell.
+    float rand = cell.x * 11.1 + cell.y * 31.7;
+
+    // Animate the Ellipsoid froming below the ground to the sky
+    // This will create  a value between 0 and 1 by using fract.
+    // Using the rand so that each ellipse animates at different times    
+    float anim_t = fract( rand * 1.312 + time * 0.1 );
+    float y      = -1.0 + 4.0 * anim_t;
+
+    // Set the Radius if Y to be Sin( Rand ) for the floater
+    vec3  rad  = vec3( 0.7, 1.0 + 0.5 * sin( rand ), 0.7 );
+    
+    // Add a bit a noise to the radius
+    rad -= 0.1 * ( sin( pos.x * 3.0 ) + sin( pos.y * 4.0 ) + sin( pos.z * 5.0 ) );    
+    
+    // Use a curve to animate the overall scale of floater, where it'll get smaller
+    // ad the end of the animation cycle
+    float siz  = 4.0 * anim_t * ( 1.0 - anim_t );
+    
+    // the floater
+    dd  = sdf_ellipsoid( grid - vec3( 0.5, y, 0.0 ), siz * rad );
+
+    // Apply a texture to the distance of the floater.
+    dd -= 0.03 * smoothstep( -1.0, 1.0, sin(18.0*pos.x) + sin(18.0*pos.y) + sin(18.0*pos.z) );
+    //dd *= 0.6;   // Shortening the distance can fix artifacts
+    dd  = min( dd, 2.0 );
+    
+    //if( dd < d )  SR.id = 2;
+    d = sdf_smin( d, dd, 0.32 );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Rocks
+    
+    // What cell are we in on the XZ Plane
+    float cell_size = 0.5;
+    float cell_h    = 0.25; // Get the center of the cell
+    cell            = floor( ( pos.xz + cell_h ) / cell_size );
+
+    vec2 displace   = cos( vec2(
+        cell.x * 72.2 + cell.y * 13.7,  // Cheap Noise using cell position as our freq
+        cell.x * 81.6 + cell.y * 51.4
+    ) );
+
+    // Since displacement can be in the negative, lets use that as a way not
+    // to display something in thie cell. Makes it look more random. Means anything
+    // left of the center doesn't get rendered.
+    float radius = 0.05 * displace.x;
+    if( radius >= 0.01 ){
+        // position relation to the center of the cell
+        vec3 cpos = vec3( mod( pos.x + cell_h, cell_size ) - cell_h, pos.y - hill,
+                          mod( pos.z + cell_h, cell_size ) - cell_h );
+
+        // Add Some Variation on position away from the center, make it like grid like.
+        cpos.xz  -= displace.xy * 0.2; 
+
+        dd = sdf_sphere( cpos, radius );
+        if( dd < d ){ d = dd; SR.id = 3; }
+    }
+
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return d;
+}
+
+void main( void ){
+    //vec2 p    = ( 2.0 * gl_FragCoord.xy - global.screen_size ) / global.screen_size.y;
+    vec2 p      = frag_pos.xy;                                      // Comuting Screen Space in VERT Shader instead of FRAG 
+    vec3 rd     = normalize( p.x*CAM_LFT + p.y*CAM_UP + CAM_FWD );  // Compute Ray based on camera Look Axis
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // BACKGROUND
+
+    // Sky Color as a starting point, Fade the sky color closer to the horizon we get
+    vec3 color = vec3( 0.4, 0.75, 1.0 ) - max( rd.y, 0.0 ) * 0.5;
+
+    // Clouds
+    vec2 uv  = 1.5 * rd.xz / rd.y;
+    float cl = 1.0 * ( sin( uv.x ) + sin( uv.y ) );
+    uv      *= mat2( 0.8, 0.6, -0.6, 0.8 ) * 2.1;
+    cl      += 0.5 * ( sin(uv.x) + sin(uv.y) );
+    color   += 0.1 * ( -1.0 +2.0 * smoothstep( -0.1, 0.1, cl-0.4 ) );
+
+    // Sky horizon use curve to buch the gradient closer to the start
+    color    = mix( color, vec3( 0.5, 0.7, .9 ), exp( -10.0 * max( rd.y, 0.0 ) ) );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // COLOR SDF MODELS
+
+    if( ray_march( CAM_POS, rd ) ){
+        vec3 norm       = normal_sdf( SR.hit ); // Normal Direction of the SDF Hit Position
+        vec3 mate       = vec3( 0.18 );         // Default Color, All Lights will be mul by this as colors lights gets added up.
+        int obj_id      = SR.id;                // Save ID, will later be changed by extra ray marches
+        vec3 hit        = SR.hit;
+        
+        if( obj_id == 1 ){ // GROUND + FLOATERS
+            color = vec3( 0.05, 0.09, 0.02 ); // Base Color
+            float ff = 18.0;    // Freq to pass through sin noise
+
+            //float n = sin( ff * hit.x ) * sin( ff * hit.z ); // Square
+            //float n = sin( ff * hit.x ) + sin( ff * hit.z ); // Circles
+            //float n = smoothstep( -0.2, 0.2, sin( ff * hit.x ) + sin( ff * hit.z ) ); // Diamonds
+            //float n = smoothstep( -0.2, 0.2, sin( ff * hit.x ) + sin( ff * hit.y ) + sin( ff * hit.z ) ); // circles again
+            float n = -1.0 + 2.0 * smoothstep( -0.2, 0.2, sin( ff * hit.x ) + sin( ff * hit.y ) + sin( ff * hit.z ) ); // circles again, lil brighter
+                
+            float f = 0.2 * n;  // Make the noise Smaller
+            color   += f * vec3( 0.06, 0.06, 0.02 ); // Apply the lil bit of noise to a second color to blend with base color
+
+        }else if( obj_id == 3 ){    // ROCKS
+            color       = vec3( 0.15, 0.05, 0.01 );
+            vec2 id     = floor( ( hit.xz ) / 0.5 );
+            float fid   = id.x * 11.1 + id.y * 31.7;
+            color      += 0.7 * cos( fid * 10.0 + vec3( 0.0, 2.0, 4.0 ) );
+            color       = max( color, 0.0 );
+        }
+
+        /* NOTE
+        Having issues and was wasting too much time trying to figure out whats going on in Inigo's Lighting Code,
+        So I gave up and just a simple phong model with inigo's shadows and gamma correction stuff.
+        */
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        vec3 ambient    = vec3( 0.4 );
+        vec3 light_pos  = vec3( 8.0, 4.0, 2.0 );
+        vec3 light_col  = vec3( 1.0 );
+		vec3 dir_light	= normalize( light_pos - hit );	// Direction of light from fragment
+
+        float shadow   = ( ray_march( SR.hit + norm * 0.001, normalize(light_pos) ) )? 0.0 : 1.0;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// DIFFUSE LIGHT
+		float diff		= max( dot( norm, dir_light ), 0.0 ); 	// Angle between Frag Normal and Light Direction ( 0 to 1 )
+        vec3 diffuse	= diff * light_col;		    			// Use the angle to scale the amount of light to use.
+        diffuse         *= shadow;
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPECULAR LIGHT
+		const float specular_strength	= 0.1;
+		const float shininess 			= 16.0;
+
+		vec3 dir_reflect	= reflect( -dir_light, norm );		// Reflection Dir of Fragment to Light
+		vec3 dir_frag_cam	= normalize( CAM_POS - hit );		// Dir from Fragment to Camera
+        float specular 		= specular_strength * pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
+        vec3 specular_color = vec3( 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        color = color * ( ambient + diffuse );
+        color = mix( color, specular_color, specular );
+    }
+
+    //out_color = vec4( color, 1.0 );
+    out_color = vec4( pow( color, vec3(0.4545) ), 1.0 ); // Apply Gamma Correction, Makes the brights brighter
+}`;
+
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%;  }
+    div{ font-family:monospace; font-size:1.2em; color:white; background-color:#00000099; }
+    b{ color:yellow; }
+    i{ color:lime; font-style: normal; }
+    .top_div{ position:fixed; top:0px; left:0px; padding:5px 10px 7px 10px;  border-radius:0px 0px 10px 0px; }
+</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+    <div class="top_div">
+        Arrows [ <b>Move Cam Target</b> ] <i>::</i>
+        WASD [ <b>Orbit Angle</b> ] <i>::</i>
+        QE [ <b>Zoom</b> ]
+    </div>
+</body></html>

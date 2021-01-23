@@ -34,3 +34,8 @@ https://www.shadertoy.com/view/tdGSDd BUNCH OF 2D Shapes
 
 
 https://github.com/spite/sdf-physics
+
+https://www.shadertoy.com/view/WldGWM SDF 2D JOINTS
+https://www.shadertoy.com/view/3l23RK SDF PIE, Can make Pacman
+
+https://www.shadertoy.com/view/WlSGW1 shoe horn

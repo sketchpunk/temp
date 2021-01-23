@@ -54,6 +54,8 @@ class Vec3 extends Float32Array{
 			}
 		}
 		
+		is_zero(){ return ( this[0] == 0 && this[1] == 0 && this[2] == 0 ); }
+
 		//-------------------------------------------
 
 		from_buf( ary, i ){ this[0] = ary[i]; this[1] = ary[i+1]; this[2] = ary[i+2]; return this;}

@@ -162,7 +162,6 @@ function NodeSys( ecs ){
 
 		// Create Model Matrix for Shaders
 		n.model_matrix.from_quat_tran_scale( n.world.rot, n.world.pos, n.world.scl );
-
 		//console.log( "[ %s ] %s ", n.level, ecs.entities.instances[ n._entity_id ].name );
 	}
 }

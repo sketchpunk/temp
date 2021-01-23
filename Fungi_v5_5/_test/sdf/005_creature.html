@@ -9,7 +9,7 @@ App
     .load_shaders( "LowPoly.js" )
     //.load_pkg( { name:"fungi.sdf" } )
 	.use_debug()
-	.set_camera( 0, 10, 3, 0, 0.9, 0 )
+	.set_camera( 0, 10, 4, 0, 0.9, 0 )
 	.task( init )
 	.then();
 
@@ -18,7 +18,7 @@ App
 // https://www.youtube.com/watch?v=sl9x19EnKng&feature=emb_logo
 
 async function init(){
-    App.find_entity_com( "GridFloor", "Draw" ).priority = 900;
+    App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
     App.Debug.set_depth_test( true ).set_priority( 0 );
     init_shader();
 
@@ -34,7 +34,7 @@ async function init(){
     //let e   = App.sdf.volume.from_origin( "vb", mat );
     
     ///e.node.set_scl( 5.0 );
-   VolumeCube.debug( e.node.local );
+    //VolumeCube.debug( e.node.local );
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //App.render_by( 1, null );

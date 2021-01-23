@@ -1,0 +1,758 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3 } from "../../fungi/App.js";
+import QuadNS       from "../../fungi/geo/QuadNS.js";
+
+import PropPanel	from "../../sage.ui/PropPanel.js";
+
+// https://www.shadertoy.com/view/3ltSW2
+// https://www.iquilezles.org/www/articles/distgradfunctions2d/distgradfunctions2d.htm
+// https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
+// https://www.iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+
+//#####################################################
+App
+	.init( false )
+    //.load_shaders( "LowPoly.js" )
+    //.load_pkg( { name:"fungi.sdf" } )
+	//.use_debug()
+	.set_camera( 0, 20, 8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let QUAD, CAM, MAT, CTR, TRAN;
+async function init(){
+    init_shader();
+    init_ui();
+
+    MAT     = App.shader.new_material( "TESTER" );  // SDF Shader
+    QUAD    = QuadNS( "screen_quad", MAT );         // Normalized Screen Space Quad
+    CAM     = new SDFOrbitCamera( MAT );            // Main Camera Object
+    CTR     = new KBOrbitCamCtr( CAM );             // Camera Keyboard Controller.
+    TRAN    = new TransitionStack( 1.0 );
+
+    CAM.orbit( 0, 30 ).zoom( 0.5 );
+    CAM.update();
+
+    TRAN.push( 0 )
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //App.render_by( 1, null );                               // Turn on Render Loop
+
+    App.input.on_input  = CTR.get_on_input();               // Set Input Callback
+    App.on_render       = on_render;                        // What to do before frame is rendered
+
+    /* DEMO 
+    setTimeout( _=>{
+        TRAN
+            .push( 2 ).push( 2 )
+            .push( 21 ).push( 21 )
+            .push( 3 ).push( 3 )
+            .push( 4 ).push( 4 )
+            .push( 5 ).push( 5 )
+            .push( 16 ).push( 16 )
+            .push( 18 ).push( 18 )
+            .push( 10 ).push( 10 )
+            .push( 7 ).push( 7 )
+            .push( 0 ).push( 0 );
+        do_render();
+    }, 2000 );
+    */
+
+    return true;
+}
+
+function on_render( dt, ss ){
+    CAM.update();
+
+    if( TRAN.update( 0.03 ) ){
+        MAT.set( "ASHAPE", TRAN.a );
+        MAT.set( "BSHAPE", TRAN.b );
+        MAT.set( "TSHAPE", TRAN.t );
+        window.requestAnimationFrame( App.render );
+    }
+}
+
+function do_render(){ window.requestAnimationFrame( App.render ); }
+
+//#####################################################
+
+// Need to Pass in Camera Position, Plus View Axis
+class SDFOrbitCamera{
+    // #region MAIN
+    cam_pos     = new Vec3( 0, 0.5, 2.0 );  // Camera Position
+    tar_pos     = new Vec3( 0, 0, 0 );      // Target Position
+    field       = 1.5;                      
+    distance    = Vec3.len( this.cam_pos, this.tar_pos );   // Distance between Cam+Target
+
+    fwd         = new Vec3();   // View Axis
+    lft         = new Vec3();
+    up          = new Vec3();   
+
+    mat         = null;         // Material to Update Camera Axis + Position
+    updated     = true;         // Dirty Flag
+
+    constructor( mat ){
+        this.mat = mat;
+    }
+    // #endregion /////////////////////////////////////////////////
+
+    // #region SETTERS    
+    move( v ){
+        CAM.tar_pos.add( v );
+        CAM.cam_pos.add( v );
+        this.updated = true;
+        return this;
+    }
+
+    orbit( x, y ){
+        let delta = Vec3.sub(  this.cam_pos, this.tar_pos ),
+            polar = Maths.cartesian_to_polar( delta );
+
+        if( x ) polar[ 0 ] += x;
+        if( y ) polar[ 1 ] = Maths.clamp( polar[ 1 ] + y, 0, 89.999999 );
+
+        let pos = Maths.polar_to_cartesian( polar[ 0 ], polar[ 1 ], this.distance );
+        this.cam_pos.from_add( pos, this.tar_pos );
+
+        this.updated = true;
+        return this;
+    }
+
+    zoom( i ){
+        let dir = Vec3.sub(  this.cam_pos, this.tar_pos );
+
+        this.distance = Math.max( 0.5, dir.len() + i );
+        this.cam_pos
+            .from_scale( dir.norm(), this.distance )
+            .add( this.tar_pos );
+
+        this.updated = true;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////
+
+    // #region METHODS
+    update(){
+        if( !this.updated ) return;
+
+        // Compute the Axis of the Camera Looking Direction
+        this.fwd.from_sub( this.tar_pos, this.cam_pos ).norm();
+        this.lft.from_cross( this.fwd, Vec3.UP ).norm();
+        this.up.from_cross( this.lft, this.fwd ).norm();
+        this.fwd.scale( this.field ); // Apply Field of View to FWD Direction
+
+        // Update the Material with all the camera information
+        this.mat.set( "CAM_POS", this.cam_pos );
+        this.mat.set( "CAM_FWD", this.fwd );
+        this.mat.set( "CAM_LFT", this.lft );
+        this.mat.set( "CAM_UP", this.up );
+
+        this.updated = false;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////
+}
+
+// Updates the Camera based on user's Keyboard Input
+class KBOrbitCamCtr{
+    cam         = null; // Camera Object
+    move_scl    = 0.2;  // How  Much to scale the Axis Movement
+    orbit_inc   = 3;    // Angle Increment for Orbit Rotation
+    zoom_inc    = 0.1;  // Increment distance change between Cam and Target
+
+    constructor( c ){ this.cam = c; }
+
+    get_on_input(){ return this.on_input.bind( this ); }
+    on_input( ){ 
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HANDLE MOVEMENT
+        let move    = new Vec3();
+        let tmp     = new Vec3();
+
+        // Compute Look Directions
+        let fwd     = Vec3.sub( this.cam.cam_pos, this.cam.tar_pos );
+        fwd.y = 0;
+        fwd.norm();
+        let lft = Vec3.cross( fwd, Vec3.UP ).norm();
+
+        if( App.input.arrowUp )     move.add( tmp.from_scale( fwd, -this.move_scl ) );
+        if( App.input.arrowDown )   move.add( tmp.from_scale( fwd, this.move_scl ) );
+        if( App.input.arrowRight )  move.add( tmp.from_scale( lft, -this.move_scl ) );
+        if( App.input.arrowLeft )   move.add( tmp.from_scale( lft, this.move_scl ) );
+
+        if( !move.is_zero() ) this.cam.move( move );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HANDLE ORBIT 
+        if( App.input.key_w ) this.cam.orbit( 0, this.orbit_inc );
+        if( App.input.key_s ) this.cam.orbit( 0, -this.orbit_inc );
+        if( App.input.key_a ) this.cam.orbit( this.orbit_inc, 0 );
+        if( App.input.key_d ) this.cam.orbit( -this.orbit_inc, 0 );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HANDLE ZOOM 
+        if( App.input.key_q ) this.cam.zoom( this.zoom_inc );
+        if( App.input.key_e ) this.cam.zoom( -this.zoom_inc );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        App.render();
+    }
+}
+
+//#####################################################
+
+class TransitionStack{
+    // #region MAIN
+    list        = new Array();
+    time        = 0;
+    tran_time   = 2;
+    a           = null;
+    b           = null;
+    t           = null;
+
+    constructor( ttime=2 ){ this.tran_time = ttime; }
+    // #endregion ///////////////////////////////////////////////////////
+
+    // #region XXX
+    push( v ){ this.list.push( v ); return this; }
+    // #endregion ///////////////////////////////////////////////////////
+
+    // #region XXX
+    update( dt ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // How to handle empty list or a single item on list
+        switch( this.list.length ){
+            case 0:
+                if( this.a == null && this.b == null ) return false;
+                this.a = null;
+                this.b = null;
+                this.t = null;
+                return true;
+            case 1:
+                if( this.b == null && this.a == this.list[ 0 ] ) return false
+                this.a = this.list[ 0 ];
+                this.b = null;
+                this.t = 0;
+                return true;
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute Transition
+        this.a = this.list[ 0 ];
+        this.b = this.list[ 1 ];
+        this.t = Math.min( this.tran_time, this.time + dt );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // If at the end of a transition
+        // switch over to next item
+        if( this.t >= this.tran_time ){
+            this.list.shift();
+            this.time   = 0;
+            this.t      = 1;
+        }else{
+            this.time   = this.t;
+            this.t     /= this.tran_time;   // Normalize Time
+        }
+
+        //console.log( "A", this.a, "B", this.b, "T", this.t, this.time );
+        return true;
+    }
+    // #endregion ///////////////////////////////////////////////////////
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"CAM_POS", type:"vec3", value:null },
+        { name:"CAM_FWD", type:"vec3", value:null },
+        { name:"CAM_LFT", type:"vec3", value:null },
+        { name:"CAM_UP",  type:"vec3", value:null },
+        //{ name:"ISHAPE",  type:"int", value:21 },
+        { name:"ASHAPE",  type:"int", value:0 },
+        { name:"BSHAPE",  type:"int", value:1 },
+        { name:"TSHAPE",  type:"float", value:1.0 },
+	], App.ubo.get_array( "Global" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+out vec2 frag_pos;
+
+void main(void){
+    gl_Position = vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Using a NS Quad, so can use it in fragment shader but needs to fix the X Stretch.
+    frag_pos    = vec2( a_pos.x * ( global.screen_size.x / global.screen_size.y ), a_pos.y );
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform vec3 CAM_POS;
+uniform vec3 CAM_FWD;
+uniform vec3 CAM_LFT;
+uniform vec3 CAM_UP;
+
+//uniform int   ISHAPE;
+uniform int   ASHAPE;
+uniform int   BSHAPE;
+uniform float TSHAPE;
+
+out vec4 out_color;
+in vec2 frag_pos;
+
+//-------------------------
+// GOOD QUALITY, BAD PERFORMANCE WHEN VERY CLOSE : TRIES 60, MIN 0.001
+// MEDIUM QUALITY, BETTER PERFORMANCE CLOSE BY   : TRIES 30, MIN 0.005
+const int   MARCH_TRIES     = 80;      // How many attempt to march ray
+const float MARCH_EPSILON   = 0.001;    // Min Distance to SDF Surface
+const float MARCH_MAX_DIST  = 20.0;     // Max Distance to Travel on March
+const float MARCH_START     = 0.0;      // Starting Distance for Ro Marching
+
+float map_func( vec3 p );  // Forward Decoration
+
+struct SDFResult{
+    vec3   hit;
+    float  ao;
+    int    id;
+} SR;
+
+bool ray_march( vec3 ro, vec3 rd ){
+    float d     = MARCH_START;  // How much distance on the ray traveled
+    float rng   = 0.0;          // Distance Range to next closets object
+
+    for( int i = 0; i < MARCH_TRIES && d < MARCH_MAX_DIST; i++ ){
+        rng = map_func( ro + rd * d );  // distance to the closets object
+        
+        //if( rng <= MARCH_EPSILON ){
+        //if( abs( rng ) <= MARCH_EPSILON ){ // Help Fix some artifacts
+
+        if( abs( rng ) <= ( MARCH_EPSILON * d ) ){ // spend less time trying to detail long distance pixels. 
+            SR.hit = ro + rd * d;
+            //SR.ao      = 1.0 - float( i ) / float( MARCH_TRIES - 1 );
+            SR.ao      = 1.0 - d / MARCH_MAX_DIST;
+            return true;
+        }
+        d += rng;   // Add save distance for the next check.
+    }
+    return false;
+}
+
+// OTHER VERSION, COMPILER'S OPTIMIZATION MIGHT CAUSE ISSUES WITH LARGE SETS OF SDF OBJECTS
+uniform int iFrame;
+vec3 normal_sdf( vec3 pos ){
+    #define ZERO min(iFrame,0)
+    vec3 n = vec3( 0.0 );
+    for( int i = ZERO; i < 4; i++ ){
+        vec3 e = 0.5773 * (2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+        n += e * map_func( pos + 0.0005 * e );
+    }
+    return normalize( n );
+}
+
+//-------------------------
+
+float sdf_sphere( vec3 p, float radius ){ return length( p ) - radius; }
+float sdf_box( vec3 p, vec3 b ){
+  vec3 q = abs(p) - b;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+float sdf_round_box( vec3 p, vec3 b, float r ){
+  vec3 q = abs(p) - b;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0) - r;
+}
+float sdf_torus( vec3 p, vec2 t ){
+  vec2 q = vec2(length(p.xz)-t.x,p.y);
+  return length(q)-t.y;
+}
+float sdf_capped_torus( in vec3 p, in vec2 sc, in float ra, in float rb ){
+  p.x = abs(p.x);
+  float k = (sc.y*p.x>sc.x*p.y) ? dot(p.xy,sc) : length(p.xy);
+  return sqrt( dot(p,p) + ra*ra - 2.0*ra*k ) - rb;
+}
+float sdf_link( vec3 p, float le, float r1, float r2 ){
+  vec3 q = vec3( p.x, max(abs(p.y)-le,0.0), p.z );
+  return length(vec2(length(q.xy)-r1,q.z)) - r2;
+}
+float sdf_capped_cylinder( vec3 p, float h, float r ){
+  vec2 d = abs(vec2(length(p.xz),p.y)) - vec2(h,r);
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+float sdf_octahedron( vec3 p, float s ){
+    p = abs(p);
+    float m = p.x + p.y + p.z - s;
+    vec3 r = 3.0*p - m;
+	vec3 q;
+         if( r.x < 0.0 ) q = p.xyz;
+    else if( r.y < 0.0 ) q = p.yzx;
+    else if( r.z < 0.0 ) q = p.zxy;
+    else return m*0.57735027;
+    float k = clamp(0.5*(q.z-q.y+s),0.0,s); 
+    return length(vec3(q.x,q.y-s+k,q.z-k)); 
+}
+float sdf_capped_cone( vec3 p, float h, float r1, float r2 ){
+  vec2 q = vec2( length(p.xz), p.y );
+  vec2 k1 = vec2(r2,h);
+  vec2 k2 = vec2(r2-r1,2.0*h);
+  vec2 ca = vec2(q.x-min(q.x,(q.y<0.0)?r1:r2), abs(q.y)-h);
+  vec2 cb = q - k1 + k2*clamp( dot(k1-q,k2)/dot(k2,k2), 0.0, 1.0 );
+  float s = (cb.x<0.0 && ca.y<0.0) ? -1.0 : 1.0;
+  return s*sqrt( min(dot(ca,ca),dot(cb,cb)) );
+}
+float sdf_pentagon( vec2 p, float r ){
+    const vec3 k = vec3(0.809016994,0.587785252,0.726542528);
+    p.x = abs(p.x);
+    p -= 2.0*min(dot(vec2(-k.x,k.y),p),0.0)*vec2(-k.x,k.y);
+    p -= 2.0*min(dot(vec2( k.x,k.y),p),0.0)*vec2( k.x,k.y);
+    p -= vec2(clamp(p.x,-r*k.z,r*k.z),r);    
+    return length(p)*sign(p.y);
+}
+float sdf_hexagon( vec2 p, float r ){
+    const vec3 k = vec3(-0.866025404,0.5,0.577350269);
+    p = abs(p);
+    p -= 2.0*min(dot(k.xy,p),0.0)*k.xy;
+    p -= vec2(clamp(p.x, -k.z*r, k.z*r), r);
+    return length(p)*sign(p.y);
+}
+float sdf_octogon( vec2 p, float r ){
+    const vec3 k = vec3(-0.9238795325, 0.3826834323, 0.4142135623 );
+    p = abs(p);
+    p -= 2.0*min(dot(vec2( k.x,k.y),p),0.0)*vec2( k.x,k.y);
+    p -= 2.0*min(dot(vec2(-k.x,k.y),p),0.0)*vec2(-k.x,k.y);
+    p -= vec2(clamp(p.x, -k.z*r, k.z*r), r);
+    return length(p)*sign(p.y);
+}
+float sdf_hexagram( vec2 p, float r ){
+    const vec4 k = vec4(-0.5,0.8660254038,0.5773502692,1.7320508076);
+    p = abs(p);
+    p -= 2.0*min(dot(k.xy,p),0.0)*k.xy;
+    p -= 2.0*min(dot(k.yx,p),0.0)*k.yx;
+    p -= vec2(clamp(p.x,r*k.z,r*k.w),r);
+    return length(p)*sign(p.y);
+}
+float sdf_star5(in vec2 p, in float r, in float rf){
+    const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+    const vec2 k2 = vec2(-k1.x,k1.y);
+    p.x = abs(p.x);
+    p -= 2.0*max(dot(k1,p),0.0)*k1;
+    p -= 2.0*max(dot(k2,p),0.0)*k2;
+    p.x = abs(p.x);
+    p.y -= r;
+    vec2 ba = rf*vec2(-k1.y,k1.x) - vec2(0,1);
+    float h = clamp( dot(p,ba)/dot(ba,ba), 0.0, r );
+    return length(p-ba*h) * sign(p.y*ba.x-p.x*ba.y);
+}
+float sdf_star( vec2 p, float r, int n, float m ){
+    // next 4 lines can be precomputed for a given shape
+    float an = 3.141593/float(n);
+    float en = 3.141593/m;  // m is between 2 and n
+    vec2  acs = vec2(cos(an),sin(an));
+    vec2  ecs = vec2(cos(en),sin(en)); // ecs=vec2(0,1) for regular polygon,
+
+    float bn = mod(atan(p.x,p.y),2.0*an) - an;
+    p = length(p)*vec2(cos(bn),abs(sin(bn)));
+    p -= r*acs;
+    p += ecs*clamp( -dot(p,ecs), 0.0, r*acs.y/ecs.y);
+    return length(p)*sign(p.x);
+}
+float sdf_pie( vec2 p, vec2 c, float r ){
+    p.x = abs(p.x);
+    float l = length(p) - r;
+    float m = length(p-c*clamp(dot(p,c),0.0,r)); // c = sin/cos of the aperture
+    return max(l,m*sign(c.y*p.x-c.x*p.y));
+}
+float sdf_horseshoe( in vec2 p, in vec2 c, in float r, in vec2 w ){
+    p.x = abs(p.x);
+    float l = length(p);
+    p = mat2(-c.x, c.y, 
+              c.y, c.x)*p;
+    p = vec2((p.y>0.0)?p.x:l*sign(-c.x),
+             (p.x>0.0)?p.y:l );
+    p = vec2(p.x,abs(p.y-r))-w;
+    return length(max(p,0.0)) + min(0.0,max(p.x,p.y));
+}
+float sdf_vesica( vec2 p, float r, float d ){
+    p = abs(p);
+    float b = sqrt(r*r-d*d);
+    return ((p.y-b)*d>p.x*b) ? length(p-vec2(0.0,b))
+                             : length(p-vec2(-d,0.0))-r;
+}
+float sdf_egg( vec2 p, float ra, float rb ){
+    const float k = sqrt(3.0);
+    p.x = abs(p.x);
+    float r = ra - rb;
+    return ((p.y<0.0)       ? length(vec2(p.x,  p.y    )) - r :
+            (k*(p.x+r)<p.y) ? length(vec2(p.x,  p.y-k*r)) :
+                              length(vec2(p.x+r,p.y    )) - 2.0*r) - rb;
+}
+float sdf_cross( vec2 p, vec2 b, float r ){
+    p = abs(p); p = (p.y>p.x) ? p.yx : p.xy;
+    vec2  q = p - b;
+    float k = max(q.y,q.x);
+    vec2  w = (k>0.0) ? q : vec2(b.y-p.x,-k);
+    return sign(k)*length(max(w,0.0)) + r;
+}
+float sdf_rounded_x( vec2 p, float w, float r ){
+    p = abs(p);
+    return length(p-min(p.x+p.y,w)*0.5) - r;
+}
+float sdf_tri_isosceles( vec2 p, in vec2 q ){
+    p.x = abs(p.x);
+    vec2 a = p - q*clamp( dot(p,q)/dot(q,q), 0.0, 1.0 );
+    vec2 b = p - q*vec2( clamp( p.x/q.x, 0.0, 1.0 ), 1.0 );
+    float s = -sign( q.y );
+    vec2 d = min( vec2( dot(a,a), s*(p.x*q.y-p.y*q.x) ),
+                  vec2( dot(b,b), s*(p.y-q.y)  ));
+    return -sqrt(d.x)*sign(d.y);
+}
+
+float sdf_ellipse( vec2 p, vec2 ab ){
+    p = abs(p); if( p.x > p.y ) {p=p.yx;ab=ab.yx;}
+    float l = ab.y*ab.y - ab.x*ab.x;
+    float m = ab.x*p.x/l;      float m2 = m*m; 
+    float n = ab.y*p.y/l;      float n2 = n*n; 
+    float c = (m2+n2-1.0)/3.0; float c3 = c*c*c;
+    float q = c3 + m2*n2*2.0;
+    float d = c3 + m2*n2;
+    float g = m + m*n2;
+    float co;
+    if( d<0.0 )
+    {
+        float h = acos(q/c3)/3.0;
+        float s = cos(h);
+        float t = sin(h)*sqrt(3.0);
+        float rx = sqrt( -c*(s + t + 2.0) + m2 );
+        float ry = sqrt( -c*(s - t + 2.0) + m2 );
+        co = (ry+sign(l)*rx+abs(g)/(rx*ry)- m)/2.0;
+    }
+    else
+    {
+        float h = 2.0*m*n*sqrt( d );
+        float s = sign(q+h)*pow(abs(q+h), 1.0/3.0);
+        float u = sign(q-h)*pow(abs(q-h), 1.0/3.0);
+        float rx = -s - u - c*4.0 + 2.0*m2;
+        float ry = (s - u)*sqrt(3.0);
+        float rm = sqrt( rx*rx + ry*ry );
+        co = (ry/sqrt(rm-rx)+2.0*g/rm-m)/2.0;
+    }
+    vec2 r = ab * vec2(co, sqrt(1.0-co*co));
+    return length(r-p) * sign(p.y-r.y);
+}
+
+mat3 rot_x( float theta ){ float c = cos(theta); float s = sin(theta); return mat3( 1, 0, 0, 0, c, -s, 0, s, c ); }
+mat3 rot_y( float theta ){ float c = cos(theta); float s = sin(theta); return mat3( c, 0, s, 0, 1, 0, -s, 0, c ); }
+mat3 rot_z( float theta ){ float c = cos(theta); float s = sin(theta); return mat3( c, -s, 0, s, c, 0, 0, 0, 1 ); }
+
+vec3 rot_x90( vec3 p ){  return vec3( p.x, -p.z , p.y ); }
+vec3 rot_xy90( vec3 p ){  return vec3( p.z, p.x , p.y ); }
+
+float sdf_onion( float d, in float r ){ return abs( d ) - r; }
+float sdf_extrusion_y( vec3 p, float d, in float h ){
+    vec2 w = vec2( d, abs(p.y) - h );
+    return min(max(w.x,w.y),0.0) + length(max(w,0.0));
+}
+
+float shape_list( vec3 p, int ISHAPE ){
+    if( ISHAPE == 0 )       return sdf_sphere( p, 1.0 );
+    else if( ISHAPE == 1 )  return sdf_box( p, vec3( 0.8 ) );
+    else if( ISHAPE == 2 )  return sdf_round_box( p, vec3( 0.4 ), 0.4 );
+    else if( ISHAPE == 3 )  return sdf_torus( p, vec2( 0.8, 0.3 ) );
+    else if( ISHAPE == 4 )  return sdf_capped_torus( rot_x90( p ) , vec2( sin(2.4), cos(2.4) ), 0.9, 0.3 );
+    else if( ISHAPE == 5 )  return sdf_link( rot_xy90(p), 0.4, 0.5, 0.2 );
+    else if( ISHAPE == 6 )  return sdf_capped_cylinder( rot_x90(p), 0.4, 0.8 );
+    else if( ISHAPE == 7 )  return sdf_octahedron( p, 1.0 );
+    else if( ISHAPE == 8 )  return sdf_capped_cone( rot_xy90(p), 1.0, 0.7, 0.2 ); 
+    else if( ISHAPE == 9 )  return sdf_extrusion_y( p, sdf_pentagon( p.xz, 0.8 ), 0.4 );
+    else if( ISHAPE == 10 ) return sdf_extrusion_y( p, sdf_hexagon( p.xz, 0.8 ), 0.4 );
+    else if( ISHAPE == 11 ) return sdf_extrusion_y( p, sdf_octogon( p.xz, 0.8 ), 0.4 ); 
+    else if( ISHAPE == 12 ) return sdf_extrusion_y( p, sdf_hexagram( p.xz, 0.5 ), 0.4 ); 
+    else if( ISHAPE == 13 ) return sdf_extrusion_y( p, sdf_star5( p.zx, 1.0, 0.5 ), 0.4 ); 
+    else if( ISHAPE == 14 ) return sdf_extrusion_y( p, sdf_star( p.zx, 1.0, 8, 4.0  ), 0.4 );
+    else if( ISHAPE == 15 ) return sdf_extrusion_y( p, sdf_pie( p.xz, vec2( sin(2.5), cos(2.5) ), 1.0 ), 0.4 );
+    else if( ISHAPE == 16 ) return sdf_extrusion_y( p, sdf_horseshoe( p.xz, vec2(cos(1.3),sin(1.3)), 0.8, vec2(0.9,0.3) ), 0.4 );
+    else if( ISHAPE == 17 ) return sdf_extrusion_y( p, sdf_vesica( p.xz, 1.0, 0.4 ), 0.4 );
+    else if( ISHAPE == 18 ) return sdf_extrusion_y( p, sdf_egg( p.xz, 0.7, 0.03 ), 0.4 );
+    else if( ISHAPE == 19 ) return sdf_extrusion_y( p, sdf_cross( p.xz, vec2(1.1,0.4), 0.05 ), 0.4 );
+    else if( ISHAPE == 20 ) return sdf_extrusion_y( p, sdf_rounded_x( p.xz, 1.0, 0.25 ), 0.4 ) - 0.05;
+    else if( ISHAPE == 21 ) return sdf_extrusion_y( p, sdf_onion( sdf_octogon( p.xz, 0.8 ), 0.1 ), 0.4 ) - 0.2;
+
+    return 0.0;
+}
+
+float get_shape( vec3 p ){
+    float a = shape_list( p, ASHAPE );
+    float b = shape_list( p, BSHAPE );
+    float t = TSHAPE;
+    return a * (1.0-t) + b * t;
+}
+
+//-------------------------
+
+float map_func( vec3 pos ){
+    /**/
+    float d  = get_shape( pos ); //sdf_sphere( pos, 1.0 );
+    float dd = pos.y + 0.001;  // Floor, Need to add some offset else it'll clip half the screen.
+    return min( d, dd );
+    
+    //return pos.y + 0.02;
+}
+
+void main( void ){
+    //vec2 p    = ( 2.0 * gl_FragCoord.xy - global.screen_size ) / global.screen_size.y;
+    vec2 p      = frag_pos.xy;                                      // Comuting Screen Space in VERT Shader instead of FRAG 
+    vec3 rd     = normalize( p.x*CAM_LFT + p.y*CAM_UP + CAM_FWD );  // Compute Ray based on camera Look Axis
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // COLOR SDF MODELS
+    vec3 color = vec3( 0.0 );
+    
+    if( ray_march( CAM_POS, rd ) ){
+        //vec3 norm       = normal_sdf( SR.hit ); // Normal Direction of the SDF Hit Position
+
+        //float len = sdf_sphere( vec3( SR.hit.x, 0.0, SR.hit.z ), 1.0 );
+        float len = get_shape( vec3( SR.hit.x, 0.0, SR.hit.z ) );
+
+        vec3 col = vec3( 1.0 ) - sign( len ) * vec3( 0.1, 0.4, 0.7 );
+        col *= 1.0 - exp( -4.0 * abs( len ) );
+        col *= 0.8 + 0.2 * cos( 128.0 * abs( len ) );
+        col  = mix( col, vec3( 1.0 ), 1.0 - smoothstep( 0.0, 0.015, abs( len ) ) );
+
+        /*
+        // normalized pixel coordinates
+        vec2 uv = (fragCoord*2.0-iResolution.xy)/iResolution.y;
+        
+        // animation
+        float ra = 0.6;
+        float rb = ra*(0.55+0.45*cos(2.0*iTime));
+        
+        // distance
+        float len = sdEgg(uv+vec2(0.,0.2), ra, rb);
+        
+        // coloring
+        vec3 col = vec3(1.0) - sign(len)*vec3(0.1,0.4,0.7);
+        col *= 1.0 - exp(-4.0*abs(len));
+        col *= 0.8 + 0.2*cos(128.0*abs(len));
+        col = mix( col, vec3(1.0), 1.0-smoothstep(0.0,0.015,abs(len)) );
+
+        fragColor = vec4(col, 1.0);
+        */
+        
+        //color = vec3( SR.ao );
+        color = col;
+    }
+
+    out_color = vec4( color, 1.0 );
+    //out_color = vec4( pow( color, vec3(0.4545) ), 1.0 ); // Apply Gamma Correction, Makes the brights brighter
+
+/*
+// signed distance to a regular octogon
+float sdOctogon( in vec2 p, in float r )
+{
+  // pi/8: cos, sin, tan.
+  const vec3 k = vec3(-0.9238795325,   // sqrt(2+sqrt(2))/2 
+                       0.3826834323,   // sqrt(2-sqrt(2))/2
+                       0.4142135623 ); // sqrt(2)-1 
+  // reflections
+  p = abs(p);
+  p -= 2.0*min(dot(vec2( k.x,k.y),p),0.0)*vec2( k.x,k.y);
+  p -= 2.0*min(dot(vec2(-k.x,k.y),p),0.0)*vec2(-k.x,k.y);
+  // Polygon side.
+  p -= vec2(clamp(p.x, -k.z*r, k.z*r), r);
+  return length(p)*sign(p.y);
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+	vec2 p = (2.0*fragCoord-iResolution.xy)/iResolution.y;
+    
+	float d = sdOctogon( p, 0.5 );
+
+    vec3 col = vec3(1.0) - sign(d)*vec3(0.1,0.4,0.7);
+	col *= 1.0 - exp(-4.0*abs(d));
+	col *= 0.8 + 0.2*cos(140.0*d);
+	col = mix( col, vec3(1.0), 1.0-smoothstep(0.0,0.015,abs(d)) );
+
+    
+	fragColor = vec4(col,1.0);
+}
+*/
+
+
+}`;
+
+//#####################################################
+
+function init_ui(){
+    document.getElementById( "dd_shapes" ).addEventListener( "change", (e)=>{
+        let v = parseInt( e.srcElement.value );
+        TRAN.push( v );
+        do_render();
+    });
+}
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%;  }
+    div{ font-family:monospace; font-size:1.2em; color:white; background-color:#00000099; }
+    b{ color:yellow; }
+    i{ color:lime; font-style: normal; }
+    .top_div{ position:fixed; top:0px; left:0px; padding:5px 10px 7px 10px;  border-radius:0px 0px 10px 0px; }
+</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+    <div class="top_div">
+        Arrows [ <b>Move Cam Target</b> ] <i>::</i>
+        WASD [ <b>Orbit Angle</b> ] <i>::</i>
+        QE [ <b>Zoom</b> ]
+    </div>
+
+    <prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+        <select id="dd_shapes" label="Shapes">
+            <option value="0">Sphere</option>
+            <option value="1">Box</option>
+            <option value="2">Round Box</option>
+            <option value="3">Torus</option>
+            <option value="4">Capped Torus</option>
+            <option value="5">Chain Link</option>
+            <option value="6">Capped Cylinder</option>
+            <option value="7">Octahedron</option>
+            <option value="8">Capped Cone</option> 
+            <option value="9">Pentagon</option>
+            <option value="10">Hexagon</option>
+            <option value="11">Octogon</option> 
+            <option value="12">Hexagram</option> 
+            <option value="13">Star 5</option> 
+            <option value="14">Star</option>
+            <option value="15">Pie</option>
+            <option value="16">Horseshoe</option>
+            <option value="17">Vesica</option>
+            <option value="18">Egg</option>
+            <option value="19">Cross</option>
+            <option value="20">X</option>
+            <option value="21">Octogon</option>
+        </select>
+	</prop-panel>
+</body></html>

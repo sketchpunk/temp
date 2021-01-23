@@ -1,2 +1,5 @@
 https://www.clicktorelease.com/blog/creating-spherical-environment-mapping-shader/
 https://github.com/spite/spherical-environment-mapping
+
+
+https://github.com/spite/THREE.EquirectangularToCubemap turn sphere texture into a Cube Map

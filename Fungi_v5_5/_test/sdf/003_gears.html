@@ -1,6 +1,9 @@
 <!DOCTYPE html><script type="module">
 import App, {} from "../../fungi/App.js";
 
+import VolumeCube from "../../fungi.sdf/VolumeCube.js";
+import SDFShader  from "../../fungi.sdf/SDFShader.js";
+
 // https://www.alanzucconi.com/2016/07/01/volumetric-rendering/
 // https://github.com/smkplus/UnityRayMarching
 // https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
@@ -11,9 +14,9 @@ import App, {} from "../../fungi/App.js";
 App
 	.init( true )
     .load_shaders( "LowPoly.js" )
-    .load_pkg( { name:"fungi.sdf" } )
+    //.load_pkg( { name:"fungi.sdf" } )
 	.use_debug()
-	.set_camera( 0, 20, 8, 0, 0.5, 0 )
+	.set_camera( 0, 20, 12, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
@@ -25,13 +28,13 @@ async function init(){
     App.find_entity_com( "GridFloor", "Draw" ).priority = 900;
     App.Debug.set_depth_test( true ).set_priority( 0 );
 
-    App.sdf.shader.new( "Sdf", map_func );
+    SDFShader.new( "Sdf", map_func );
     
     let mat = App.shader.new_material( "Sdf" );
-    let e   = App.sdf.volume.from_origin( "vb", mat );
+    let e   = VolumeCube.from_origin( "vb", mat );
     
     e.node.set_scl( 5.0 );
-    App.sdf.volume.debug( e.node.local );
+    VolumeCube.debug( e.node.local );
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     App.render_by( 1, null );
