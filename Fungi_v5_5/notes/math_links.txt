@@ -26,3 +26,4 @@ https://mindbleach.com/words/tag/mechanical-logic/
 
 CURVES
 https://observablehq.com/@pamacha/chaikins-algorithm
+https://github.com/nortikin/sverchok/tree/master/nodes/curve

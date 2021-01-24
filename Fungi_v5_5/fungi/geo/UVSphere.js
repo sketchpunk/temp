@@ -174,4 +174,42 @@ function vertsOLD( y_len=18, x_len=25, radius = 0.5, close_loop=true ){
     return out;
 }
 
+// THIS IS A BETTER WAY TO COMPUTE A SPHERE< THIS ONLY DOES A CORNER
+// BUT JUST CHANGE THE STARTING AND RANGES OF THE ANGLES for full sphere
+/*
+function sphere_corner(){
+    let lon     = 0;
+    let lat     = 0; 
+    let radius  = 0.5;
+    let s_lat, c_lat, s_lon, c_lon, x, y, z, i, j;
+
+    for( j=0; j <= 5; j ++ ){
+        lat     =  Maths.PI_270 - Maths.PI_H * ( j / 5 );
+        s_lat   = Math.sin( lat );
+        c_lat   = Math.cos( lat );
+
+        for( i=0; i < 5; i++ ){
+            lon     = Maths.PI_H - Maths.PI_H * (i / 5);
+            s_lon   = Math.sin( lon );
+            c_lon   = Math.cos( lon );
+
+            x       = radius * s_lon * c_lat;
+            z       = radius * s_lon * s_lat;
+            y       = radius * c_lon;
+
+            App.Debug.pnt( [x,y,z] );
+        }
+    }
+
+    // Top Point
+    lon     = Maths.PI_H - Maths.PI_H * (i / 5);
+    s_lon   = Math.sin( lon );
+    c_lon   = Math.cos( lon );
+    x       = radius * s_lon * c_lat;
+    z       = radius * s_lon * s_lat;
+    y       = radius * c_lon;
+    App.Debug.pnt( [x,y,z] );
+}
+*/
+
 export default Sphere;

@@ -56,7 +56,7 @@ https://github.com/wtelford/maya-python-plugins/blob/master/mirror_matrix.py
 
 https://www.babylonjs-playground.com/#4HTBYP#2   IK Pole
 
-
+https://www.linkedin.com/pulse/right-position-polevector-artem-efimovich/ Pole Vector
 
 
 http://www.jimovelmen.com/TutorialPics/IK_solver_descr.htm
