@@ -3,6 +3,8 @@ import App		from "../../fungi/App.js";
 //import Torus	from "../../fungi/geo/Torus.js";
 //import Capsule	from "../../fungi/geo/Capsule.js";
 //import Quad		from "../../fungi/geo/Quad.js";
+
+import UVSphere	from "../../fungi/geo/UVSphere.js";
 import Points 	from "../../fungi/geo/Points.js";
 import Motion 	from "../../fungi.test/Motion.js";
 import GltfUtil from "../../fungi/lib/GltfUtil.js";
@@ -69,9 +71,6 @@ async function init( x ){
     //e_name, json, bin, mat, m_names
     //e = Torus.knot( "shape", mat );
 	//e.Node.set_pos( 0, 1.8, 0 );
-
-	//e = Capsule( "capsule", mat, 8, 5, 0.5, 0.25 );
-	//e.Node.set_pos( 3, 1.8, 0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//mat = gShader.new_material( "mat_floor", { "base_color":"#404040ff"} ).opt_cullface( false );
@@ -187,7 +186,7 @@ const frag_src = `#version 300 es
 		// SPECULAR LIGHT
 		
 		const float specular_strength	= 1.0;
-		const float shininess 			= 32.0;
+		const float shininess 			= 32.0; // If less then 1, becomes more metallic shiny
 
 		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
 		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_pos );		// Dir from Fragment to Camera

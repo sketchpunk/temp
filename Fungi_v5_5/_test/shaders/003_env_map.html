@@ -1,0 +1,222 @@
+<!DOCTYPE html><script type="module">
+import App				from "../../fungi/App.js";
+import XhrQueue			from "../../fungi/lib/XhrQueue.js";
+import Cube				from "../../fungi/geo/Cube.js";
+import GltfUtil 		from "../../fungi/lib/GltfUtil.js";
+
+// Need to learn about Rim Light, Fresnel 
+// https://danielilett.com/2019-06-12-tut2-3-fresnel/
+// http://kylehalladay.com/blog/tutorial/2014/02/18/Fresnel-Shaders-From-The-Ground-Up.html
+// https://learnopengl.com/PBR/Theory
+
+//#####################################################
+App
+	.init()
+	//.load_shaders( "Phong.js" )
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	let dl = await XhrQueue
+		.url( "../../files/textures/forest_cubemap/" ) // RIGHT,LEFT,TOP,BOTTOM,BACK,FRONT
+		.push( "posx.jpg", "negx.jpg", "posy.jpg", "negy.jpg", "posz.jpg", "negz.jpg" )
+		.then();
+
+	load_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+	let [json,bin] = await XhrQueue.url( "../../files/models/", "suzanne_hpoly.gltf", "suzanne_hpoly.bin" ).then();
+
+	let tex = App.texture.new_cube( "cube_map", dl, true );
+	//let mat 	= App.new_mat( "LowPoly" );
+	let mat 	= App.shader.new_material( "env_map", { cube_tex:tex } );
+	mat.options.cullFace = false;
+	
+	//c.frontFace(	c.CCW );			// Dont really need to set it, its ccw by default.
+	// TODO, would be nice to have FrontFace Swop to CW, Then set CullFace = true.
+	// RENDERER ALREADY HAS Something to use cullDir					: { state : gl.ctx.BACK },
+	
+	let gCubeB 	= Cube( "CubeB", mat );
+	gCubeB.node.set_pos( 1.5, 0.5, 0 );
+
+
+	let e = GltfUtil.get_entity( "suzanne", json, bin, mat );
+    e.node.set_pos( 0, 0.6, 0 );
+	
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	//let albedo_tex	= App.gl.load_texture( "albedo_tex", dl[2], false ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
+	//let normal_tex	= App.gl.load_texture( "normal_tex", dl[3], false );
+	//let ao_tex		= App.gl.load_texture( "ao_tex", dl[4], false );
+	//let emiss_tex	= App.gl.load_texture( "emiss_tex", dl[5], false );
+
+	/*
+	let mat = SHADER.new_material( "Texture",{ 
+		base_tex		: albedo_tex, 
+		norm_tex		: normal_tex,
+		ao_tex			: ao_tex,
+		emissive_tex	: emiss_tex,
+	});
+
+	cube = Cube( "Cube", mat );
+	*/
+
+	//let mat	= App.new_mat( "LowPoly" );
+	//let e = GltfUtil.get_mesh( "MeshTest", dl[0], dl[1], mat );
+	//e.Node.set_pos( 0, 1.0, 0 );
+	//gMotion = Motion.rot_by( e, -20, "z" );
+
+	return true;
+}
+
+/*
+https://webglfundamentals.org/webgl/lessons/webgl-cube-maps.html
+https://webglfundamentals.org/webgl/lessons/webgl-environment-maps.html
+https://webglfundamentals.org/webgl/lessons/webgl-skybox.html
+
+var texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+
+const faceInfos = [
+  { target: gl.TEXTURE_CUBE_MAP_POSITIVE_X, faceColor: '#F00', textColor: '#0FF', text: '+X' },
+  { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_X, faceColor: '#FF0', textColor: '#00F', text: '-X' },
+  { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, faceColor: '#0F0', textColor: '#F0F', text: '+Y' },
+  { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, faceColor: '#0FF', textColor: '#F00', text: '-Y' },
+  { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Z, faceColor: '#00F', textColor: '#FF0', text: '+Z' },
+  { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, faceColor: '#F0F', textColor: '#0F0', text: '-Z' },
+];
+faceInfos.forEach((faceInfo) => {
+  const {target, faceColor, textColor, text} = faceInfo;
+  generateFace(ctx, faceColor, textColor, text);
+ 
+  // Upload the canvas to the cubemap face.
+  const level = 0;
+  const internalFormat = gl.RGBA;
+  const format = gl.RGBA;
+  const type = gl.UNSIGNED_BYTE;
+  gl.texImage2D(target, level, internalFormat, format, type, ctx.canvas);
+});
+gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+
+
+attribute vec4 a_position;
+ 
+uniform mat4 u_matrix;
+ 
+varying vec3 v_normal;
+ 
+void main() {
+  // Multiply the position by the matrix.
+  gl_Position = u_matrix * a_position;
+ 
+  // Pass a normal. Since the positions are
+  // centered around the origin we can just 
+  // pass the position
+  v_normal = normalize(a_position.xyz);
+}
+
+
+precision mediump float;
+ 
+// Passed in from the vertex shader.
+varying vec3 v_normal;
+ 
+// The texture.
+uniform samplerCube u_texture;
+ 
+void main() {
+   gl_FragColor = textureCube(u_texture, normalize(v_normal));
+}
+*/
+
+//##############################################################
+
+let SHADER = null;
+function load_shader(){
+	App.shader.new( "env_map", vert_src, frag_src, [
+		{ name:"cube_tex", type:"samplerCube", value:null },
+	], App.ubo.get_array( "Global", "Model" ) );
+}
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+	layout(location=2) in vec2 a_uv;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 cam_pos;
+	out vec2 frag_uv;
+	out vec3 frag_norm;
+	out vec3 frag_pos;
+	out vec3 frag_dir;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		cam_pos			= global.camera_pos;
+		frag_uv			= a_uv;
+		frag_pos		= wpos.xyz;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+		frag_dir 		= normalize( frag_pos );
+		
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+	out vec4 out_color;
+
+	//-------------------------
+	uniform samplerCube cube_tex;
+
+	in vec3 cam_pos;
+	in vec2 frag_uv;
+	in vec3 frag_dir;
+	in vec3 frag_pos;
+	in vec3 frag_norm;
+
+	//-------------------------
+	vec3 light_pos = vec3( 6.0, 10.0, 5.0 );
+
+	void main( void ){
+		vec3 cam_to_frag	= normalize( frag_pos - cam_pos );
+		vec3 f_norm			= normalize( frag_norm );
+		//vec3 reflect_dir	= reflect( cam_to_frag, f_norm );
+		vec3 reflect_dir	= cam_to_frag - 2.0 * dot( f_norm, cam_to_frag ) * f_norm;
+
+		out_color = texture( cube_tex, reflect_dir );
+
+		//~~~~~~~~~~~~~~~~~~~~~
+		// Testing to mix diffuse color with the enviroment map
+		// To make a chrome like
+		vec3 frag_to_light	= normalize( light_pos - frag_pos );
+		float diffuse_rng	= max( dot( f_norm, frag_to_light ) , 0.3 ) * 0.8;
+		vec3 base_color		= vec3( 1.0, 0.0, 1.0 ) * diffuse_rng;
+
+		out_color.rgb = mix( base_color, out_color.rgb, 0.2 );
+	}
+`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

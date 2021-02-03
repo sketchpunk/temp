@@ -46,11 +46,12 @@ class GltfUtil{
 
 		for( i of ary ){			
 			mesh = App.mesh.from_bin( i.name, i, bin, load_skin );
+
 			e.draw.add( mesh, mat, i.draw_mode );
 
-			if( i.rotation )	e.node.set_rot( g.rotation );
-			if( i.position )	e.node.set_pos( g.position );
-			if( i.scale )		e.node.set_scl( g.scale );
+			if( i.rotation )	e.node.set_rot( i.rotation );
+			if( i.position )	e.node.set_pos( i.position );
+			if( i.scale )		e.node.set_scl( i.scale );
 		}
 		
 		return e;

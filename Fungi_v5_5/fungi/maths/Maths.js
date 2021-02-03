@@ -164,6 +164,12 @@ class Maths{
 
 		//static cheap_parabola( t ) { return 1.0 - Math.abs( t * 2.0 - 1.0 ); }
 
+		// Triangle Wave :: y = abs((x++ % 6) - 3);
+		// Square Wave :: y = (x++ % 6) < 3 ? 3 : 0;
+		// Sign Wave :: y = 3 * sin((float)x / 10);
+		// Concave Wave :: y = pow(abs((x++ % 6) - 3), 2.0);
+		// Diff Concave Wave :: y = pow(abs((x++ % 6) - 3), 0.5);
+
 	////////////////////////////////////////////////////////////////////
 	// CURVES
 	////////////////////////////////////////////////////////////////////

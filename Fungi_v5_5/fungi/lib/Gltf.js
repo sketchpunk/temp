@@ -96,11 +96,11 @@ class Gltf{
 				if( node.rotation )		itm.rotation	= node.rotation.slice( 0 );
 				if( node.scale )		itm.scale		= node.scale.slice( 0 );
 			}
-	
+
 			//-------------------------------------------
 			// Get Primitive
 			itm.vertices = this.parse_accessor( attr.POSITION, json, bin, inc_data );
-			if( prim.indices ) 		itm.indices	= this.parse_accessor( prim.indices,	json, bin, inc_data );
+			if( prim.indices != undefined ) itm.indices	= this.parse_accessor( prim.indices,	json, bin, inc_data );
 			if( attr.NORMAL )		itm.normal	= this.parse_accessor( attr.NORMAL,		json, bin, inc_data );
 			if( attr.TEXCOORD_0 )	itm.uv		= this.parse_accessor( attr.TEXCOORD_0,	json, bin, inc_data );
 			if( attr.WEIGHTS_0 )	itm.weights	= this.parse_accessor( attr.WEIGHTS_0,	json, bin, inc_data ); 
