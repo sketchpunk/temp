@@ -7,7 +7,7 @@ import GltfUtil,{Gltf}	from "../../fungi/lib/GltfUtil.js";
 App
 	.init()
 	//.load_shaders( "LowPoly.js" )
-	.set_camera( 50, 20, 4, 0, 0.8, 0 )
+	.set_camera( -60, 20, 3, 0, 0.8, 0 )
 	.task( init )
 	.then();
 
@@ -50,7 +50,7 @@ async function init(){
 	let ao_tex		= App.texture.new( "ao_tex", dl[4] );
 	let emiss_tex	= App.texture.new( "emiss_tex", dl[5] );
 	let mr_tex		= App.texture.new( "mr_tex", dl[6] );
-	let env_tex		= App.texture.new( "env_tex", dl[7] );
+	let env_tex		= App.texture.new( "env_tex", dl[7], false, true ); // Turn On Mips
 
 	let mat = App.shader.new_material( "PhongTex",{ 
 		base_tex		: albedo_tex, 
@@ -271,13 +271,12 @@ const frag_src = `#version 300 es
 	
 	//-------------------------
 	
-	const vec3 light_pos 			= vec3( 3.0, 5.0, 0.0 );
-	const vec3 light_dir 			= vec3( -0.5, -0.5, 0.0 ); // Keep it Normalized
+	const vec3 light_pos 			= vec3( -3.0, 5.0, 1.0 );
+	const vec3 light_dir 			= vec3( 0.5, -0.5, 0.0 ); // Keep it Normalized
 	const vec3 light_color			= vec3( 1.0 );
 
 	const float ambient_strength	= 0.4;
-	const float specular_strength	= 0.5;
-	const float shininess 			= 32.0;
+
 
 	//-------------------------
 
@@ -296,6 +295,35 @@ const frag_src = `#version 300 es
 		vec3 norm = normalize( frag_norm );
   		norm = perturb_normal( norm, -dir_frag_cam, frag_uv, norm_tex ); //
 
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ENVIRONMENT MAP
+		vec3 cam_to_frag	= normalize( frag_pos - frag_cam_pos );
+		vec3 reflect_dir	= cam_to_frag - 2.0 * dot( norm, cam_to_frag ) * norm;
+		//vec4 env 			= texture( env_tex, norm_uv( reflect_dir ) );
+		vec4 mr 			= texture( mr_tex, frag_uv ); // B=Metal, G=Roughness, GLTF Spec Says so
+		
+		// numLevels = 1 + floor(log2(max(w, h, d))) Best guess for # of mip levels.
+		float max_mips		= 5.0; // TODO : Dont hardcode value, it can be different depending on tex size.
+
+		float rough			= mr.g;
+		float metal			= mr.b;
+		float gloss			= 1.0 - mr.g;
+		float reflec		= (metal + gloss) / 2.0;
+
+		// The rougher the surface, Load a higher Mips level to make env blurry.
+		vec4 env 			= textureLod( env_tex, norm_uv( reflect_dir ), max_mips * rough );
+
+		/*
+		gloss = 1.0 - roughness;
+		metal = n;
+
+		gloss == 0, no reflection.
+		gloss == 1 and metal == 1, Full reflection.
+		gloss == 1 and metal == 0, Half Reflection
+		metal == 1 and gloss == 0.5, reflects blurryness
+
+		(1 + 0) * 0.5 
+		*/
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// AMBIENT LIGHT
@@ -304,8 +332,10 @@ const frag_src = `#version 300 es
 
 		// Adding A bit a shadow from a texture, just scales the ambient light
 		float occlusion = texture( ao_tex, frag_uv ).r;
-    	vec3 ambient 	= light_color * ambient_strength * occlusion ; // Comment out if occlusion will scale all light
+		
+		vec3 ambient 	= light_color * ambient_strength;// * occlusion ; // Comment out if occlusion will scale all light
     							// vec3( 0.3 * Diffuse * AmbientOcclusion );
+
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// DIFFUSED LIGHT
@@ -315,40 +345,85 @@ const frag_src = `#version 300 es
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// SPECULAR LIGHT
-		
+		float specular_strength	= 3.0;
+		float shininess 		= 32.0;
+		//vec3 spec_col			= mix( vec3( 0.4 ), env.rgb, mr.b ); // More metal, the more Dielectric color to use/
+
 		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
 		float spec 			= pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
 		vec3 specular 		= specular_strength * spec * light_color;
+		
+		//vec3 specular 		= specular_strength * spec * spec_col;
+		//specular = spec_col * 0.2;
+
+		//float gloss = mr.g;
+		//spec = max( dot( dir_frag_cam, dir_reflect ), 0.0 ); //max(0.0, dot(V, R));
+		//float k = 1.999 / ( gloss * gloss );
+		//spec =  pow( spec, min(10000.0, k) );
+
+		//specular = spec_col * spec;
+
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// EMISSION LIGHT
 
-		vec3 emission = texture( emissive_tex, frag_uv ).rgb;
+		vec4 emission = texture( emissive_tex, frag_uv );
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// ENVIROMENT MAP
-		vec3 cam_to_frag	= normalize( frag_pos - frag_cam_pos );
-		vec3 reflect_dir	= cam_to_frag - 2.0 * dot( norm, cam_to_frag ) * norm;
-		vec4 env 			= texture( env_tex, norm_uv( reflect_dir ) );
-		vec4 mr 			= texture( mr_tex, frag_uv ); // B=Metal, G=Roughness, GLTF Spec Says so
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// out_color = base_clr;
-		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular + emission ), 1.0 );
+		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular ), 1.0 );
+		//out_color = vec4( pow( out_color.rgb, vec3(0.4545) ), 1.0 ); // Apply Gamma Correction, Makes the brights brighter
+		//out_color.rgb *= occlusion;
+
+		// multiply blending
+		out_color.rgb = mix( out_color.rgb, out_color.rgb * env.rgb, reflec * reflec );
+		//out_color.rgb += env.rgb;
+		//out_color.rgb + out_color.rgb env.rgb, metal * gloss );
+
+		
+		out_color.rgb += emission.rgb;
+
+		out_color.rgb = pow( out_color.rgb, vec3( 0.7272 ) ); // org .4545
+
+		out_color.rgb *= occlusion;
+
+
+		// just add emission
+		//out_color.rgb = vec3( metal );
+		//out_color.rgb = vec3( rough );
+		//out_color.rgb = vec3( ( metal + gloss ) * 0.5 );
+		//out_color.rgb = vec3(  rough );
 
 		// Another Approach is to scale all light based on Occlusion, instead of it just effecting ambient light.
-		//out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular + emission ) * occlusion, 1.0 );
+		// out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular ) * occlusion, 1.0 );
 		
 		// out_color = vec4( vec3( occlusion ) , 1.0 ); // See Ambient Occlusion
 
-		
-		
+	/*
+	#ifdef ENVMAP_BLENDING_MULTIPLY
+		outgoingLight = mix( outgoingLight, outgoingLight * envColor.xyz, specularStrength * reflectivity );
+	#elif defined( ENVMAP_BLENDING_MIX )
+		outgoingLight = mix( outgoingLight, envColor.xyz, specularStrength * reflectivity );
+	#elif defined( ENVMAP_BLENDING_ADD )
+		outgoingLight += envColor.xyz * specularStrength * reflectivity;
+	*/
+
+
 		//out_color.rgb += vec3( 1.0, 0.0, 0.0 ) * ; 
 		//if( mr.b > 0.9 ) out_color.r = 1.0;
 
 		//out_color.rgb = vec3( mr.g );
-		out_color.rgb += ( env.rgb * 0.5 * mr.b ) * (1.0- mr.g);
-		//out_color.rgb = vec3( 1.0 - mr.g );
+		//out_color.rgb += ( env.rgb * 0.5 * mr.b ) * (1.0- mr.g);
+		//out_color.rgb = vec3( mr.b );
+
+		//out_color.rgb = env.rgb;
+		
+		//out_color.rgb = mix( env.rgb, out_color.rgb, ( (1.0 - metal) + gloss ) * 0.5 );
+		//out_color.rgb = mix( out_color.rgb, emission.rgb, max( max( emission.r, emission.b ), emission.g ) );
+
+		//out_color.rgb += env.rgb;
+		
 	}
 `;
 
@@ -363,6 +438,8 @@ const frag_src = `#version 300 es
 // https://kcoley.github.io/glTF/extensions/2.0/Khronos/KHR_materials_pbrSpecularGlossiness/
 
 // https://github.com/mrdoob/three.js/blob/master/src/renderers/shaders/ShaderLib/meshphong_frag.glsl.js
+
+// https://github.com/CesiumGS/gltf-pipeline/blob/25177db38c6c7874969acc02da339176d72b2607/lib/processPbrMetallicRoughness.js#L533-L536
 
 // Convert 
 // https://github.com/KhronosGroup/glTF/blob/846a13bff8cfca3cf403598b0f7a409d5724b5e2/extensions/2.0/Khronos/KHR_materials_pbrSpecularGlossiness/examples/convert-between-workflows-bjs/js/babylon.pbrUtilities.js#L12
