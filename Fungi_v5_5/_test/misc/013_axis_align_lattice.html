@@ -1,0 +1,321 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+import UVSphere from "../../fungi/geo/UVSphere.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.task( init )
+	.then();
+
+/*
+https://twitter.com/mvinetwork/status/1358086703328735251
+https://github.com/keenanwoodall/Deform/blob/develop/Code/Runtime/Mesh/Deformers/LatticeDeformer.cs
+
+*/
+
+//#####################################################
+
+async function init(){
+	let al  = new AALattice();
+    let pnt = new Vec3( 0.25, 0.65, 0.0 );
+    
+    //App.Debug.pnt( pnt, "green", 0.1, 3 );
+    //al.voxel_index( pnt );
+
+    let geo = UVSphere.geo(  26, 18, 0.8,  );
+    console.log( geo );
+	//return  App.mesh.from_data( name, geo.vert, 3, geo.idx, geo.norm, geo.uv );
+
+    //for( let v of Vec3.f32buf_iter( geo.vert ) ){
+    //    App.Debug.pnt( v, "green", 0.03 );
+    //}
+    
+    
+    let v = new Vec3();
+    for( let i=0; i < geo.vert.length; i+=3 ){
+        v.x = geo.vert[ i ];
+        v.y = geo.vert[i+1];
+        v.z = geo.vert[i+2];
+
+        al.voxel_index( v );
+
+        App.Debug.pnt( v, "gray", 0.05, 2 );
+    }
+    /**/
+
+	return true;
+}
+
+
+class AALattice{
+    local_pnt	    = new Array();      // List of Lattice Points ( LocalS )
+    offset_dir      = new Array();      // List of Offsets to add to Local Pnts
+    world_pnt       = new Array();      // Update the World Space of the Control Points
+    work_pnt        = new Array();      // World Space Plus Offset
+    ws_min          = new Vec3();       // World Space min corner of the Voxel Chunk, Help compute Voxel Grid
+
+    voxel_div	    = new Vec3();       // Chunk Division into Voxels
+    voxel_div_min   = new Vec3();       // Min Div Coord of Voxel Corner, used for clamping Voxel Coord
+    bound_size      = new Vec3();       // Size of Bounding Box ( Chunk )
+    world_pos	    = new Vec3();       // World Position of Bounding Origins
+    bound_min	    = new Vec3();       // Minimal Point of Box ( LocalS )
+    bound_max	    = new Vec3();       // Maximum Point of Box ( LocalS )
+    voxel_size      = new Vec3();       // Size of Voxel inside chunk
+    voxel_size_inv  = new Vec3();       // Size of Voxel inside chunk - Inverted to Remove Division from Coordnate Conversion
+    xy_cnt          = 0;                // How many points to create one Z order of points
+
+	constructor( min=[-0.5,-0.5,-0.5], max=[0.5,0.5,0.5], div=[2,2,2] ){
+		this.bound_min.copy( min );
+		this.bound_max.copy( max );
+		this.voxel_div.copy( div );
+        this.bound_size.from_sub( max, min );
+        this.voxel_div_min.from_sub( div, [1,1,1] );
+        
+        this.voxel_size.from_div( this.bound_size, div );
+        this.voxel_size_inv.copy( this.voxel_size ).div_inv_scale( 1 );
+
+        this.xy_cnt = (div[0]+1) * (div[1]+1);
+
+		this._gen_pnts();
+	}
+
+	_gen_pnts(){
+        App.Debug.box( this.bound_min, this.bound_max, "gray" );
+        
+        let t, x, y, z, xx, yy, zz;
+        let xlen = this.voxel_div[ 0 ];
+        let ylen = this.voxel_div[ 1 ];
+        let zlen = this.voxel_div[ 2 ];
+        let bmin = this.bound_min;
+        let bmax = this.bound_max;
+
+        for( z=0; z <= zlen; z++ ){
+            t   = z / zlen;
+            zz  = bmin[ 2 ] * (1-t) + bmax[ 2 ] * t;
+
+            for( y=0; y <= ylen; y++ ){
+                t   = y / ylen;
+                yy  = bmin[ 1 ] * (1-t) + bmax[ 1 ] * t;
+
+                for( x=0; x <= xlen; x++ ){
+                    t   = x / xlen;
+                    xx  = bmin[ 0 ] * (1-t) + bmax[ 0 ] * t;
+
+                    App.Debug.pnt( [xx,yy,zz], "green", 0.1, 2 );
+
+                    this.local_pnt.push( new Vec3( xx,yy,zz) );
+                    this.offset_dir.push( new Vec3() );
+                    this.world_pnt.push( new Vec3() );
+                    this.work_pnt.push( new Vec3() );
+                }   
+            }
+        }
+
+    }
+    
+    update_world(){
+        // Compute the World Space and Working Points
+        for( let i=0; i < this.local_pnt.length; i++ ){
+            this.world_pnt[ i ].from_add( this.local_pnt[ i ], this.world_pos );
+            this.work_pnt[ i ].from_add( this.world_pnt[ i ], this.offset_dir[ i ] );
+        }
+
+        // Compute World Space Min Coorner
+        this.ws_min.from_add( this.bound_min, this.world_pos );
+    }
+
+
+    voxel_index( pnt ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let ws_min  = this.ws_min;  
+        let vs_inv  = this.voxel_size_inv;  // Ref to Voxel Inverted Size
+        let vox     = this.voxel_div;       // Ref to Voxel Division
+        let coord   = new Vec3(), 
+            coordi  = new Vec3(),
+            coordt  = new Vec3();
+
+        //let ii= 20;
+        //this.offset_dir[ ii ].x = 1;
+        //this.offset_dir[ ii ].y = -0.5;
+        //this.offset_dir[ ii ].z = 1.5;
+        //this.offset_dir[ 11 ].x = 1.5;
+        //this.offset_dir[ 14 ].x = 1.5;
+        //this.offset_dir[ 20 ].x = 1.5;
+        //this.offset_dir[ 23 ].x = 1.5;
+        
+
+        this.update_world();
+        //App.Debug.pnt( this.world_pnt[ ii ], "yellow", 0.1, 2 );
+        //App.Debug.pnt( this.work_pnt[ ii ], "yellow", 0.1, 2 );
+
+        //App.Debug.pnt( this.work_pnt[ 11 ], "yellow", 0.1, 2 );
+        //App.Debug.pnt( this.work_pnt[ 14 ], "yellow", 0.1, 2 );
+        //App.Debug.pnt( this.work_pnt[ 20 ], "yellow", 0.1, 2 );
+        //App.Debug.pnt( this.work_pnt[ 23 ], "yellow", 0.1, 2 );
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute the relation of the ws point to the ws voxel grid ( without offsets applied )
+        coord.from_sub( pnt, ws_min ).mul( vs_inv );    // Using the corner of chunk as origin, find which voxel the point is in. DIV VS Size, but using invert can use mul since its faster then div
+        coordi.copy( coord )
+            .floor()                                    // Floor to convert to 3D Voxel Coordnate
+            .clamp( [0,0,0], this.voxel_div_min );      // Make Sure Voxel Coords are not over the limit of the max possible corner point
+        
+        coordt.from_sub( coord, coordi )                // Something like a Fract() to get the Linear T
+            .clamp( [0,0,0], [1,1,1] );                 // Need to Clamp T between 0 & 1 else some verts will be moved in wrong dir
+
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute the Local Ppnt Indexes that will make out the voxel that the vertex is in.
+        // We start off with the minimal corner of the voxel then work around. 
+        // BACK         FRONT
+        // c --- d      g --- h
+        // |     |      |     |
+        // a --- b      e --- f
+
+        let a = coordi.z * this.xy_cnt + coordi.y * (vox.x+1) + coordi.x;   // Back, Bottom, Left
+        let b = a + 1;                                                      // Back, Bottom, Right
+        let c = a + vox.x + 1;                                              // Back, Top, Left
+        let d = c + 1;                                                      // Back, Top, Right
+        let e = a + this.xy_cnt;                                            // Front, Bottom, Left 
+        let f = e + 1;                                                      // Front, Bottom, Right
+        let g = f + vox.x;                                                  // Front, Top, Left
+        let h = g + 1;                                                      // Front, Top, Right
+
+        /*
+        App.Debug.pnt( this.world_pnt[a], "green" );
+        App.Debug.pnt( this.world_pnt[b], "yellow" );
+        App.Debug.pnt( this.world_pnt[c], "cyan" );
+        App.Debug.pnt( this.world_pnt[d], "blue" );
+
+        App.Debug.pnt( this.world_pnt[e], "green" );
+        App.Debug.pnt( this.world_pnt[f], "yellow" );
+        App.Debug.pnt( this.world_pnt[g], "cyan" );
+        App.Debug.pnt( this.world_pnt[h], "blue" );
+        */
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Lerp Closures TODO - Should try moving this into methods
+        let min_a, min_b, max_a, max_b, min, max;
+        let cp = this.work_pnt;
+
+        // Lerp a Float Value
+        const lerp = ( a, b, t )=>{ return a * ( 1 - t ) + b * t; };
+
+        // Lerp Axis Position in relation to all 8 Points of the Voxel.
+        const lerp_axis = ( a, b, c, d, e, f, g, h, t0, t1, t2 )=>{
+            min_a = lerp( cp[ a ][ t2 ], cp[ b ][ t2 ], coordt[ t0 ] );
+            max_a = lerp( cp[ c ][ t2 ], cp[ d ][ t2 ], coordt[ t0 ] );
+            min_b = lerp( cp[ e ][ t2 ], cp[ f ][ t2 ], coordt[ t0 ] );
+            max_b = lerp( cp[ g ][ t2 ], cp[ h ][ t2 ], coordt[ t0 ] );
+            min   = lerp( min_a, min_b, coordt[ t1 ] );
+            max   = lerp( max_a, max_b, coordt[ t1 ] );
+            return lerp( min, max, coordt[ t2 ] );
+        };
+
+        // Lerp in relation to the 4 points of a voxel face.
+        const lerp_outer = ( a, b, c, d, t0, t1, t2, offset )=>{
+            min_a = lerp( cp[ a ][ t2 ], cp[ b ][ t2 ], coordt[ t0 ] );
+            min_b = lerp( cp[ c ][ t2 ], cp[ d ][ t2 ], coordt[ t0 ] );
+            min   = lerp( min_a, min_b, coordt[ t1 ] );
+            return pnt[ t2 ] + min + offset;
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute Each Vertice one Axis at a time, weighted by which voxel its in OR closest too.
+        let x,y,z;
+
+        if( coord.x < 0 )                       x = lerp_outer( a, c, e, g, 1, 2, 0, this.voxel_size.x );       // RIGHT
+        else if( coord.x > this.voxel_div.x )   x = lerp_outer( b, d, f, h, 1, 2, 0, -this.voxel_size.x );      // LEFT
+        else                                    x = lerp_axis( a, c, b, d, e, g, f, h, 1, 2, 0 );               // IN
+
+        if( coord.y < 0 )                       y = lerp_outer( a, b, e, f, 0, 2, 1, this.voxel_size.y );       // DOWN         
+        else if( coord.y > this.voxel_div.y )   y = lerp_outer( c, d, g, h, 0, 2, 1, -this.voxel_size.y );      // UP
+        else                                    y = lerp_axis( a, b, c, d, e, f, g, h, 0, 2, 1 );               // IN
+
+        if( coord.z < 0 )                       z = lerp_outer( a, b, c, d, 0, 1, 2, this.voxel_size.z );       // BACK
+        else if( coord.z > this.voxel_div.z )   z = lerp_outer( e, f, g, h, 0, 1, 2, -this.voxel_size.z );      // FORWARD
+        else                                    z = lerp_axis( a, b, e, f, c, d, g, h, 0, 1, 2 );               // IN
+
+
+        pnt[ 0 ] = x;
+        pnt[ 1 ] = y;
+        pnt[ 2 ] = z;
+    }
+}
+
+class AALatticeX{
+	size		= new Vec3();
+	world_pos	= new Vec3();
+	local_pnt	= new Array();
+	offset_pnt  = new Array();
+
+	constructor( x,y,z ){
+		this.size.set( x,y,z );
+		this._gen_pnts();
+	}
+
+	_gen_pnts(){
+		let get_index	= ( res, x, y, z )=>{ return x + y * res.x + z * (res.x * res.y); };
+		let res			= this.size;
+
+		for( let z = 0; z < res.z; z++ ){
+
+			for( let y = 0; y < res.y; y++ ){
+
+				for( let x = 0; x < res.x; x++ ){
+
+					let idx = get_index( res, x, y, z );
+
+					let xx = x / (res.x - 1) - 0.5;
+					let yy = y / (res.y - 1) - 0.5;
+					let zz = z / (res.z - 1) - 0.5;
+
+					//console.log( idx, xx, yy, zz );
+
+					this.local_pnt.push( new Vec3( xx, yy, zz ) );
+					this.offset_pnt.push( new Vec3() );
+
+					App.Debug.pnt( [xx,yy,zz] );
+					
+					//return true;
+				}
+				
+
+			}
+		}
+	}
+
+	find_cube( pnt ){
+		let size = this.size;
+		
+
+		/*
+                // Convert from [-0.5,0.5] space to [0,1]
+                var sourcePosition = transform(meshToTarget, vertices[index]) + float3(0.5f, 0.5f, 0.5f);
+
+                // Determine the negative corner of the lattice cell containing the source position
+                var negativeCorner = new int3((int) (sourcePosition.x * (resolution.x - 1)), (int) (sourcePosition.y * (resolution.y - 1)), (int) (sourcePosition.z * (resolution.z - 1)));
+
+                // Clamp the corner to an acceptable range in case the source vertex is outside or on the lattice bounds
+                negativeCorner = max(negativeCorner, new int3(0, 0, 0));
+                negativeCorner = min(negativeCorner, resolution - new int3(2, 2, 2));
+
+                int index0 = (negativeCorner.x + 0) + (negativeCorner.y + 0) * resolution.x + (negativeCorner.z + 0) * (resolution.x * resolution.y);
+                int index1 = (negativeCorner.x + 1) + (negativeCorner.y + 0) * resolution.x + (negativeCorner.z + 0) * (resolution.x * resolution.y);
+                int index2 = (negativeCorner.x + 0) + (negativeCorner.y + 1) * resolution.x + (negativeCorner.z + 0) * (resolution.x * resolution.y);
+                int index3 = (negativeCorner.x + 1) + (negativeCorner.y + 1) * resolution.x + (negativeCorner.z + 0) * (resolution.x * resolution.y);
+                int index4 = (negativeCorner.x + 0) + (negativeCorner.y + 0) * resolution.x + (negativeCorner.z + 1) * (resolution.x * resolution.y);
+                int index5 = (negativeCorner.x + 1) + (negativeCorner.y + 0) * resolution.x + (negativeCorner.z + 1) * (resolution.x * resolution.y);
+                int index6 = (negativeCorner.x + 0) + (negativeCorner.y + 1) * resolution.x + (negativeCorner.z + 1) * (resolution.x * resolution.y);
+                int index7 = (negativeCorner.x + 1) + (negativeCorner.y + 1) * resolution.x + (negativeCorner.z + 1) * (resolution.x * resolution.y);
+		*/
+	}
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

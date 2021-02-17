@@ -61,6 +61,8 @@ class Vec3 extends Float32Array{
 		from_buf( ary, i ){ this[0] = ary[i]; this[1] = ary[i+1]; this[2] = ary[i+2]; return this;}
 		to_buf( ary, i ){ ary[i] = this[0]; ary[i+1] = this[1]; ary[i+2] = this[2]; return this; }
 
+		push_to( ary ){ ary.push( this[0], this[1], this[2] ); return this; }
+
 		//-------------------------------------------
 
 		set_len( len ){ return this.norm().scale(len); }
@@ -308,6 +310,13 @@ class Vec3 extends Float32Array{
 			out[2] = this[2] * mag;
 
 			return out;
+		}
+
+		clamp( min, max ){
+			this[ 0 ] = Math.min( Math.max( this[0], min[ 0 ] ), max[ 0 ] );
+			this[ 1 ] = Math.min( Math.max( this[1], min[ 1 ] ), max[ 1 ] );
+			this[ 2 ] = Math.min( Math.max( this[2], min[ 2 ] ), max[ 2 ] );
+			return this;
 		}
 
 
@@ -588,6 +597,25 @@ class Vec3 extends Float32Array{
 			let i, ary = new Array( len );
 			for(i=0; i < len; i++) ary[i] = new Vec3();
 			return ary;
+		}
+
+		// Create an Iterator Object that allows an easy
+		// way to loop a Float32Buffer
+		static f32buf_iter( buf ){
+			let result  = { value:new Vec3(), done:false },
+				len     = buf.length,
+				i       = 0;
+		
+			let next    = ()=>{
+				if( i >= len ) result.done = true;
+				else{
+					result.value.from_buf( buf, i );
+					i += 3;
+				}
+				return result;
+			};
+		
+			return { [Symbol.iterator](){ return { next }; } };
 		}
 }
 

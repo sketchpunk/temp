@@ -1,0 +1,351 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+import UVSphere     from "../../fungi/geo/UVSphere.js";
+import DragPoints   from "../../fungi.misc/DragPoints.js";
+
+//#####################################################
+App
+	.init( false )
+    .use_debug()                    // Need Debug Rendering Available
+    .use_events()                   // DragPoints needs Event Dispatcher Running
+    .load_shaders( "LowPoly.js" )   
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.task( init )
+    .then();
+
+/*
+https://twitter.com/mvinetwork/status/1358086703328735251
+https://github.com/keenanwoodall/Deform/blob/develop/Code/Runtime/Mesh/Deformers/LatticeDeformer.cs
+*/
+
+//#####################################################
+let LAT     = null; // Global Lattice Reference
+let STATE   = {};   // Global State of some Objects for Rendering Demo
+
+function dp_move( idx, ws_pnt ){    
+    App.Debug.reset();                          // Clear out Debug Render
+
+    LAT
+        .set_worldspace_offset( idx, ws_pnt )   // Use Drag Point to Update Lattice Offset Point
+        .update_world()                         // Recompute World Space Data
+        .debug( true, 2 );                      // Draw Dashed Lines using Debug Render
+
+    apply_lattice();                            // Apply Lattice to Mesh
+}
+
+function apply_lattice(){
+    let a = STATE.s_vert,
+        b = STATE.d_vert,
+        v = new Vec3();
+
+    for( let i=0; i < b.length; i+=3 ){
+        v.from_buf( a, i );     // Get Vert Position out of Static Flat Buffer
+        LAT.apply_vert( v );    // Apply Lattice on Vert
+        v.to_buf( b, i );       // Copy new Vert position to Dynamic Flat Buffer
+    }
+
+    App.buffer.update_data( STATE.buf_vert, b );    // Update Vertex Buffer on GPU
+}
+
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // System that handles user interactivity with points in World Space
+    DragPoints
+        .init()                         // Startup System
+        .set_move_handler( dp_move )    // Callback for when a point's position changes
+        .set_priority( 1000 )           // Render Last
+        .set_depth_test( false );       // Disable Depth testing to render over everything.
+    
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // LATTICE SETUP
+    LAT  = new AALattice().update_world();
+
+    // Create Drag Points based on the Lattice Points
+    let v;
+    for( v of LAT.world_pnt ) DragPoints.pnt( v, null, "gray" );
+
+    LAT.debug( true, 2 ); // Use Debug to display Grid lines
+
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Maunally UV Sphere mesh with its vertex buffer set as dynamic  
+    let geo         = UVSphere.geo(  26, 18, 0.8  );                    // Generate Geometry Data
+    let vert_buf    = App.buffer.new_array( geo.vert, 3, false, true ); // Vertex Buffer, Not Static
+    let idx_buf     = App.buffer.new_element( geo.idx, true, true );    // Index Buffer, Static
+    
+    let mesh        = App.mesh.from_buffer_config([                     // Generate VAO ( Mesh )
+	    { name: "indices", buffer: idx_buf },
+	    { name: "vertices", buffer: vert_buf, attrib_loc:0, size:3, stride_len:0, offset:0 },
+    ], "UVSphere", geo.idx.length );
+
+    let eSphere     = App.mesh_entity( "Sphere", mesh, "LowPoly", App.mesh.TRI_STRIP ); // Create a Drawing Entity
+
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Save some data globally to easily apply lattice to mesh vertices
+    STATE.s_vert    = geo.vert;                             // Keep Original Data for the Mesh Verts
+    STATE.d_vert    = new Float32Array( geo.vert.length );  // Going to Transform and save vertex here
+    STATE.buf_vert  = vert_buf;                             // Safe Buffer Ref to update with d_vert
+
+	return true;
+}
+
+
+class AALattice{
+    // #region MAIN
+    local_pnt	    = new Array();      // List of Lattice Points ( LocalS )
+    offset_dir      = new Array();      // List of Offsets to add to Local Pnts
+    world_pnt       = new Array();      // Update the World Space of the Control Points
+    work_pnt        = new Array();      // World Space Plus Offset
+    ws_min          = new Vec3();       // World Space min corner of the Voxel Chunk, Help compute Voxel Grid
+
+    voxel_div	    = new Vec3();       // Chunk Division into Voxels
+    voxel_div_min   = new Vec3();       // Min Div Coord of Voxel Corner, used for clamping Voxel Coord
+    bound_size      = new Vec3();       // Size of Bounding Box ( Chunk )
+    world_pos	    = new Vec3();       // World Position of Bounding Origins
+    bound_min	    = new Vec3();       // Minimal Point of Box ( LocalS )
+    bound_max	    = new Vec3();       // Maximum Point of Box ( LocalS )
+    voxel_size      = new Vec3();       // Size of Voxel inside chunk
+    voxel_size_inv  = new Vec3();       // Size of Voxel inside chunk - Inverted to Remove Division from Coordnate Conversion
+    xy_cnt          = 0;                // How many points to create one Z order of points
+
+	constructor( min=[-0.5,-0.5,-0.5], max=[0.5,0.5,0.5], div=[2,2,2] ){
+		this.bound_min.copy( min );
+		this.bound_max.copy( max );
+		this.voxel_div.copy( div );
+        this.bound_size.from_sub( max, min );
+        this.voxel_div_min.from_sub( div, [1,1,1] );
+        
+        this.voxel_size.from_div( this.bound_size, div );
+        this.voxel_size_inv.copy( this.voxel_size ).div_inv_scale( 1 );
+
+        this.xy_cnt = (div[0]+1) * (div[1]+1);
+
+		this._gen_pnts();
+    }
+    // #endregion /////////////////////////////////////////////////////////////////
+
+    // #region PRIVATE METHODS
+    
+	_gen_pnts(){ // Generate All the Points of a Lattice.
+        let t, x, y, z, xx, yy, zz;
+        let xlen = this.voxel_div[ 0 ];
+        let ylen = this.voxel_div[ 1 ];
+        let zlen = this.voxel_div[ 2 ];
+        let bmin = this.bound_min;
+        let bmax = this.bound_max;
+
+        for( z=0; z <= zlen; z++ ){
+            t   = z / zlen;
+            zz  = bmin[ 2 ] * (1-t) + bmax[ 2 ] * t;
+
+            for( y=0; y <= ylen; y++ ){
+                t   = y / ylen;
+                yy  = bmin[ 1 ] * (1-t) + bmax[ 1 ] * t;
+
+                for( x=0; x <= xlen; x++ ){
+                    t   = x / xlen;
+                    xx  = bmin[ 0 ] * (1-t) + bmax[ 0 ] * t;
+
+                    this.local_pnt.push( new Vec3( xx,yy,zz) );
+                    this.offset_dir.push( new Vec3() );
+                    this.world_pnt.push( new Vec3() );
+                    this.work_pnt.push( new Vec3() );
+                }   
+            }
+        }
+
+    }
+    
+    // #endregion /////////////////////////////////////////////////////////////////
+
+    // #region SETTERS
+
+    set_worldspace_offset( idx, ws_pnt ){ // Translate WS position as an Offset Value
+        this.offset_dir[ idx ].from_sub( ws_pnt, this.world_pnt[ idx ] );
+        return this;
+    }
+
+    // Set the ws origin position of the lattice
+    set_pos( x, y, z ){ this.world_pos.set( x, y, z ); return this; }
+    
+    // Set raw offset value for a lattice point
+    set_offset( i, x, y, z ){ this.offset_dir[ i ].set( x, y, z ); return this; }
+
+    // #endregion /////////////////////////////////////////////////////////////////
+
+    // #region PUBLIC METHODS
+    
+    // Recompute the World Space Voxel Points and the Working points ( offset + world )
+    update_world(){
+        // Compute the World Space and Working Points
+        for( let i=0; i < this.local_pnt.length; i++ ){
+            this.world_pnt[ i ].from_add( this.local_pnt[ i ], this.world_pos );
+            this.work_pnt[ i ].from_add( this.world_pnt[ i ], this.offset_dir[ i ] );
+        }
+
+        // Compute World Space Min Coorner
+        this.ws_min.from_add( this.bound_min, this.world_pos );
+
+        return this;
+    }
+
+    apply_vert( pnt ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let ws_min  = this.ws_min;  
+        let vs_inv  = this.voxel_size_inv;  // Ref to Voxel Inverted Size
+        let vox     = this.voxel_div;       // Ref to Voxel Division
+        let coord   = new Vec3(),           // Raw Voxel Coordnates
+            coordi  = new Vec3(),           // Integer Voxel Coords clamped to max possible bottom left corner ( A )
+            coordt  = new Vec3();           // Lerp Time value a PNT is in relation to its closest voxel
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute the relation of the ws point to the ws voxel grid ( without offsets applied )
+        coord.from_sub( pnt, ws_min ).mul( vs_inv );    // Using the corner of chunk as origin, find which voxel the point is in. DIV VS Size, but using invert can use mul since its faster then div
+        coordi.copy( coord )
+            .floor()                                    // Floor to convert to 3D Voxel Coordnate
+            .clamp( [0,0,0], this.voxel_div_min );      // Make Sure Voxel Coords are not over the limit of the max possible corner point
+        
+        coordt.from_sub( coord, coordi )                // Something like a Fract() to get the Linear T
+            .clamp( [0,0,0], [1,1,1] );                 // Need to Clamp T between 0 & 1 else some verts will be moved in wrong dir
+
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute the Local Ppnt Indexes that will make out the voxel that the vertex is in.
+        // We start off with the minimal corner of the voxel then work around. 
+        // BACK         FRONT
+        // c --- d      g --- h
+        // |     |      |     |
+        // a --- b      e --- f
+
+        let a = coordi.z * this.xy_cnt + coordi.y * (vox.x+1) + coordi.x;   // Back, Bottom, Left
+        let b = a + 1;                                                      // Back, Bottom, Right
+        let c = a + vox.x + 1;                                              // Back, Top, Left
+        let d = c + 1;                                                      // Back, Top, Right
+        let e = a + this.xy_cnt;                                            // Front, Bottom, Left 
+        let f = e + 1;                                                      // Front, Bottom, Right
+        let g = f + vox.x;                                                  // Front, Top, Left
+        let h = g + 1;                                                      // Front, Top, Right
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Lerp Closures TODO - Should try moving this into methods
+        let min_a, min_b, max_a, max_b, min, max;
+        let cp = this.work_pnt;
+
+        // Lerp a Float Value
+        const lerp = ( a, b, t )=>{ return a * ( 1 - t ) + b * t; };
+
+        // Lerp Axis Position in relation to all 8 Points of the Voxel.
+        const lerp_axis = ( a, b, c, d, e, f, g, h, t0, t1, t2 )=>{
+            min_a = lerp( cp[ a ][ t2 ], cp[ b ][ t2 ], coordt[ t0 ] );
+            max_a = lerp( cp[ c ][ t2 ], cp[ d ][ t2 ], coordt[ t0 ] );
+            min_b = lerp( cp[ e ][ t2 ], cp[ f ][ t2 ], coordt[ t0 ] );
+            max_b = lerp( cp[ g ][ t2 ], cp[ h ][ t2 ], coordt[ t0 ] );
+            min   = lerp( min_a, min_b, coordt[ t1 ] );
+            max   = lerp( max_a, max_b, coordt[ t1 ] );
+            return lerp( min, max, coordt[ t2 ] );
+        };
+
+        // Lerp in relation to the 4 points of a voxel face.
+        const lerp_outer = ( a, b, c, d, t0, t1, t2, offset )=>{
+            min_a = lerp( cp[ a ][ t2 ], cp[ b ][ t2 ], coordt[ t0 ] );
+            min_b = lerp( cp[ c ][ t2 ], cp[ d ][ t2 ], coordt[ t0 ] );
+            min   = lerp( min_a, min_b, coordt[ t1 ] );
+            return pnt[ t2 ] + min + offset;
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Compute Each Vertice one Axis at a time, weighted by which voxel its in OR closest too.
+        let x,y,z;
+
+        if( coord.x < 0 )                       x = lerp_outer( a, c, e, g, 1, 2, 0, this.voxel_size.x );       // RIGHT
+        else if( coord.x > this.voxel_div.x )   x = lerp_outer( b, d, f, h, 1, 2, 0, -this.voxel_size.x );      // LEFT
+        else                                    x = lerp_axis( a, c, b, d, e, g, f, h, 1, 2, 0 );               // IN
+
+        if( coord.y < 0 )                       y = lerp_outer( a, b, e, f, 0, 2, 1, this.voxel_size.y );       // DOWN         
+        else if( coord.y > this.voxel_div.y )   y = lerp_outer( c, d, g, h, 0, 2, 1, -this.voxel_size.y );      // UP
+        else                                    y = lerp_axis( a, b, c, d, e, f, g, h, 0, 2, 1 );               // IN
+
+        if( coord.z < 0 )                       z = lerp_outer( a, b, c, d, 0, 1, 2, this.voxel_size.z );       // BACK
+        else if( coord.z > this.voxel_div.z )   z = lerp_outer( e, f, g, h, 0, 1, 2, -this.voxel_size.z );      // FORWARD
+        else                                    z = lerp_axis( a, b, e, f, c, d, g, h, 0, 1, 2 );               // IN
+
+        // Save value back to point reference
+        pnt.set( x, y, z );
+        //pnt[ 0 ] = x;
+        //pnt[ 1 ] = y;
+        //pnt[ 2 ] = z;
+    }
+
+    // #endregion /////////////////////////////////////////////////////////////////
+
+    // #region MISC
+
+    debug( use_work=true, draw=3 ){ // Use Debug Render to draw the points and lines of a Lattice Grid
+        let v, i, idx;
+        let xlen1   = this.voxel_div[ 0 ] + 1;  // Needed for Index/Voxel Coord conversion
+        let xlen    = this.voxel_div[ 0 ];      // Test Axis line Drawing
+        let ylen    = this.voxel_div[ 1 ];
+        let zlen    = this.voxel_div[ 2 ];
+        let coord   = new Vec3();               // Voxel Coordnate
+        let tmp     = new Vec3();               // Temp var for vector math
+
+        let pnts    = ( use_work )? this.work_pnt : this.world_pnt;
+
+        let draw_pnts = ( ( draw & 1 ) != 0 );
+        let draw_lns  = ( ( draw & 2 ) != 0 );
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        const dashed  = true;
+        const ln_col  = "gray";
+        const pnt_col = "green";
+
+        const to_idx  = ( v )=>{ return v[2] * this.xy_cnt + v[1] * xlen1 + v[ 0 ]; };
+        const to_xyz  = ( i, c )=>{
+            c[2] = Math.floor( i / this.xy_cnt );
+            c[1] = Math.floor( (i - c[2] * this.xy_cnt) / xlen1 );
+            c[0] = i % xlen1;
+        };
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        for( i=0; i < this.world_pnt.length; i++ ){
+            //--------------------------------
+            // Draw Points
+            v = pnts[ i ];
+            if( draw_pnts ) App.Debug.pnt( v, pnt_col, 0.05, 1 );
+
+            //--------------------------------
+            // Draw Lines
+            if( !draw_lns ) continue;
+            
+            to_xyz( i, coord ); // Convert Idex to XYZ Voxel Coords
+
+            if( coord.y < ylen ){
+                idx = to_idx( tmp.from_add( coord, Vec3.UP ) );
+                App.Debug.ln( v, pnts[ idx ], ln_col, ln_col, dashed );
+            }
+
+            if( coord.z < zlen ){
+                idx = to_idx( tmp.from_add( coord, Vec3.FORWARD ) );
+                App.Debug.ln( v, pnts[ idx ], ln_col, ln_col, dashed );
+            }
+
+            if( coord.x < xlen ){
+                idx = to_idx( tmp.from_add( coord, Vec3.LEFT ) );
+                App.Debug.ln( v, pnts[ idx ], ln_col, ln_col, dashed );
+            }
+        }
+
+        return this;
+    }
+    
+    // #endregion /////////////////////////////////////////////////////////////////
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } 	from "../../fungi/App.js";
+
+import Wireframe    from "../../fungi/shaders/Wireframe.js";
+import Grid         from "../../fungi/geo/Grid.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "BaseColor.js" )
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.task( init )
+	.then();
+
+/*
+
+https://jeremybouny.fr/en/articles/webgl_lod/
+
+*/
+
+//#####################################################
+
+async function init(){
+
+	let geo = Geo.new_vert_indice();
+
+	create_grid_verts( geo, 1, 1, 4, 4 );
+	grid_alt_tri_idx( geo, 4, 4 );
+	
+	
+	let mesh 	= geo.to_mesh();
+	let mat     = App.shader.new_material( "BaseColor", null, { cullFace:true } );
+    let e       = App.mesh_entity( "Grid", mesh, mat, App.mesh.TRI );
+	//console.log( mesh );
+	e.node.set_pos( 0, 0.5, 0 );
+
+	Wireframe.append_tri( e.draw, geo.get_array("indices"), geo.get_array("vertices"), { line_color:"#000000ff", face_color:"#00000000" } );
+	
+
+	//for( let v of geo.attrib_iter( "vertices", 3 ) ) App.Debug.pnt( v );
+	
+	//console.log( geo );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //geo( w=1, h=1, x_cells=2, y_cells=2, center_offset=false, tri="tri" )
+
+	/*
+    let geo = Grid.geo( 20, 20, 40, 40, true, TRI );
+    let scl = 0.2;
+    let ymax = 2;
+    let n;
+
+    
+    //simplex2:simplex2, simplex3:simplex3, perlin2:perlin2
+    for( let i=0; i < geo.vert.length; i+=3 ){
+        n = Noise.simplex2( geo.vert[ i+0] * scl, geo.vert[ i+2] * scl );
+        geo.vert[ i+1 ] = (n * 0.5 + 0.5 ) * ymax;
+    }
+
+    //Grid.debug_verts( geo.vert );
+    let d_mode  = ( TRI == "tri" )? App.mesh.TRI : App.mesh.TRI_STRIP;
+    let mesh    = App.mesh.from_data( "Grid", geo.vert, 3, geo.idx );
+    let mat     = App.shader.new_material( "LowPoly", null, { cullFace:false } );
+    let e       = App.mesh_entity( "Grid", mesh, mat, d_mode );
+    e.node.set_pos( 0, 0.1, 0 );
+
+    if( TRI == "tri" )  Wireframe.append_tri( e.draw, geo.idx, geo.vert, { line_color:"#ffffffff", face_color:"#00000000" } );
+    else                Wireframe.append_tri_strip( e.draw, geo.idx, geo.vert, { line_color:"#ffffffff", face_color:"#00000000" } );
+    */
+
+
+	return true;
+}
+
+//#####################################################
+
+class Geo{
+	// #region MAIN
+	attrib = new Map();
+	// #endregion ////////////////////////////////////////////////////////////
+	
+	// #region GETTER/SETTERS
+	add_attrib( name, type="float", size=null ){
+		let info = {
+			name : name,
+			type : type,
+			data : (size)? new Array( size ) : new Array(),
+		};
+		this.attrib.set( name, info );
+		return this;
+	}
+
+	get_array( name ){
+		let i = this.attrib.get( name );
+		if( !i ){
+			console.error( "Geo Attrib not found :", name );
+			return null;
+		}
+		return i.data;
+	}
+
+	to_type( name ){
+		let a = this.attrib.get( name );
+		if( !a ) return null;
+
+		switch( a.type ){
+			case "float"	: return new Float32Array( a.data );
+			case "uint16"	: return new Uint16Array( a.data );
+		}
+
+		return null;
+	}
+
+	to_mesh( name="NoNameGeo", vert_len=3 ){
+		let vert	= this.to_type( "vertices" );
+		let idx		= this.to_type( "indices" );
+		return App.mesh.from_data( name, vert, vert_len, idx );
+	}
+	// #endregion ////////////////////////////////////////////////////////////
+
+	// #region SPECIALTY
+	attrib_iter( name, size=3 ){
+		return { [Symbol.iterator]:()=>{ 
+			let j,i	= 0;
+			let out	= { value:new Array( size ), done:false };
+			let ary = this.attrib.get( name ).data;
+			let len = ary.length;
+			return {
+				next: function(){
+					for( j=0; j < size; j++ ) out.value[ j ] = ary[ i++ ];
+					
+					if( i > len ) out.done = true;
+					return out;
+				}
+			} 
+		} };
+	}
+	// #endregion ////////////////////////////////////////////////////////////
+
+	// #region STATIC BUILDERS
+	static new_vert(){ return new Geo().add_attrib( "vertices" ); }
+	static new_vert_indice(){ return new Geo().add_attrib( "vertices" ).add_attrib( "indices", "uint16" ); }
+	// #endregion ////////////////////////////////////////////////////////////
+}
+
+
+function create_grid_verts( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
+	let vert	= geo.get_array( "vertices" ),
+		x_inc   = w / x_cells,
+		y_inc   = h / y_cells,
+		v       = new Vec3(),
+		vv      = new Vec3(),
+		offset  = [0,0,0],
+		xx, yy;
+
+	if( center_offset ){
+		offset[ 0 ] = -w * 0.5;
+		offset[ 2 ] = -h * 0.5;
+	}
+
+	for( yy=0; yy <= y_cells; yy++ ){
+		v.z = yy * y_inc;
+
+		for( xx=0; xx <= x_cells; xx++ ){
+			v.x = xx * x_inc;  //App.Debug.pnt( v );
+			vv.from_add( v, offset ).push_to( vert );
+		}
+	}
+}
+
+function grid_alt_tri_idx( geo, x_cells, y_cells ){
+	let ary     = geo.get_array( "indices" ),
+		col_cnt = x_cells + 1,
+		x, y, a, b, c, d, bit;
+
+	for( y=0; y < y_cells; y++ ){
+		bit = y & 1; // Alternate the starting Quad Layout for every row 
+
+		for( x=0; x < x_cells; x++ ){
+			a   = y * col_cnt + x;
+			b   = a + col_cnt;
+			c   = b + 1
+			d   = a + 1;
+			// Alternate the Quad Layout for each cell
+			if( ( x & 1 ) == bit )	ary.push( d, a, b, b, c, d ); // Front Slash
+			else					ary.push( a, b, c, c, d, a ); // Back Slash
+		}
+	}
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

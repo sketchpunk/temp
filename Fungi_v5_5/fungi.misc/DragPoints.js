@@ -54,11 +54,16 @@ export default {
 	//pnt					: function( p, data=null, color="red" ){ ePnt.hitpoints.add( p, data, color ); return this; },
 	pnt					: function(){ ePnt.hitpoints.add.apply( ePnt.hitpoints, arguments ); return this; },
 	move				: function( pos, idx=null ){ ePnt.hitpoints.move( pos, idx ); return this; },
+	
 	set_move_handler	: function( fn ){ Gizmo_Move_Handler = fn; return this; },
+	set_state_handler	: function( fn ){ ePnt.hitpoints.on_state_chg = fn; return this; },
 
 	set_select_color	: function( c ){ ePnt.hitpoints.sel_color = c; return this; },
 
 	get_pos				: function(){ ePnt.hitpoints.get_pos.apply( ePnt.hitpoints, arguments ); return this; },
+
+	set_priority		: function( i ){ ePnt.draw.priority = i; return this; },
+	set_depth_test		: function( s ){ ePnt.draw.items[0].material.options.depthTest = s; return this; },
 };
 
 //get_pos_array 		: function(){ return ePnt.hitpoints.get_pos_array(); },

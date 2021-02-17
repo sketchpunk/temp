@@ -16,14 +16,15 @@ class HitPoints{
     // #endregion //////////////////////////////////////////////////////////
 
     // #region PROPERTIES & CONTRUCTOR
-	points		= new Array();
-	updated		= true;
-	sel_idx 	= null;
-	pnts 	 	= null;
-	pnt_size	= 0.07;
-	pnt_shape	= 1;
-	hit_range	= 0.07;
-	sel_color	= "green";
+	points			= new Array();
+	updated			= true;
+	sel_idx			= null;
+	pnts			= null;
+	pnt_size		= 0.07;
+	pnt_shape		= 1;
+	hit_range		= 0.07;
+	sel_color		= "green";
+	on_state_chg	= null;
 
 	constructor(){}
 	init(){
@@ -62,7 +63,9 @@ class HitPoints{
 			p				= this.points[ idx ];
 			p.color			= this.sel_color;
             this.sel_idx	= idx;
-            this.updated	= true;
+			this.updated	= true;
+
+			if( this.on_state_chg ) this.on_state_chg( true, idx, p.pos );
 		}
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -105,8 +108,11 @@ class HitPoints{
 			let p = this.points[ this.sel_idx ];
 			p.color = p.base_color;
 
+			let i = this.sel_idx;
             this.sel_idx = null;
-            this.updated = true;
+			this.updated = true;
+			
+			if( this.on_state_chg ) this.on_state_chg( false, i, p.pos );
         }
         return this;
     }
@@ -144,6 +150,8 @@ class HitPoints{
 		this.updated = true;
 		return this;
 	}
+
+	clear(){ this.deselect(); this.pnts.length = 0; this.updated = true; return this; }
     // #endregion //////////////////////////////////////////////////////////
 
 	// #region MISC

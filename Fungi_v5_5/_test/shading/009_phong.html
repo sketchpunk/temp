@@ -180,12 +180,12 @@ const vert_src = `#version 300 es
 	layout(location=2) in vec2 a_uv;
 
 	uniform Global{ 
-		mat4 proj_view; 
-		mat4 camera_matrix;
-		vec3 camera_pos;
-		float delta_time;
-		vec2 screen_size;
-		float clock;
+		mediump mat4 proj_view; 
+		mediump mat4 camera_matrix;
+		mediump vec3 camera_pos;
+		mediump float delta_time;
+		mediump vec2 screen_size;
+		mediump float clock;
 	} global;
 
 	uniform Model{ 
@@ -194,7 +194,6 @@ const vert_src = `#version 300 es
 
 	out vec2 frag_uv;
 	out vec3 frag_norm;
-	out vec3 frag_cam_pos;
 	out vec3 frag_pos;
 
 	void main(void){
@@ -203,39 +202,43 @@ const vert_src = `#version 300 es
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		frag_uv			= a_uv;
 		frag_pos		= wpos.xyz;
-		frag_cam_pos	= global.camera_pos;
 		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		gl_Position = global.proj_view * wpos;
-
 	}`;
 
 const frag_src = `#version 300 es
 	precision mediump float;
 	
+	uniform Global{ 
+		mediump mat4 proj_view; 
+		mediump mat4 camera_matrix;
+		mediump vec3 camera_pos;
+		mediump float delta_time;
+		mediump vec2 screen_size;
+		mediump float clock;
+	} global;
+
 	out vec4 out_color;
 
 	//-------------------------
 	
-	uniform sampler2D base_tex;
-	uniform sampler2D norm_tex;
-	uniform sampler2D ao_tex;
-	uniform sampler2D emissive_tex;
-	uniform sampler2D mr_tex;		// Metal (B) - Roughness (G)
-	uniform sampler2D env_tex;
-
+	uniform sampler2D base_tex;			// Albedo
+	uniform sampler2D norm_tex;			// Normal Map
+	uniform sampler2D ao_tex;			// Ambient Occlusion
+	uniform sampler2D emissive_tex;		// Emission
+	uniform sampler2D mr_tex;			// Metal-Roughness (BG)
+	uniform sampler2D env_tex;			// Enviroment
 
 	in vec2 frag_uv;
 	in vec3 frag_norm;
-	in vec3 frag_cam_pos;
 	in vec3 frag_pos;
 
 	//-------------------------
 
 	// Without Knowing or precomuting the Vertex Tangent, We can give up a lil
 	// bit of performance by computing a suitable TBN Matrix to use with Normal / Bump Maps.
-
 	vec3 perturb_normal( vec3 surf_norm, vec3 dir_eye_frag, vec2 uv, sampler2D tex ){
 		vec3 tx_norm = texture( tex, uv ).xyz * 255.0/127.0 - 128.0/127.0;
 
@@ -260,7 +263,7 @@ const frag_src = `#version 300 es
 		return normalize( tbn * tx_norm );
 	}
 
-	// Equirectangular, converts Normal Direction to UV Coords, great for spheres
+	// Equirectangular, converts Normal Direction to UV Coords
     vec2 norm_uv( vec3 norm ){
         float lon   = atan( norm.z, norm.x );
         float lat   = acos( norm.y );
@@ -272,158 +275,126 @@ const frag_src = `#version 300 es
 	//-------------------------
 	
 	const vec3 light_pos 			= vec3( -3.0, 5.0, 1.0 );
-	const vec3 light_dir 			= vec3( 0.5, -0.5, 0.0 ); // Keep it Normalized
 	const vec3 light_color			= vec3( 1.0 );
-
 	const float ambient_strength	= 0.4;
-
 
 	//-------------------------
 
 	void main( void ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// BASE 
+		// INIT 
+		vec3 to_cam			= normalize( global.camera_pos - frag_pos );			// Dir to Cam from Frag
+		vec3 to_light		= normalize( light_pos - frag_pos ); 					// Dir To Lite from Frag
 
-		vec3 dir_frag_cam	= normalize( frag_cam_pos - frag_pos ); // Dir from Fragment to Camera (Need for NormTex & Specular)
-		
-		vec3 dir_light		= normalize( light_pos - frag_pos ); // Direction of light from fragment
-		//vec3 dir_light		= normalize( -light_dir ); // Directional Light Source, no need to compute light dir
+		vec4 base_clr		= texture( base_tex, frag_uv );							// Starting Color
 
-		//vec4 base_clr = vec4( 0.8, 0.8, 0.8, 1.0 );
-		vec4 base_clr = texture( base_tex, frag_uv );
+		vec3 norm			= normalize( frag_norm );								// Frag Normal from Vertex Attrib
+		norm				= perturb_normal( norm, -to_cam, frag_uv, norm_tex );	// Frag Normal from Texture
+		  
+		float occlusion		= texture( ao_tex, frag_uv ).r;							// Ambient Occlusion
+		vec4 emissive		= texture( emissive_tex, frag_uv );						// Emmissive
 
-		vec3 norm = normalize( frag_norm );
-  		norm = perturb_normal( norm, -dir_frag_cam, frag_uv, norm_tex ); //
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// ENVIRONMENT MAP
-		vec3 cam_to_frag	= normalize( frag_pos - frag_cam_pos );
-		vec3 reflect_dir	= cam_to_frag - 2.0 * dot( norm, cam_to_frag ) * norm;
-		//vec4 env 			= texture( env_tex, norm_uv( reflect_dir ) );
-		vec4 mr 			= texture( mr_tex, frag_uv ); // B=Metal, G=Roughness, GLTF Spec Says so
-		
-		// numLevels = 1 + floor(log2(max(w, h, d))) Best guess for # of mip levels.
-		float max_mips		= 5.0; // TODO : Dont hardcode value, it can be different depending on tex size.
+		// METAL / ROUGHNESS
+		vec4 met_rou 			= texture( mr_tex, frag_uv ); // B=Metal, G=Roughness, GLTF Spec Says so
 
-		float rough			= mr.g;
-		float metal			= mr.b;
-		float gloss			= 1.0 - mr.g;
-		float reflec		= (metal + gloss) / 2.0;
+		// Guess how many mips level the texture might have
+		ivec2 met_rou_size		= textureSize( mr_tex, 0 );
+		float met_rou_mips		= 1.0 + floor( log2( float( max( met_rou_size.x, met_rou_size.y ) ) ) );
 
-		// The rougher the surface, Load a higher Mips level to make env blurry.
-		vec4 env 			= textureLod( env_tex, norm_uv( reflect_dir ), max_mips * rough );
+		// Setup some properties
+		float rough				= met_rou.g;				// How Rough the Surface
+		float metal				= met_rou.b;				// Is Surface Metal
+		float gloss				= 1.0 - met_rou.g;			// How Glossy, just inverse of roughness
+		float reflec			= (metal + gloss) * 0.5;	// How Reflective is the surface, made this up, works.
 
 		/*
-		gloss = 1.0 - roughness;
-		metal = n;
-
+		Observations with playing with an web based Shader demo
 		gloss == 0, no reflection.
 		gloss == 1 and metal == 1, Full reflection.
 		gloss == 1 and metal == 0, Half Reflection
 		metal == 1 and gloss == 0.5, reflects blurryness
 
-		(1 + 0) * 0.5 
+		To get that Total Reflection of Metal=1 / Gloss=1,
+		while also doing half reflection of Metal=0 / Gloss=1
+		
+		( Metal + Gloss ) / 2
+		so if 1,1 i get back 1 which is Full Blending
+		so if 0,1 I get back 0.5 which is half blending.
+		So this simple equation works out to do a decent replication.
 		*/
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// AMBIENT LIGHT
-		
-		//vec3 ambient = ambient_strength * light_color;
-
-		// Adding A bit a shadow from a texture, just scales the ambient light
-		float occlusion = texture( ao_tex, frag_uv ).r;
-		
-		vec3 ambient 	= light_color * ambient_strength;// * occlusion ; // Comment out if occlusion will scale all light
-    							// vec3( 0.3 * Diffuse * AmbientOcclusion );
-
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// DIFFUSED LIGHT
+		// ENVIRONMENT MAP
+
+		// Get Reflection Direction between the Frag normal and direction from cam to frag, negate to get reverse direction
+		//vec3 reflect_cam_norm	= reflect( -to_cam, norm ); 					// Can use function OOOOR...
+		vec3 reflect_cam_norm	= -to_cam - 2.0 * dot( norm, -to_cam ) * norm;	// Use the Equation for the same result 4fun
 		
-		float diff			= max( dot( norm, dir_light ), 0.0 );	//
-		vec3 diffuse		= diff * light_color;
+		// Depending on the roughness of the texture, will tell how much scattering you get
+		// So with more scattering, blurring the enviroment map gives you the basic idea 
+		// and a cheap way to do it is by setting the texture with mips,
+		// then sample the higher levels which are smaller BUT blurry :)
+		// So if smooth get mips of 0, if rough get max lips for big blurryness.
+		vec4 env_clr = textureLod(  
+			env_tex, 
+			norm_uv( reflect_cam_norm ), 	// Convert Direction to UV coords for Equirectangular texture
+			met_rou_mips * rough
+		);
+
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// BASIC LIGHTING
+		vec3 ambient_clr	= light_color * ambient_strength;		// Minimum Light
+
+		float diff			= max( dot( norm, to_light ), 0.0 );	// Light based on angle from light source
+		vec3 diffuse_clr	= diff * light_color;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// SPECULAR LIGHT
 		float specular_strength	= 3.0;
-		float shininess 		= 32.0;
-		//vec3 spec_col			= mix( vec3( 0.4 ), env.rgb, mr.b ); // More metal, the more Dielectric color to use/
+		float shininess 		= 32.0; 
 
-		vec3 dir_reflect	= reflect( -dir_light, norm );				// Reflection Dir of Fragment to Light
-		float spec 			= pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), shininess );
-		vec3 specular 		= specular_strength * spec * light_color;
+		vec3 reflect_lite_n	= reflect( -to_light, norm );	// Light to Frag Dir (negated),
+		float spec 			= pow( max( dot( to_cam, reflect_lite_n ), 0.0 ), shininess );
+		vec3 specular_clr	= specular_strength * spec * light_color;
 		
-		//vec3 specular 		= specular_strength * spec * spec_col;
-		//specular = spec_col * 0.2;
-
-		//float gloss = mr.g;
-		//spec = max( dot( dir_frag_cam, dir_reflect ), 0.0 ); //max(0.0, dot(V, R));
-		//float k = 1.999 / ( gloss * gloss );
-		//spec =  pow( spec, min(10000.0, k) );
-
-		//specular = spec_col * spec;
-
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// EMISSION LIGHT
+		// COLOR MIXING
 
-		vec4 emission = texture( emissive_tex, frag_uv );
+		// Basic Lit Color
+		out_color = vec4( base_clr.rgb * ( ambient_clr + diffuse_clr + specular_clr ), 1.0 );
 
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// out_color = base_clr;
-		out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular ), 1.0 );
-		//out_color = vec4( pow( out_color.rgb, vec3(0.4545) ), 1.0 ); // Apply Gamma Correction, Makes the brights brighter
-		//out_color.rgb *= occlusion;
+		// Multiply Blend Environment color on surfaces with reflection
+		out_color.rgb = mix(
+			out_color.rgb,
+			out_color.rgb * env_clr.rgb,	// Multiple Blend
+			reflec * reflec					// Curve in gradient value, looks better then linear blending 
+		);
 
-		// multiply blending
-		out_color.rgb = mix( out_color.rgb, out_color.rgb * env.rgb, reflec * reflec );
-		//out_color.rgb += env.rgb;
-		//out_color.rgb + out_color.rgb env.rgb, metal * gloss );
+		// After Color and Reflection, Just add Emissive since this texture
+		// is to have no lighting applied to it.
+		out_color.rgb += emissive.rgb;
 
-		
-		out_color.rgb += emission.rgb;
+		// Apply the shadows defined from the texture
+		out_color.rgb *= occlusion * occlusion;			// Squared it to make it a bit darker, personal preference
 
+		// Learned about this Gamma Correction trick from Indigo.
+		// I tweaked the value which gives a better look for me.
 		out_color.rgb = pow( out_color.rgb, vec3( 0.7272 ) ); // org .4545
 
-		out_color.rgb *= occlusion;
 
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// TESTING
 
-		// just add emission
 		//out_color.rgb = vec3( metal );
 		//out_color.rgb = vec3( rough );
-		//out_color.rgb = vec3( ( metal + gloss ) * 0.5 );
-		//out_color.rgb = vec3(  rough );
-
-		// Another Approach is to scale all light based on Occlusion, instead of it just effecting ambient light.
-		// out_color = vec4( base_clr.rgb * ( ambient + diffuse + specular ) * occlusion, 1.0 );
-		
-		// out_color = vec4( vec3( occlusion ) , 1.0 ); // See Ambient Occlusion
-
-	/*
-	#ifdef ENVMAP_BLENDING_MULTIPLY
-		outgoingLight = mix( outgoingLight, outgoingLight * envColor.xyz, specularStrength * reflectivity );
-	#elif defined( ENVMAP_BLENDING_MIX )
-		outgoingLight = mix( outgoingLight, envColor.xyz, specularStrength * reflectivity );
-	#elif defined( ENVMAP_BLENDING_ADD )
-		outgoingLight += envColor.xyz * specularStrength * reflectivity;
-	*/
-
-
-		//out_color.rgb += vec3( 1.0, 0.0, 0.0 ) * ; 
-		//if( mr.b > 0.9 ) out_color.r = 1.0;
-
-		//out_color.rgb = vec3( mr.g );
-		//out_color.rgb += ( env.rgb * 0.5 * mr.b ) * (1.0- mr.g);
-		//out_color.rgb = vec3( mr.b );
-
-		//out_color.rgb = env.rgb;
-		
-		//out_color.rgb = mix( env.rgb, out_color.rgb, ( (1.0 - metal) + gloss ) * 0.5 );
-		//out_color.rgb = mix( out_color.rgb, emission.rgb, max( max( emission.r, emission.b ), emission.g ) );
-
-		//out_color.rgb += env.rgb;
-		
+		//out_color.rgb = vec3( ( metal + gloss ) );
+		//out_color.rgb = env_clr.rgb;
 	}
 `;
 
