@@ -5,6 +5,11 @@ https://github.com/BabylonJS/Babylon.js/tree/master/materialsLibrary/src/grid
 Really cool idea for using Signed Distance Textures
 https://twitter.com/sakuramochiJP/status/1301528245477584898?s=20
 
+TOTALLY AWESOME MULTI LIGHT TOON SHADER WITH LOTS OF FEATURES
+https://github.com/CaptainProton42/FlexibleToonShaderGD
+https://twitter.com/CaptainProton42/status/1362187872086933506?s=20
+
+
 Cool looking Cel Shader
 https://halisavakis.com/my-take-on-shaders-cel-shading/
 

@@ -33,6 +33,7 @@ class Vec3 extends Float32Array{
 		from_struct( o ){ this[0] = o.x; this[1] = o.y; this[2] = o.z; return this; }
 
 		copy( v ){ this[0] = v[0]; this[1] = v[1]; this[2] = v[2]; return this; }
+		copy_to( v ){ v[0] = this[0]; v[1] = this[1]; v[2] = this[2]; return v; }
 		
 		clone(){ return new Vec3( this ); }
 

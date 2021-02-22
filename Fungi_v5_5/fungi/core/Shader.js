@@ -149,6 +149,7 @@ class ShaderFactory{
 				
 				case "rgb":		gl.ctx.uniform3fv(	itm.loc, itm.data.rgb ); break;
 				case "vec3":	gl.ctx.uniform3fv(	itm.loc, itm.data ); break;
+				case "ivec3":	gl.ctx.uniform3iv(	itm.loc, itm.data ); break;
 				
 				case "rgba":	gl.ctx.uniform4fv(	itm.loc, itm.data.rgba ); break;
 				case "vec4":	gl.ctx.uniform4fv(	itm.loc, itm.data ); break;
@@ -330,6 +331,12 @@ class Material{
 
 		u.set( data );
 		return this;
+	}
+
+	get( u_name ){
+		let u = this.uniforms.get( u_name );
+		if( !u ){ console.log("Uniform: %s not found in material %s", u_name, this.shader.name ); return null; }
+		return u.data;
 	}
 
 	set_depth_test( v ){ this.options.depthTest = v; return this; }
