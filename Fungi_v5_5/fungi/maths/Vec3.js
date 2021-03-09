@@ -204,6 +204,21 @@ class Vec3 extends Float32Array{
 			return this;
 		}
 
+		from_axis_angle( axis, rad, v=Vec3.FORWARD ){
+			// Rodrigues Rotation formula:
+			// v_rot = v * cos(theta) + cross( axis, v ) * sin(theta) + axis * dot( axis, v) * (1-cos(theta))
+			let cp	= Vec3.cross( axis, v ),
+				dot	= Vec3.dot( axis, v ),
+				s	= Math.sin( rad ),
+				c	= Math.cos( rad ),
+				ci	= 1 - c;
+
+			this[ 0 ] = v[0] * c + cp[0] * s + axis[0] * dot * ci;
+			this[ 1 ] = v[1] * c + cp[1] * s + axis[1] * dot * ci;
+			this[ 2 ] = v[2] * c + cp[2] * s + axis[2] * dot * ci;
+			return this;
+		}
+
 
 	////////////////////////////////////////////////////////////////////
 	// INSTANCE OPERATORS

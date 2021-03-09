@@ -1,0 +1,348 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+import FboFactory from "../../fungi/core/Fbo.js";
+
+//#####################################################
+App
+	.init( true )
+	.set_camera( 0, 30, 3.0, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let $ortho;
+let $move = new Float32Array( 2 );
+let $mesh, $quad;
+let $mat, $fbo, $post;
+
+function on_input(){
+	if( !App.input.isMouseActive ) return;
+
+	console.log( App.input.coord );
+	$move[ 0 ] = App.input.coord.x;
+	$move[ 1 ] = App.input.coord.y;
+
+	draw();
+}
+
+function draw(){
+	//App.gl.clear();
+	App.fbo.bind( $fbo );//.clear( $fbo );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup
+	App.gl.ctx.bindVertexArray( $mesh.vao.id );		// Load Quad
+	App.gl.ctx.useProgram( $mat.shader.program );	// Load Shader
+	//App.gl.ctx.disable( App.gl.ctx.DEPTH_TEST );
+
+	App.gl.ctx.uniformMatrix4fv( $mat.uniforms.get( "ortho" ).loc, false, $ortho );
+	App.gl.ctx.uniform2fv( $mat.uniforms.get( "move" ).loc, $move );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.gl.ctx.drawElements( App.mesh.TRI, $mesh.element_cnt, $mesh.element_type, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Cleanup
+	App.gl.ctx.useProgram( null );
+	App.gl.ctx.bindVertexArray( null );
+
+	render();
+}
+
+function render(){
+	App.fbo.unbind();
+	App.gl.clear();
+
+	App.gl.ctx.bindVertexArray( $quad.vao.id );		// Load Quad
+	App.gl.ctx.useProgram( $post.shader.program );	// Load Shader
+
+
+	App.gl.ctx.activeTexture(	App.gl.ctx.TEXTURE0 );
+	App.gl.ctx.bindTexture(		App.gl.ctx.TEXTURE_2D, $fbo.buffers.color.id );
+	App.gl.ctx.uniform1i(		$post.uniforms.get( "buf_color" ).loc, 0 );
+
+	App.gl.ctx.drawElements( App.mesh.TRI, $quad.element_cnt, $quad.element_type, 0 );
+
+	App.gl.ctx.useProgram( null );
+	App.gl.ctx.bindVertexArray( null );
+}
+
+async function init(){
+	App.input.on_input = on_input; //()=>{ App.render(); };
+	App.fbo = new FboFactory( App.gl );
+	
+	//console.log( App.gl.width, App.gl.height );
+
+
+	$mesh = new_quad_mesh();
+	$quad = post_quad();
+
+	let scl = 1;
+	$ortho = new Mat4().from_ortho( 0, App.gl.width/scl, App.gl.height/scl, 0, -100, 100 );
+
+	init_shader();
+	$mat = App.shader.new_material( "TESTER" );
+	$post = App.shader.new_material( "PostRender" );
+	
+
+	console.log( $post );
+	console.log( $mesh );
+	console.log( $mat.uniforms.get( "ortho" ) );
+	console.log( $ortho );
+
+
+	$fbo = App.fbo.new( {
+		width   : App.gl.width,
+		height  : App.gl.height,
+		buffers : [
+			{ attach:0, name:"color", type:"color", mode:"tex", pixel:"byte" },
+		]
+	} );
+
+	console.log( $fbo );
+
+	//App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+	//App.Debug.set_depth_test( true ).set_priority( 0 );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+
+    //$mat = App.shader.new_material( "TESTER" );
+    //$mat.set( "uLightDir", $light_dir );
+
+	//let e = SkyBox( "sb", $mat );
+	//e.node.set_scl( 2 );
+	
+	//OrbitCamera
+	
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return true;
+}
+
+//#####################################################
+
+
+function new_quad_mesh(){
+	let buf_idx		= App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
+	let buf_vert	= App.buffer.new_array( new Float32Array(
+		[ 0, 0, 0,	0,0,
+		  0, 1, 0,	0,1,
+		  1, 1, 0,	1,1, 
+		  1, 0, 0,	1,0 ]
+	));
+
+	/*
+	[ -0.5,  0.5, 0.0,	0,0,1,	0,0,
+		  -0.5, -0.5, 0.0,	0,0,1,	0,1,
+		   0.5, -0.5, 0.0,	0,0,1,	1,1, 
+		   0.5,  0.5, 0.0,	0,0,1,	1,0 ]
+	*/
+
+	return App.mesh.from_buffer_config([
+		{ name: "indices", buffer: buf_idx },
+		{ name: "quad", buffer: buf_vert, interleaved: [
+			{ attrib_loc:0, size:3, stride_len:5 * 4, offset:0 * 4 },
+			{ attrib_loc:2, size:2, stride_len:5 * 4, offset:3 * 4 },
+		]}
+	], "BrushQuad", 6 );
+}
+
+function post_quad(){
+    let buf_idx     = App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
+    let buf_vert    = App.buffer.new_array( new Float32Array(
+        [ -1,  1, 0,	0,0,
+          -1, -1, 0,	0,1,
+           1, -1, 0,	1,1, 
+           1,  1, 0,	1,0 ]
+    ));
+
+    let mesh = App.mesh.from_buffer_config([
+        { name: "indices", buffer: buf_idx },
+        { name: "quad", buffer: buf_vert, interleaved: [
+            { attrib_loc:0, size:3, stride_len:5 * 4, offset:0 * 4 },
+            { attrib_loc:2, size:2, stride_len:5 * 4, offset:3 * 4 },
+        ]}
+    ], "PostQuad", 6 );
+    
+    return mesh;
+}
+
+
+//#####################################################
+
+let gUbo;
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"ortho", type:"mat4", value:null },
+		{ name:"move", type:"vec2", value:null },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model" ) );
+	//.set_blend( true );
+
+	App.shader.new( "PostRender", VERT_SRC2, FRAG_SRC2, [
+		{ name:"buf_color", type:"sampler2D", value:"null" },
+	], App.ubo.get_array( "Global" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+uniform mat4 ortho;
+uniform vec2 move;
+
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+	//vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+	vec4 wpos	= vec4( a_pos * 10.0, 1.0 ) + vec4( move, 0.0, 0.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_lpos 		= a_pos.xyz;
+	frag_wpos		= wpos.xyz;
+	frag_cam_pos	= global.camera_pos;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//gl_Position = global.proj_view * wpos;
+	
+	gl_Position = ortho * wpos;
+	//gl_Position = wpos;
+
+	//gl_PointSize = 10.0;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+void main( void ){
+    out_color   = vec4( 1.0, 1.0, 0.0, 1.0 );	
+}`;
+
+
+const VERT_SRC2 = `#version 300 es
+    layout(location=0) in vec3 a_pos;
+    layout(location=2) in vec2 a_uv;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	out vec2 frag_uv;
+
+	void main(void){
+        frag_uv     = a_uv;
+        gl_Position = vec4( a_pos, 1.0 );
+	}`;
+
+const FRAG_SRC2 = `#version 300 es
+precision mediump float;
+
+	out vec4 out_color;
+	in vec2 frag_uv;
+
+	//------------------------
+
+    uniform sampler2D buf_color;
+	uniform sampler2D buf_depth;	
+
+	//-------------------------
+
+	float linearize_depth( float z ){ // Good to visualize Depth
+        float n = 0.1;      // camera z near
+        float f = 100.0;    // camera z far
+        return (2.0 * n) / (f + n - z * (f - n));	
+    }
+    
+    float map_depth_to_proj( float depth ){ // But better for Depth Testing
+        float PROJ_NEAR = 0.1;  //depth is should be between 0:1
+	    float PROJ_FAR  = 100.0;
+		float ndc       = 2.0 * depth - 1.0; // Normalized Device Space -1:1
+		return -(2.0 * PROJ_FAR * PROJ_NEAR) / (ndc * (PROJ_FAR - PROJ_NEAR) - PROJ_FAR - PROJ_NEAR);
+	}
+
+	void main( void ){
+        ivec2 fCoord    = ivec2( gl_FragCoord.xy );     // Get the Int of the current Screen pixel X,Y
+        ivec2 texSize   = textureSize( buf_color, 0 );	// Get Size of Texture
+        
+        vec4 color      = texelFetch( buf_color, fCoord , 0 );
+        float depth     = texelFetch( buf_depth, fCoord , 0 ).x;
+        
+        //depth = linearize_depth( depth );
+        //depth = map_depth_to_proj( depth );
+          
+        out_color = color;
+        //out_color.rgb = vec3( depth );
+
+        /*
+        // Post Effect of Pixalating 
+        float pixelSize = 7.0;
+		float xMod		= mod( float( fCoord.x ), pixelSize );
+		float yMod		= mod( float( fCoord.y ), pixelSize );
+
+		if( xMod == 0.0 || yMod == 0.0 ) out_color = vec4(0.0,0.0,0.0,0.3);
+		else{
+			ivec2 pix = fCoord;
+			pix.x -= int( xMod );
+			pix.y -= int( yMod );
+			out_color = texelFetch( buf_color, pix , 0);
+        }
+        */
+	}`;
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+    .info{ font-family:monospace; font-size:1.2em; color:white; background-color:#00000099; }
+    .info b{ color:yellow; }
+    .info i{ color:lime; font-style: normal; }
+    .top_div{ position:fixed; top:0px; left:0px; padding:5px 10px 7px 10px;  border-radius:0px 0px 10px 0px; }
+</style></head><body>
+
+    <canvas id="pg_canvas"></canvas>
+    <!--
+    <div class="info top_div">
+        Left Mouse Drag [ <b>Move Camera</b> ] <i>::</i>
+    </div>
+	-->
+</body></html>

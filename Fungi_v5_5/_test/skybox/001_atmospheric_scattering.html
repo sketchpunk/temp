@@ -1,0 +1,420 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import PropPanel from "../../sage.ui/PropPanel.js";
+
+// https://github.com/Fewes/MinimalAtmosphere
+
+//#####################################################
+App
+	.init( true )
+	.set_camera( 0, -10, 0.0, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let $mat, 
+    $lat        = 180,
+    $long       = 20,
+    $light_dir  = new Vec3().from_polar( $lat, $long );
+
+async function init(){
+	//App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+	//App.Debug.set_depth_test( true ).set_priority( 0 );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    init_shader();
+
+    $mat = App.shader.new_material( "TESTER" );
+    $mat.set( "uLightDir", $light_dir );
+
+	let e = SkyBox( "sb", $mat );
+	e.node.set_scl( 2 );
+	
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    init_ui();
+	return true;
+}
+
+//#####################################################
+
+function SkyBox( name = "SkyBox", mat ){
+	let g = SkyBox.geo();
+	let m = App.mesh.from_data( "SkyBox", g.vert, 3, g.idx ); //, g.norm, g.uv
+	//let draw = new Draw().add( MESH, mat, App.mesh.TRI );
+    //return App.ecs.new_entity( name, "Node", draw );
+    return App.mesh_entity( name, m, mat, App.mesh.TRI );
+}
+
+SkyBox.geo = function( ww=1, hh=1, dd=1 ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let width = ww, height = hh, depth = dd, x = 0, y = 0, z = 0;
+	let w = width*0.5, h = height*0.5, d = depth*0.5;
+	let x0 = x-w, x1 = x+w, y0 = y-h, y1 = y+h, z0 = z-d, z1 = z+d;
+
+	//Starting bottom left corner, then working counter clockwise to create the front face.
+	//Backface is the first face but in reverse (3,2,1,0)
+	//keep each quad face built the same way to make index and uv easier to assign
+	let vert = [
+		x0, y1, z1, 	//0 Front
+		x0, y0, z1, 	//1
+		x1, y0, z1, 	//2
+		x1, y1, z1, 	//3 
+
+		x1, y1, z0, 	//4 Back
+		x1, y0, z0, 	//5
+		x0, y0, z0, 	//6
+		x0, y1, z0, 	//7 
+
+		x1, y1, z1, 	//3 Right
+		x1, y0, z1, 	//2 
+		x1, y0, z0, 	//5
+		x1, y1, z0, 	//4
+
+		x0, y0, z1, 	//1 Bottom
+		x0, y0, z0, 	//6
+		x1, y0, z0, 	//5
+		x1, y0, z1, 	//2
+
+		x0, y1, z0, 	//7 Left
+		x0, y0, z0, 	//6
+		x0, y0, z1, 	//1
+		x0, y1, z1, 	//0
+
+		x0, y1, z0, 	//7 Top
+		x0, y1, z1, 	//0
+		x1, y1, z1, 	//3
+		x1, y1, z0, 	//4
+	];
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//Build the index of each quad [0,1,2, 2,3,0]
+	let i, idx = [];
+	for( i=0; i < vert.length / 3; i+=2) idx.push(i, i+1, (Math.floor(i/4)*4)+((i+2)%4));
+
+	// Reverse Triangle Winding
+	/**/
+	let t;
+	for( let i=0; i < idx.length; i+=3 ){
+		t			= idx[ i ];
+		idx[ i ]	= idx[ i+2 ];
+		idx[ i+2 ]	= t;
+	}
+	
+	/*
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//Build UV data for each vertex
+	let uv = [];
+	for( i=0; i < 6; i++) uv.push( 0,0,	0,1, 1,1,  1,0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//Build Normal data for each vertex
+	
+	let norm = [
+		 0, 0, 1,	 0, 0, 1,	 0, 0, 1,	 0, 0, 1,		//Front
+		 0, 0,-1,	 0, 0,-1,	 0, 0,-1,	 0, 0,-1,		//Back
+		-1, 0, 0,	-1, 0, 0,	-1, 0, 0,	-1, 0, 0,		//Left
+		 0,-1, 0,	 0,-1, 0,	 0,-1, 0,	 0,-1, 0,		//Bottom
+		 1, 0, 0,	 1, 0, 0,	 1, 0, 0,	 1, 0, 0,		//Right
+		 0, 1, 0,	 0, 1, 0,	 0, 1, 0,	 0, 1, 0		//Top
+	];
+	*/
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	return { vert:new Float32Array(vert), idx:new Uint16Array(idx) }; // , uv:new Float32Array(uv), norm:new Float32Array(norm) 
+}
+
+//#####################################################
+
+let gUbo;
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"uLightDir", type:"vec3", value:null },
+		//{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model" ) );
+	//.set_blend( true );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+	vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_lpos 		= a_pos.xyz;
+	frag_wpos		= wpos.xyz;
+	frag_cam_pos	= global.camera_pos;
+	//frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform vec3 uLightDir;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+// -------------------------------------
+// Defines
+#define EPS					1e-6
+#define PI					3.14159265359
+#define INFINITY 			1.0 / 0.0
+#define PLANET_RADIUS		6371000.0
+#define PLANET_CENTER		vec3( 0.0, -PLANET_RADIUS, 0.0 )
+#define ATMOSPHERE_HEIGHT	100000.0
+#define RAYLEIGH_HEIGHT		( ATMOSPHERE_HEIGHT * 0.08 )
+#define MIE_HEIGHT			( ATMOSPHERE_HEIGHT * 0.012 )
+
+#define FLT_MAX             3.402823466e+38
+#define FLT_MIN             1.175494351e-38
+
+const float INTERGRATE_SCATTERING_SCALE     = 8.0;
+const int   INTERGRATE_SCATTERING_SAMPLES   = 5; // 64
+
+// -------------------------------------
+// Coefficients
+#define C_RAYLEIGH			(vec3(5.802, 13.558, 33.100) * 1e-6)
+#define C_MIE				(vec3(3.996,  3.996,  3.996) * 1e-6)
+#define C_OZONE				(vec3(0.650,  1.881,  0.085) * 1e-6)
+
+#define ATMOSPHERE_DENSITY	1.0
+#define EXPOSURE			20.0
+
+// -------------------------------------
+// Math
+vec2 SphereIntersection( vec3 rayStart, vec3 rayDir, vec3 sphereCenter, float sphereRadius ){
+    rayStart -= sphereCenter;
+    
+	float a = dot(rayDir, rayDir);
+	float b = 2.0 * dot(rayStart, rayDir);
+	float c = dot(rayStart, rayStart) - (sphereRadius * sphereRadius);
+    float d = b * b - 4.0 * a * c;
+    
+	if (d < 0.0) return vec2( -1.0 );
+    
+    d = sqrt(d);
+    return vec2(-b - d, -b + d) / (2.0 * a);
+}
+
+vec2 PlanetIntersection( vec3 rayStart, vec3 rayDir ){ return SphereIntersection( rayStart, rayDir, PLANET_CENTER, PLANET_RADIUS ); }
+vec2 AtmosphereIntersection( vec3 rayStart, vec3 rayDir ){ return SphereIntersection( rayStart, rayDir, PLANET_CENTER, PLANET_RADIUS + ATMOSPHERE_HEIGHT ); }
+
+// -------------------------------------
+// Phase functions
+float PhaseRayleigh (float costh){ return 3.0 * (1.0 + costh*costh) / (16.0 * PI); }
+
+float PhaseMie (float costh, float g){ // g= 0.85 
+	g = min(g, 0.9381);
+	float k = 1.55*g - 0.55*g*g*g;
+	float kcosth = k*costh;
+	return (1.0 - k*k) / ((4.0 * PI) * (1.0-kcosth) * (1.0-kcosth));
+}
+
+
+// -------------------------------------
+// Atmosphere
+float AtmosphereHeight( vec3 positionWS ){ return distance( positionWS, PLANET_CENTER) - PLANET_RADIUS; }
+float DensityRayleigh( float h ){ return exp( -max( 0.0, h / RAYLEIGH_HEIGHT ) ); }
+float DensityMie( float h ){ return exp( -max( 0.0, h / MIE_HEIGHT ) ); }
+float DensityOzone( float h ){
+	// Ozone is represented as a tent function with a width of 30km, centered around an altitude of 25km.
+	return max( 0.0, 1.0 - abs( h - 25000.0 ) / 15000.0 );
+}
+
+vec3 AtmosphereDensity( float h ){ return vec3( DensityRayleigh( h ), DensityMie( h ), DensityOzone( h ) ); }
+
+// Optical depth is a unitless measurement of the amount of absorption of a participating medium (such as the atmosphere).
+// This function calculates just that for our three atmospheric elements:
+// R: Rayleigh
+// G: Mie
+// B: Ozone
+// If you find the term "optical depth" confusing, you can think of it as "how much density was found along the ray in total".
+vec3 IntegrateOpticalDepth( vec3 rayStart, vec3 rayDir ){
+	vec2 intersection   = AtmosphereIntersection(rayStart, rayDir);
+	float  rayLength    = intersection.y;
+
+	int    sampleCount  = 8;
+	float  stepSize     = rayLength / float( sampleCount );
+    vec3 opticalDepth   = vec3( 0.0 );
+    
+    float localHeight;
+    vec3 localPosition, localDensity;
+
+	for( int i=0; i < sampleCount; i++ ){
+		localPosition  = rayStart + rayDir * ( float( i ) + 0.5 ) * stepSize;
+		localHeight    = AtmosphereHeight( localPosition );
+		localDensity   = AtmosphereDensity( localHeight ) * stepSize;
+		opticalDepth  += localDensity;
+	}
+
+	return opticalDepth;
+}
+
+// Calculate a luminance transmittance value from optical depth.
+vec3 Absorb( vec3 opticalDepth ){
+	// Note that Mie results in slightly more light absorption than scattering, hence * 1.1
+	return exp( -( opticalDepth.x * C_RAYLEIGH + opticalDepth.y * C_MIE * 1.1 + opticalDepth.z * C_OZONE ) * ATMOSPHERE_DENSITY );
+}
+
+float saturate( float v ){ return clamp( v, 0.0, 1.0 ); }
+
+// Integrate scattering over a ray for a single directional light source.
+// Also return the transmittance for the same ray as we are already calculating the optical depth anyway.
+vec3 IntegrateScattering( vec3 rayStart, vec3 rayDir, float rayLength, vec3 lightDir, vec3 lightColor, out vec3 transmittance ){
+	// We can reduce the number of atmospheric samples required to converge by spacing them exponentially closer to the camera.
+	// This breaks space view however, so let's compensate for that with an exponent that "fades" to 1 as we leave the atmosphere.
+	float  rayHeight = AtmosphereHeight(rayStart);
+	float  sampleDistributionExponent = 1.0 + saturate( 1.0 - rayHeight / ATMOSPHERE_HEIGHT ) * INTERGRATE_SCATTERING_SCALE; // Slightly arbitrary max exponent of 9
+
+	vec2 intersection = AtmosphereIntersection( rayStart, rayDir );
+	rayLength = min( rayLength, intersection.y );
+	if( intersection.x > 0.0 ){
+		// Advance ray to the atmosphere entry point
+		rayStart    += rayDir * intersection.x;
+		rayLength   -= intersection.x;
+	}
+
+	float costh         = dot(rayDir, lightDir);
+	float phaseRayleigh = PhaseRayleigh(costh);
+	float phaseMie      = PhaseMie( costh, 0.85 );
+	vec3  rayleigh      = vec3( 0.0 );
+	vec3  mie           = vec3( 0.0 );
+	int   sampleCount   = INTERGRATE_SCATTERING_SAMPLES; 
+	vec3  opticalDepth  = vec3( 0.0 );
+    float prevRayTime   = 0.0;
+    
+    float rayTime, stepSize, localHeight;
+    vec3 localPosition, localDensity, opticalDepthlight, lightTransmittance;
+
+	for( int i=0; i < sampleCount; i++ ){
+		rayTime = pow( float(i) / float(sampleCount), sampleDistributionExponent ) * rayLength;
+		// Because we are distributing the samples exponentially, we have to calculate the step size per sample.
+	    stepSize = (rayTime - prevRayTime);
+
+		localPosition = rayStart + rayDir * rayTime;
+		localHeight   = AtmosphereHeight(localPosition);
+		localDensity  = AtmosphereDensity(localHeight) * stepSize;
+
+		opticalDepth += localDensity;
+
+		opticalDepthlight  = IntegrateOpticalDepth(localPosition, lightDir);
+		lightTransmittance = Absorb(opticalDepth + opticalDepthlight);
+
+		rayleigh += lightTransmittance * phaseRayleigh * localDensity.x;
+		mie      += lightTransmittance * phaseMie      * localDensity.y;
+
+		prevRayTime = rayTime;
+	}
+
+	transmittance = Absorb( opticalDepth );
+
+	return ( rayleigh * C_RAYLEIGH + mie * C_MIE ) * lightColor * EXPOSURE;
+}
+/**/
+
+void main( void ){
+    vec3    rayStart = global.camera_pos;
+	vec3    rayDir   = normalize( frag_wpos - rayStart );
+	float   rayLen   = FLT_MAX;
+
+    /*
+	if( _DrawPlanet == 1.0 ){
+		vec2 planetIntersection = PlanetIntersection( rayStart, rayDir );
+		if( planetIntersection.x > 0.0 ) rayLen = min( rayLen, planetIntersection.x );
+    }
+    */
+
+	vec3 lightDir   = uLightDir; //normalize( vec3( 0.0, 0.3, -0.8 ) );
+	vec3 lightColor = vec3( 1.4 );
+
+    // https://github.com/Fewes/MinimalAtmosphere/blob/master/Assets/Atmosphere/Shaders/Object.shader
+    vec3 transmittance; // This is not needed for this shader, but in the Object Shader it is used.
+    
+    vec3 color  = IntegrateScattering( rayStart, rayDir, rayLen, lightDir, lightColor, transmittance );
+    out_color   = vec4( color, 1.0 );	
+}`;
+
+//#####################################################
+function init_ui(){
+	elm_on_input( "lbl_lat" );
+	elm_on_input( "lbl_long" );
+}
+
+function update_mat( id, value ){
+    switch( id ){
+        case "lbl_lat":     $lat    = parseFloat( value ); break;
+        case "lbl_long":    $long   = parseFloat( value ); break;
+    }
+
+    $light_dir.from_polar( $lat, $long );
+    App.render();
+}
+
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+        update_mat( e.srcElement.id, e.srcElement.value );
+	});
+}
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+    .info{ font-family:monospace; font-size:1.2em; color:white; background-color:#00000099; }
+    .info b{ color:yellow; }
+    .info i{ color:lime; font-style: normal; }
+    .top_div{ position:fixed; top:0px; left:0px; padding:5px 10px 7px 10px;  border-radius:0px 0px 10px 0px; }
+</style></head><body>
+
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		<prop-group label="Light Direction" open="true">
+            <prop-range label="latitude" id="lbl_lat" value="180" min="-180" max="180" step="5"></prop-range>
+            <prop-range label="longitude" id="lbl_long" value="20" min="-90" max="90" step="5"></prop-range>
+		</prop-group>
+    </prop-panel>
+    
+    <div class="info top_div">
+        Left Mouse Drag [ <b>Move Camera</b> ] <!--<i>::</i>-->
+    </div>
+
+</body></html>

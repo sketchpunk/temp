@@ -108,3 +108,10 @@ https://github.com/dtecta/motion-toolkit/tree/master/jointlimits
 
 http://number-none.com/product/IK%20with%20Quaternion%20Joint%20Limits/
 http://www.root-motion.com/finalikdox/html/page12.html
+
+
+Constrained FABRIK
+https://twitter.com/TwistedTwigleg/status/1365707036881793024
+https://twistedtwigleg.itch.io/twistedik2/devlog/225965/version-210-released
+https://gist.github.com/TwistedTwigleg/d49e1ed354650855551c048755760546
+https://twistedtwigleg.itch.io/twistedik2 there is a free version

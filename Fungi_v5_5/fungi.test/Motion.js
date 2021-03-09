@@ -136,7 +136,7 @@ class Motion{
 	}
 
 	static rot_by( e, deg=15, axis="y" ){ 
-		return ( dt )=>{ e.Node.rot_by( deg * dt, axis ); }
+		return ( dt )=>{ e.node.rot_by( deg * dt, axis ); }
 	}
 }
 

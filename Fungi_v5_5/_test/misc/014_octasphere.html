@@ -1,0 +1,196 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+//import Wireframe    from "../../fungi/shaders/Wireframe.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+// https://prideout.net/blog/octasphere/
+// https://twitter.com/prideout/status/1207329956616798208
+
+//#####################################################
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //octasphere_corner( 2 );
+
+    let geo     = octasphere( 2 );
+    let mesh    = App.mesh.from_data( "x", geo.verts, 3, geo.indices );
+	let e		= App.mesh_entity( "Sphere", mesh, "LowPoly", App.mesh.TRI );
+
+
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+function octasphere_corner( subdiv ){
+    let n       = 2**subdiv + 1
+    let verts   = []
+
+    let c, s, t, seg_num;
+    let a = new Vec3();
+    let b = new Vec3();
+    for( let i=0; i < n; i++ ){
+        t = Math.PI * 0.5 * i / ( n - 1 );
+        s = Math.sin( t );
+        c = Math.cos( t );
+
+        a.set( 0, s, c );
+        b.set( c, s, 0 );
+
+        seg_num = n - 1 - i;
+
+        App.Debug.pnt( a );
+        App.Debug.pnt( b, "green" );
+
+        compute_geodisc( a, b, seg_num );
+    }
+}
+
+function compute_geodisc( a, b, seg_num ){
+    if( seg_num < 2 ) return;
+
+    let ang     = Math.acos( Vec3.dot( a, b ) ); //Vec3.angle( a, b ); 
+    let axis    = Vec3.cross( a, b ).norm();
+    let steps   = ang / seg_num;
+    let v       = new Vec3();
+
+    for( let i=1; i < seg_num; i++ ){
+        v.from_axis_angle( axis, i*steps, a );
+        App.Debug.pnt( v, "yellow" );
+    }
+}
+
+
+function octasphere( subdiv ){
+    let irow = new Array();
+    let buf = gen_corner( subdiv, irow );
+    let idx = new Array;
+    //let n = 2**subdiv + 1
+    //let num_verts = n * (n + 1) / 2
+    //console.log( n, "--", buf.length / 3, "--",num_verts, "--",irow );
+
+    let cnt = 2**subdiv -1;
+    let a, b, c, d;
+    for( let i=0; i < irow.length-2; i++ ){
+        //console.log( i, irow[ i ], cnt-i );
+        //console.log( "--" );
+        for( let j=0; j < cnt-i; j++ ){
+            a = irow[ i+1 ] + j;
+            b = irow[ i ] + j;
+            c = b + 1;
+            d = a + 1;
+            //console.log( j, "-", a, b, c, d );
+            idx.push( a, b, c, c, d, a );
+        }
+
+        //console.log( d, c, c+1 );
+        idx.push( d, c, c+1 );
+    }
+
+    a = irow[ irow.length-1 ];
+    idx.push( a, a-2, a-1 );
+
+    //console.log( a, b, c );
+
+    for( let v of Vec3.f32buf_iter( buf ) ) App.Debug.pnt( v );
+
+    return {
+        verts   : new Float32Array( buf ),
+        indices : new Uint16Array( idx ),
+    };
+}
+
+function gen_corner( subdiv, irow ){
+    const pi_h = Math.PI * 0.5;
+    let n      = 2 ** subdiv; 
+    let out    = new Array();
+    let a      = new Vec3();
+    let b      = new Vec3();
+    let cnt    = 0;
+    let rad, s, c;
+
+    for( let i=0; i < n; i++ ){
+        irow.push( cnt );           // Starting Index of Each Row
+        cnt += n - i + 1;
+        
+        rad = pi_h * i / n;         
+        s   = Math.sin( rad );
+        c   = Math.cos( rad );
+        a.set( 0, s, c );
+        b.set( c, s, 0 );
+
+        a.push_to( out );           // Start of Row
+        arc_lerp( a, b, n-i, out ); // in Between Verts
+        b.push_to( out );           // End of Row
+    }
+
+    out.push( 0, 1, 0 );
+    irow.push( cnt );
+    return out;
+}
+
+function arc_lerp( a, b, seg_num, ary ){
+    if( seg_num < 2 ) return;
+
+    let ang  = Math.acos( Vec3.dot( a, b ) ); //Vec3.angle( a, b ); 
+    let axis = Vec3.cross( a, b ).norm();
+    let inc  = ang / seg_num;
+    let v    = new Vec3();
+
+    for( let i=1; i < seg_num; i++ ){
+        v.from_axis_angle( axis, i*inc, a ).push_to( ary );
+    }
+}
+
+/*
+function gen_corner( subdiv ){
+    const pi_h = Math.PI * 0.5;
+    let n      = 2 ** subdiv; 
+    let rows   = new Array();
+    let ary, rad, s, c, a, b;
+
+    for( let i=0; i < n; i++ ){
+        rad = pi_h * i / n;
+        s   = Math.sin( rad );
+        c   = Math.cos( rad );
+        a   = new Vec3( 0, s, c );
+        b   = new Vec3( c, s, 0 );
+
+        ary = new Array();
+        rows.push( ary );
+
+        ary.push( a );
+        arc_lerp( a, b, n-i, ary );
+        ary.push( b );
+    }
+
+    rows.push( [ new Vec3(0,1,0) ] );
+    return rows;
+}
+
+function arc_lerp( a, b, seg_num, ary ){
+    if( seg_num < 2 ) return;
+
+    let ang  = Math.acos( Vec3.dot( a, b ) ); //Vec3.angle( a, b ); 
+    let axis = Vec3.cross( a, b ).norm();
+    let inc  = ang / seg_num;
+
+    for( let i=1; i < seg_num; i++ ){
+        ary.push( new Vec3().from_axis_angle( axis, i*inc, a ) );
+    }
+}
+*/
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

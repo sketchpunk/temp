@@ -1,0 +1,168 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 10, 2, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gMotion;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+    gMotion = Motion.rot_by( e, 30, "y" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"color", type:"rgba", value:"#a0a0a0ff" },
+        { name:"color_a", type:"rgba", value:"#ffffffff" },
+        { name:"color_b", type:"rgba", value:"#878FA3ff" },
+        { name:"color_c", type:"rgba", value:"#CED4E0ff" },
+        
+        //{ name:"color", type:"rgba", value:"#ff7f7fff" },
+        //{ name:"color_a", type:"rgba", value:"#DB9300FF" },
+        //{ name:"color_b", type:"rgba", value:"#891DEFFF" },
+		//{ name:"color_c", type:"rgba", value:"#DB2F47FF" },
+	], App.ubo.get_array( "Global", "Model" ) );
+}
+
+// https://twitter.com/KenneyNL/status/1368510664717836291
+// https://gist.github.com/KenneyNL/802d7107fbe9bf42b16ec05b43b58079
+// Kenny Unlit Directional Tint
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+
+uniform Global{ 
+    mat4 proj_view; 
+    mat4 camera_matrix;
+    vec3 camera_pos;
+    float delta_time;
+    vec2 screen_size;
+    float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+    vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_lpos 		= a_pos.xyz;
+    frag_wpos		= wpos.xyz;
+    frag_cam_pos	= global.camera_pos;
+    frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+out vec4 out_color;
+
+//-------------------------
+uniform vec4 color;     // Base Color
+uniform vec4 color_a;   // Y Axis Color
+uniform vec4 color_b;   // X Axis Color
+uniform vec4 color_c;   // Z Axis Color
+
+in vec3 frag_norm;
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+void main( void ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Get the Normal Direction, Added a Low Poly Normal line for fun
+    //float3 ase_worldNormal      = i.worldNormal;  // Rotated 
+    //float3 ase_normWorldNormal  = normalize( ase_worldNormal );
+    
+    vec3 norm = normalize( frag_norm ); // Mesh's World Space Normal
+
+    //vec3 norm = normalize( cross( dFdx(frag_wpos), dFdy(frag_wpos) ) ); // Low Poly Normals
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //float3 appendResult10 = (float3(( ase_normWorldNormal.x * ase_normWorldNormal.x ) , ( ase_normWorldNormal.y * ase_normWorldNormal.y ) , ( ase_normWorldNormal.z * ase_normWorldNormal.z )));
+    //float3 layeredBlendVar13 = appendResult10;
+    
+    vec3 norm_sqr = norm * norm;    // Treating normal as Light Strength, it curves the progression from dark to light
+    //vec3 norm_sqr = norm;         // if left as is, it gives the tint lighting much more strength, linear progression
+
+    // Notes: Maybe a Strength Scale would work well or maybe playing with pow might give interesting results
+    // Some curve to make dark darker, and light brighter might also give different results
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Lerp between X and Y axis, bounces between Color A and B mixed with the base color
+    //float4 temp_output_9_0 = ( _Color * _ColorA ); 
+    vec3 base_color = color.rgb * color_a.rgb;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // From what I understand of how this works is by applying a Lighting Color for Each axis direction.
+    // Then using the normal direction to blend each axis color together. From kenny's image example, he
+    // setup the brightest color to come from Y, Second from Z then the darkest color at X.
+    // This shader might work best on voxel based meshes but works well on smooth organic meshes.
+    //float4 layeredBlend13 = ( lerp( lerp( lerp( temp_output_9_0 , ( _Color * _ColorB ) , layeredBlendVar13.x ) , temp_output_9_0 , layeredBlendVar13.y ) , ( _Color * _ColorC ) , layeredBlendVar13.z ) );
+    out_color.rgb = mix( base_color, color.rgb * color_b.rgb, norm_sqr.x );
+    out_color.rgb = mix( out_color.rgb, base_color, norm_sqr.y );
+    out_color.rgb = mix( out_color.rgb, color.rgb * color_c.rgb, norm_sqr.z );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Original Shader mixes base color witht the axis lighting with a texture pixel.
+    // So just keeping this here even though not really testing it.
+    //o.Emission = ( tex2D( _MainTex, uv_MainTex ) * layeredBlend13 ).rgb;
+    //out_color.rgb *= tex.rgb;
+}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
