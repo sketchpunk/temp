@@ -1,0 +1,404 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+// https://www.alanzucconi.com/2016/07/01/volumetric-rendering/
+// https://github.com/smkplus/UnityRayMarching
+// https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+// https://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
+// http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+
+//#####################################################
+App
+	.init( true )
+	//.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( 45, 20, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let geo = VolumeCube.geo();
+    
+    init_shader();
+	volume_debug( geo );
+	volume_entity( geo );
+
+	App.Debug.set_depth_test( true ).set_priority( 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+function volume_debug( geo ){
+	let i, v = new Vec3();
+	let bmin = [ Infinity, Infinity, Infinity ];
+	let bmax = [ -Infinity, -Infinity, -Infinity ];
+
+	for( i=0; i < geo.vert.length; i+=3 ){
+		v.from_buf( geo.vert, i );
+
+		bmin[ 0 ] = Math.min( bmin[ 0 ], v.x );
+		bmin[ 1 ] = Math.min( bmin[ 1 ], v.y );
+		bmin[ 2 ] = Math.min( bmin[ 2 ], v.z );
+
+		bmax[ 0 ] = Math.max( bmax[ 0 ], v.x );
+		bmax[ 1 ] = Math.max( bmax[ 1 ], v.y );
+		bmax[ 2 ] = Math.max( bmax[ 2 ], v.z );
+
+		App.Debug.pnt( v, "yellow" );
+	}
+
+	App.Debug.box( bmin, bmax, "yellow", true );
+}
+
+function volume_entity( geo ){
+	//let mat	= App.shader.new_material( "LowPoly" );
+	let mat	= App.shader.new_material( "TESTER" );
+
+	let mesh = App.mesh.from_data( "VolCube", geo.vert, 3, geo.idx );
+	App.mesh_entity( name, mesh, mat, App.mesh.TRI );
+}
+
+
+//#####################################################
+function VolumeCube( name = "VolumeCube" ){}
+VolumeCube.geo = function( ww=1, hh=1, dd=1 ){
+	let x = 0, y = 0.501, z = 0;
+	let w = ww*0.5, h = hh*0.5, d = dd*0.5;
+	let x0 = x-w, 
+		x1 = x+w, 
+		y0 = y-h, 
+		y1 = y+h, 
+		z0 = z-d, 
+		z1 = z+d;
+
+	let vert = [
+		x0, y1, z0, // Top
+		x0, y1, z1,
+		x1, y1, z1, 
+		x1, y1, z0,
+
+		x0, y0, z0,	// Bot
+		x0, y0, z1,
+		x1, y0, z1,
+		x1, y0, z0,
+	];
+
+	let idx = [				// CCW
+		0, 1, 2, 2, 3, 0,	// Top
+		6, 5, 4, 4, 7, 6,	// Bot
+		1, 5, 6, 6, 2, 1,	// Fnt
+		2, 6, 7, 7, 3, 2,	// Lft
+		3, 7, 4, 4, 0, 3,	// Bak
+		0, 4, 5, 5, 1, 0,	// Rit
+	];
+
+	// Reverse Triangle Winding
+	/**/
+	let t;
+	for( let i=0; i < idx.length; i+=3 ){
+		t			= idx[ i ];
+		idx[ i ]	= idx[ i+2 ];
+		idx[ i+2 ]	= t;
+	}
+
+	return { vert: new Float32Array( vert ), idx: new Uint16Array( idx ) };
+}
+
+//#####################################################
+
+let gUbo;
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gUbo = App.ubo.new( "Light", 10, [
+		{ name:"pos",	type:"vec3" },
+		{ name:"color",	type:"vec3" },
+	]);
+
+	gUbo
+		.set( "pos", [2,5,1] )
+		.set( "color", Colour.rgb_array( "#ffffff" ) );
+	App.ubo.update( gUbo );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"base_color", type:"rgba", value:"#DB00FFFF" },
+		//{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model", "Light" ) )
+	.set_blend( true );
+}
+
+// https://alexanderameye.github.io/simple-toon
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+
+	uniform Global{ 
+		mat4 proj_view; 
+		mat4 camera_matrix;
+		vec3 camera_pos;
+		float delta_time;
+		vec2 screen_size;
+		float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_cam_pos;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_cam_pos	= global.camera_pos;
+		//frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+	
+	out vec4 out_color;
+
+	//-------------------------
+	
+	uniform Light{ 
+		vec3 pos;
+		vec3 color;
+	} light;
+
+	in vec3 frag_cam_pos;
+	in vec3 frag_wpos;
+	in vec3 frag_lpos;
+
+	//-------------------------
+	const int TRIES 	= 60;
+
+	float vmax( vec3 v){ return max( max( v.x, v.y ), v.z ); }
+
+	float sdf_smin( float a, float b, float k ){
+		float res = exp( -k * a) + exp( -k * b );
+		return -log( max( 0.0001, res ) ) / k;
+	}
+
+	float sdf_blend( float d1, float d2, float t ){ return t * d1 + (1.0 - t) * d2; }
+
+	float sdf_sphere( vec3 p, vec3 c, float r ){ return distance( p, c ) - r; }
+
+	float sdf_box( vec3 p, vec3 c, vec3 s ){
+		s *= 0.5;
+		return max( max(
+			max( p.x - c.x - s.x, c.x - p.x - s.x ),
+			max( p.y - c.y - s.y, c.y - p.y - s.y )
+		), max( p.z - c.z - s.z, c.z - p.z - s.z ) );
+	}
+
+	float sdBox(vec3 position, vec3 c, vec3 dimensions) {
+		vec3 d = abs(position - c) - dimensions;
+		return min(max(d.x, max(d.y,d.z)), 0.0) + length(max(d, 0.0));
+	}
+
+	float sdBox2( vec3 p, vec3 c, vec3 b ){
+		vec3 q = abs(p-c) - b;
+		return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+	}
+
+	float cubeSDF( vec3 p, vec3 c, vec3 s ) {
+		// If d.x < 0, then -1 < p.x < 1, and same logic applies to p.y, p.z
+		// So if all components of d are negative, then p is inside the unit cube
+		vec3 d = abs( p - c ) - s;
+		
+		// Assuming p is inside the cube, how far is it from the surface?
+		// Result will be negative or zero.
+		float insideDistance = min(max(d.x, max(d.y, d.z)), 0.0);
+		
+		// Assuming p is outside the cube, how far is it from the surface?
+		// Result will be positive or zero.
+		float outsideDistance = length(max(d, 0.0));
+		
+		return insideDistance + outsideDistance;
+	}
+
+	float sdf_box_cheap( vec3 p, vec3 c, vec3 s){ return vmax( abs( p - c ) - s ); }
+
+	//-------------------------
+	
+	const float MIN_DIST = 0.001;
+	
+	float sdf( vec3 p ){
+		//float a = sdf_sphere( p, vec3(-.2,.5,.0), .3 );
+		//float b = sdf_box( p, vec3(.2,.5,.0 ), vec3( .2, .2, .2 ) );
+        //return sdf_smin( a, b, 32.0 );
+        
+        return sdf_sphere( p, vec3(0,.5,.0), .3 );
+	}
+
+	bool ray_march( vec3 p, vec3 dir, out vec3 hit_pos, out float ao ){
+		float d;
+		for (int i = 0; i < TRIES; i++){
+			d = sdf( p );
+			if( d < MIN_DIST ){
+				hit_pos = p;
+				ao = 1.0 - float( i ) / float( TRIES - 1 );
+				return true;
+			}
+			p += dir * d;
+		}
+		return false;
+	}
+
+	/*
+	vec2 calcRayIntersection(vec3 rayOrigin, vec3 rayDir, float maxd, float precis) {
+		float latest = precis * 2.0;
+		float dist   = +0.0;
+		float type   = -1.0;
+		vec2  res    = vec2(-1.0, -1.0);
+
+		for (int i = 0; i < steps; i++) {
+			if (latest < precis || dist > maxd) break;
+
+			vec2 result = sdf(rayOrigin + rayDir * dist);
+
+			latest = result.x;
+			type   = result.y;
+			dist  += latest;
+		}
+
+		if (dist < maxd) {
+			res = vec2(dist, type);
+		}
+
+		return res;
+	}
+
+	vec2 calcRayIntersection(vec3 rayOrigin, vec3 rayDir) {
+		return calcRayIntersection(rayOrigin, rayDir, 20.0, 0.001);
+	}
+	*/
+
+
+
+	
+
+	vec3 normal( vec3 p ){
+		const float eps = 0.01;
+		const vec3 v = vec3( eps, 0.0, 0.0 );
+
+		/*
+		return normalize( vec3(
+			sdf( p + v.xyz ) - sdf( p - v.xyz ),
+			sdf( p + v.yxz ) - sdf( p - v.yxz ),
+			sdf( p + v.yzx ) - sdf( p - v.yzx )
+		));
+		
+
+		return normalize( vec3(
+			sdf( p + v.xyz ) - sdf( p ),
+			sdf( p + v.yxz ) - sdf( p ),
+			sdf( p + v.yzx ) - sdf( p )
+		));
+		*/
+
+		return normalize( vec3(
+			sdf( p + v.xyz ),
+			sdf( p + v.yxz ),
+			sdf( p + v.yzx )
+		));
+	}
+	
+	vec3 calcNormal2( vec3 p ) // for function f(p)
+	{
+		const float h = 0.0001; // replace by an appropriate value
+		const vec2 k = vec2(1,-1);
+		return normalize( k.xyy*sdf( p + k.xyy*h ) + 
+						k.yyx*sdf( p + k.yyx*h ) + 
+						k.yxy*sdf( p + k.yxy*h ) + 
+						k.xxx*sdf( p + k.xxx*h ) );
+	}
+
+	uniform int iFrame;
+
+	vec3 calcNormal( vec3 p ) // for function f(p)
+	{
+		const float h = 0.0001;      // replace by an appropriate value
+		#define ZERO (min(iFrame,0)) // non-constant zero
+		vec3 n = vec3(0.0);
+		for( int i=ZERO; i<4; i++ )
+		{
+			vec3 e = 0.5773*(2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+			n += e * sdf( p + e*h );
+		}
+		return normalize(n);
+	}
+
+	/*
+	float ray_march2( vec3 p, vec3 dir ){
+		float d;
+		for (int i = 0; i < TRIES; i++){
+			d = sdf_sphere( p );
+			if( d <= MIN_DIST ) return float(i) / float(TRIES);
+			p += dir * d;
+		}
+		return 0.0;
+	}
+	*/
+
+	void main( void ){
+		// vec3 pixelNorm = normalize( cross( dFdx(w_pos), dFdy(w_pos) ) ); //Calc the Normal of the Rasterizing Pixel
+		vec3 ray = normalize( frag_wpos - frag_cam_pos );
+
+		//float x = ray_march2( frag_wpos, ray );
+		//out_color = vec4( x, x, x, 1.0 );
+		//out_color = mix( vec4(1.0,0.0,0.0,1.0), vec4( 0.0,1.0,0.0,1.0), x );
+
+		vec3 hit_pos;
+		float ao;
+		if( ray_march( frag_cam_pos, ray, hit_pos, ao ) ) {
+			out_color = vec4( 1.0, 0.0, 0.0, 1.0 );
+			out_color.rgb *= ao;
+		}else
+			out_color = vec4( 0.0, 0.0, 0.0, 0.0 );
+
+		//vec3 norm = normal( frag_wpos );
+		vec3 norm = calcNormal2( hit_pos );
+		//vec3 norm 	= normalize( cross( dFdx(ray), dFdy(ray) ) );
+
+		vec3 to_light = normalize( light.pos - frag_wpos );
+		float dot = clamp( dot( norm, to_light ), 0.0, 1.0 );
+
+		out_color.rgb *= dot;
+
+		/*
+		vec2 rtn = calcRayIntersection( frag_wpos, ray );
+		if(ray.x > -0.5) {
+				vec3 pos = frag_wpos + t.x * ray;
+				//vec3 nor = getNormal(pos);
+
+				color = nor * 0.5 + 0.5;
+				out_color = vec4( 1.0, 0.0, 0.0, 1.0 ) 
+		}
+		*/
+
+	}`;
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

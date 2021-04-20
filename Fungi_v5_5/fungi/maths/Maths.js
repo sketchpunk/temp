@@ -640,4 +640,14 @@ static function Berp(start : float, end : float, value : float) : float
     return start + (end - start) * value;
 }
 
+
+// Remove a Value from one Range, onto Another
+public static float Lerp (float x0, float x1, float y0, float y1, float x)
+{
+    float d = x1 - x0;
+    if (d == 0)
+        return (y0 + y1) / 2;
+    return y0 + (x - x0) * (y1 - y0) / d;
+}
+
 */

@@ -18,8 +18,18 @@ class Motion{
 
 			let c = Math.cos( t );
 			let s = Math.sin( t );
-
 			e.node.set_pos( radius * c, y, radius * s );
+		}
+	}
+
+	static circle_fn( speed, radius, fn ){
+		let t = 0;
+		return ( dt )=>{
+			t	 += speed * dt;
+			let c = Math.cos( t );
+			let s = Math.sin( t );
+
+			fn( radius * c, radius * s );
 		}
 	}
 

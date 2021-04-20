@@ -36,6 +36,13 @@ class Ubo{
 		return this;
 	}
 
+	copy( ary_buf ){
+		// Need to convert to Byte Arrays to Copy Raw Data over from one ArrayBuffer to Another.
+		new Uint8Array( this.array_buffer, 0, this.array_buffer.byteLength )
+			.set( new Uint8Array( ary_buf ) );
+		return this;
+	}
+
 	create_byte_buffer(){
 		this.byte_size 		= calculate_size( this.vars );
 		this.array_buffer	= new ArrayBuffer( this.byte_size );
@@ -73,10 +80,12 @@ class UboFactory{
 	get( n ){ return this.cache.get( n ); }
 
 	get_array(){
-		let name, rtn = new Array();
-		for( name of arguments ){
-			rtn.push( this.cache.get( name ) );
-		}
+		let name, 
+			rtn = new Array(),
+			ary = ( arguments.length == 1 && Array.isArray( arguments[0] ) )? arguments[0] : arguments; 
+
+		for( name of ary ) rtn.push( this.cache.get( name ) );
+
 		return rtn;
 	}
 

@@ -1,0 +1,66 @@
+<!DOCTYPE html><script type="module">
+import App, { Draw }		from "../../fungi/App.js";
+import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
+import GltfUtil,{Gltf}	    from "../../fungi/lib/GltfUtil.js";
+import PhongGen             from "../../fungi/shaders/PhongGen.js";
+
+//#####################################################
+App
+    .init()
+    .use_lighting()
+	//.load_shaders( "LowPoly.js" )
+	.set_camera( 50, 20, 5, 0, 0.8, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+async function init(){
+
+	let dl	= await XhrQueue.url( "../../files/models/pbr/" )
+		.add( "DamagedHelmet.gltf" )
+		.add( "DamagedHelmet.bin" )
+		.add( "DamagedHelmet_albedo.jpg" )
+		.add( "DamagedHelmet_normal.jpg" )
+		.add( "DamagedHelmet_AO.jpg" )
+		.add( "DamagedHelmet_emissive.jpg" )
+		.add( "DamagedHelmet_metalRoughness.jpg" )
+		.url( "../../files/textures/" )
+		.add( "teufelsberg_inner_1k.jpg" )
+        .then();
+        
+    let albedo_tex = App.texture.new( "albedo_tex", dl[2] ); // name, img, doYFlip = false, useMips = false, wrapMode = 0, filterMode = 0
+    let normal_tex = App.texture.new( "normal_tex", dl[3] );
+    let mr_tex	   = App.texture.new( "mr_tex", dl[6] );
+    let env_tex	   = App.texture.new( "env_tex", dl[7], false, true ); // Turn On Mips
+    let emiss_tex  = App.texture.new( "emiss_tex", dl[5] );
+    let ao_tex	   = App.texture.new( "ao_tex", dl[4] );
+
+    let sh = PhongGen.build({
+        //base_color : "#00ee00ff",
+        //poly_norm  : true,
+        base_tex        : albedo_tex,
+        normal_tex      : normal_tex,
+        equ_env_tex     : env_tex,
+        //metal           : 1.0,
+        //roughness       : 0.0,
+        metal_rough_tex : mr_tex,
+        emission_tex    : emiss_tex,
+        occlusion_tex   : ao_tex,
+        gamma           : 0.7272, //.4545
+    });
+
+    let mat = App.shader.new_material( sh.name );
+    App.ecs.systems.get( "LightSystem" ).cls.ambient_color = "#202020";
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let e = GltfUtil.get_entity( "MeshTest", dl[0], dl[1], mat );
+	e.node.set_pos( 0, 1.0, 0 );
+
+	return true;
+}
+
+//##############################################################
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

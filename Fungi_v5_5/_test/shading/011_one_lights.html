@@ -1,0 +1,164 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule	    from "../../fungi/geo/Capsule.js";
+import Points 	    from "../../fungi/geo/Points.js";
+import MotionStack 	from "../../fungi.test/MotionStack.js";
+import GltfUtil     from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	    from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 40, 10, 4, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gMotion, gUbo, gPnt
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion.run( dt );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	let e = GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gPnt = Points.new_entity( "Light" );
+	gPnt.points.add( [0,0,0], "#ffffff", 0.3, 1 );
+    gPnt.node.set_pos( 0, 2, 0 );
+    
+    App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+    gMotion = new MotionStack()
+        //.rot_by( 15, "y", (r,a)=>{ e.node.rot_by(r,a); } );
+        .sin_range( 1.5, 0.6, 3, (v)=>{ 
+            gPnt.node.set_pos( 0, 0.5, v );
+            App.ubo.update( gUbo.set( "pos", gPnt.node.local.pos ) );
+        } );
+        //.circle( 1, 1, (x,y)=>{ e.node.set_pos(x,0,y); } );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+    gUbo = App.ubo.new( "Lights", 10, [
+        { name:"pos", type:"vec3" },
+        { name:"color", type:"vec3" },
+    ]);
+
+    gUbo.set( "pos", [ 5,1,0 ] );
+    gUbo.set( "color", [ 0,1,0 ] );
+    App.ubo.update( gUbo );
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"base_color", type:"rgba", value:"#ff7f7fff" },
+	], App.ubo.get_array( "Global", "Model", "Lights" ) );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+
+uniform Global{ 
+    mat4 proj_view; 
+    mat4 camera_matrix;
+    vec3 camera_pos;
+    float delta_time;
+    vec2 screen_size;
+    float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+    vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_lpos 		= a_pos.xyz;
+    frag_wpos		= wpos.xyz;
+    frag_cam_pos	= global.camera_pos;
+    frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+out vec4 out_color;
+
+//-------------------------
+uniform vec4 base_color;
+
+uniform Lights{ 
+    vec3 pos;
+    vec3 color;
+} light;
+
+in vec3 frag_norm;
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+void main( void ){
+    out_color = vec4( 1.0, 0.0, 0.0, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec3 norm 		= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+    vec3 dir_light	= normalize( light.pos - frag_wpos );	// Direction of light from fragment
+
+    float constant  = 1.0; // Making it less then 1 can make the light more intense
+    float linear    = 0.1; // MaxLight Distance / 10 gets you linear
+    float quadratic = 1.8; // Factor how fast the light strength will diminish
+
+    float distance  = length( light.pos - frag_wpos );
+    float attenuation = 1.0 / (constant + linear * distance + quadratic * (distance * distance));
+
+    //attenuation = 0.2 / distance; // Simpler Attenuation, MaxDistance / Current Distance
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // DIFFUSE LIGHT
+
+    float diff		= max( dot( norm, dir_light ), 0.0 ); 	// Angle between Frag Normal and Light Direction ( 0 to 1 )
+    vec3 diffuse	= diff * light.color;					// Use the angle to scale the amount of light to use.
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    out_color = vec4( base_color.rgb * (diffuse * attenuation), 1.0 );
+
+}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

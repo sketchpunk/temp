@@ -5,6 +5,7 @@ const vert_src = `#version 300 es
 	layout(location=8) in vec4 a_skin_idx;
 	layout(location=9) in vec4 a_skin_wgt;
 
+	//out vec3		test_color;
 	out vec3		frag_pos;
 	flat out vec3	frag_cam_pos;
 
@@ -79,16 +80,23 @@ const vert_src = `#version 300 es
 	void main(void){
 		//vec4 wpos		= model.view_matrix * mtx_bone_transform( a_pos, arm.bones, a_skin_idx, a_skin_wgt );
 		vec4 wpos		= model.view_matrix * mtx_bone_transform2( a_pos, a_skin_idx, a_skin_wgt );
+		//vec4 wpos		= model.view_matrix * mtx_bone_transform2( a_pos, vec4(0.0, 1.0, 0.0, 0.0), vec4(0.5, 0.5, 0.0, 0.0) );
+
 		frag_pos		= wpos.xyz;
 		frag_cam_pos	= global.camera_pos;
 
-		gl_Position		= global.proj_view * wpos;		
+		gl_Position		= global.proj_view * wpos;
+		
+		//if( a_skin_idx.x > 100.0 ) test_color = vec3( 1.0, 0.0, 0.0 );
+		//else test_color = vec3( 1.0 );
 	}`;
 
 const frag_src = `#version 300 es
 	precision mediump float;
 
 	out 	vec4	out_color;
+
+	//in		vec3 	test_color;
 
 	in		vec3	frag_pos;
 	flat in	vec3	frag_cam_pos;
@@ -126,6 +134,8 @@ const frag_src = `#version 300 es
 		vec3 cSpecular		= lightColor * specular * uSpecularStrength;
 
 		out_color = vec4( color * (cAmbient + cDiffuse + cSpecular), 1.0 );
+
+		//out_color.rgb = test_color;
 	}`;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

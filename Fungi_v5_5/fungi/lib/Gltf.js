@@ -11,6 +11,8 @@ class Gltf{
 			comp_len	= Gltf[ "COMP_" + access.type ],			// Component Length for Data Element
 			data_type, tsize;
 	
+		
+
 		if( buf_view.byteStride ){
 			console.error( "UNSUPPORTED - Parsing Stride Buffer " );
 			return null;

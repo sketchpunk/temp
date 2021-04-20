@@ -41,6 +41,7 @@ class Quat extends Float32Array{
 
 		set( x, y, z, w ){ this[0] = x; this[1] = y; this[2] = z; this[3] = w; return this; }
 		copy( q ){ this[0] = q[0]; this[1] = q[1]; this[2] = q[2]; this[3] = q[3]; return this; }
+		copy_to( q ){ q[0] = this[0]; q[1] = this[1]; q[2] = this[2]; q[3] = this[3]; return this; }
 
 		reset(){ this[0] = this[1] = this[2] = 0; this[3] = 1; return this; }
 		clone(){ return new Quat(this); }
@@ -147,6 +148,8 @@ class Quat extends Float32Array{
 			out[2]	= yaw	* deg;
 			return out;
 		}
+
+		len_sqr( v ){ return this[0]**2 + this[1]**2 + this[2]**2 + this[3]**2; }
 
 	////////////////////////////////////////////////////////////////////
 	// FROM SETTERS
@@ -890,6 +893,8 @@ class Quat extends Float32Array{
 			q[3] = Math.cos( half );
 			return q;
 		}
+
+		static len_sqr( a, b ){ return (a[0]-b[0]) ** 2 + (a[1]-b[1]) ** 2 + (a[2]-b[2]) ** 2 + (a[3]-b[3]) ** 2; }
 
 	////////////////////////////////////////////////////////////////////
 	// INTERPOLATION

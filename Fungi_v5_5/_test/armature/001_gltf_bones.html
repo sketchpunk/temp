@@ -14,7 +14,7 @@ App
 //#####################################################
 
 async function init(){
-    let [ json, bin ] = await XhrQueue.url( "../../files/models/", "jinx.gltf", "jinx.bin" );
+    let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
 	
 	let e = GltfUtil.get_bone_only_entity( "Test", json, bin );
 	e.draw.items[0].material.options.depthTest = true;

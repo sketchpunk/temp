@@ -1,0 +1,159 @@
+
+/* #region prop-panel-btncont */
+prop-panel-btncont{ position:absolute; bottom:10px; right:10px; }
+.prop-panel-btncont{ width:50px; height:50px; position:relative; }
+.prop-panel-btncont > button{
+    background-color: gray;
+    position:absolute; width:50px; height:50px; bottom:0px; right:0px;
+
+    box-shadow: 0px 0px 0px 0px rgba(0, 0, 0, 0.0);
+    border:none; border-radius:50%; padding:4px; margin:0px;
+    
+    display:flex; flex-direction:column; align-items: stretch;
+    box-sizing:border-box; cursor:pointer;
+
+    transition: all 0.3s ease-in-out;
+}
+
+.prop-panel-btncont > button > div{
+    border-radius:50%; background-color: gray; 
+    flex: 1 1 auto; transition: all 0.3s ease-in-out;
+    display:flex; justify-content: center; align-items: center;
+}
+
+.prop-panel-btncont > button svg{ fill:silver; transition: all 1s ease; }
+
+.prop-panel-btncont > button:focus{ outline:none; }
+.prop-panel-btncont > button:hover{ background-color: #00000000; box-shadow: 0px 0px 0px 4px silver; }
+.prop-panel-btncont > button:hover div{ background-color:silver; }
+.prop-panel-btncont > button:hover svg{ fill:white; }
+
+.prop-panel-btncont > button.open{ background-color: #00000000; box-shadow: 0px 0px 0px 4px #00000022; }
+.prop-panel-btncont > button.open div{ background-color:silver; }
+.prop-panel-btncont > button.open svg{ fill:silver; }
+
+.prop-panel-btncont > section.open{ opacity:1; transform:scale(1); }
+.prop-panel-btncont > section{
+    background-color:white; box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.2);
+    border:0px solid green; border-radius:8px;
+    position:absolute; width:00px; bottom:60%; right:60%;
+    opacity: 0; transform: scale(0);
+    transform-origin: bottom right;
+    transition: all 0.3s ease;
+}
+/* #endregion //////////////////////////////////////////////////////// */
+
+/* #region prop-panel */
+prop-panel{}
+.prop-panel{}
+.prop-panel > header{}
+.prop-panel > main{ display:flex; flex-direction:column; }
+.prop-panel > footer{}
+/*:host{ border:3px solid sandybrown; }
+prop-panel:part(header){ border:1px solid black; }*/
+/* #endregion //////////////////////////////////////////////////////// */
+
+/* #region prop-row */
+.prop-row{ display:flex; box-sizing:border-box; }
+.prop-row > label{ flex:0 0 35%; display:flex; justify-content:left; align-items:center; }
+.prop-row > main{ flex:1 1 auto; display:flex; }
+/*.prop-row > main:before{ content:":"; color:red; }*/
+.prop-row > main ::slotted(*){ flex: 1 1 auto; }
+/* #endregion //////////////////////////////////////////////////////// */
+
+/* #region prop-group */
+.prop-group{ }
+.prop-group > header{ display:flex; }
+.prop-group > header > span{ flex:1 1 auto; user-select: none; }
+.prop-group > header > i{ flex:0 0 25px; border:1px solid red; cursor:pointer; }
+.prop-group > main{ display:flex; flex-direction:column; overflow:hidden; max-height:1500px; transition: max-height 1.5s ease-in; }
+.prop-group.close > main { max-height:0px; transition-timing-function: cubic-bezier(.07,1.07,0,1.01);
+    transition: all 0.9s, opacity 0.2s;  }
+
+
+
+
+/* #endregion //////////////////////////////////////////////////////// */
+
+/* #region THEME */
+
+/*
+https://codepen.io/ShanKris/pen/EXYMxg awesome TrueFalse Toggle
+https://webdesign.tutsplus.com/tutorials/toggle-switch-component-with-css-checkbox-hack--cms-35011  EVEN BETTER TOGGLE
+
+https://lokesh-coder.github.io/pretty-checkbox/
+https://codepen.io/aaroniker/pen/abzgWEx Cool SVG PLUS MINUS ICON
+https://codepen.io/aaroniker/pen/ZEYoxEY
+
+https://codepen.io/LeonardMeagher2/pen/NvOLZr
+https://codepen.io/abergin/pen/kjwBz/
+*/
+
+:root{
+    --head-bg               : #3d4145;
+    --secondary-bg          : #c8cad0;
+    --secondary-bg-hover    : #838488;
+    --secondary-txt         : #2f3137;
+}
+
+/* PROP PANEL */
+.prop-panel,
+.prop-panel button,
+.prop-panel select{
+    font-family : "Lucida Console", Monaco, monospace;
+    font-size   : 16px;
+    color       : #b6b9be;
+}
+
+.prop-panel{ background-color:#2e3136; border-radius:8px; }
+.prop-panel > header{ background-color:var(--head-bg); font-weight:bold; text-align:center; border-radius:8px 8px 0px 0px; padding:5px 8px 3px 8px; }
+.prop-panel > footer{ background-color:#212325; font-weight:bold; text-align:center; border-radius:0px 0px 8px 8px; padding:5px 8px 3px 8px; }
+
+.prop-panel > main{ padding:8px; }
+.prop-panel > main ::slotted(*:not(:last-child)){ margin-bottom:8px; }
+
+/* SELECT */
+.prop-panel select{ border:none; border-radius:4px; background-color:var(--secondary-bg); padding:4px 6px; color: var(--secondary-txt); }
+.prop-panel select:focus{ outline:0; background-color:#c8cad0; }
+
+/* RANGE */
+.prop-panel input[type=range] { margin:1px; box-sizing: border-box; -webkit-appearance: none; min-height:20px; border-radius:5px;}
+.prop-panel input[type=range]:focus{ outline:0; background-color:#404040; border-color:#c0c0c0; color:white; }
+.prop-panel input[type=range]::-webkit-slider-thumb{ -webkit-appearance: none; height:100%; width:40px; background: #727272; border-radius:4px; cursor: pointer; }
+.prop-panel input[type=range]::-webkit-slider-runnable-track{ height: 100%; cursor: ew-resize; background: #303030; border:1px solid #555555; border-radius:5px; transition: all 0.3s ease-out; }
+.prop-panel input[type=range]:focus::-webkit-slider-runnable-track{ background-color:#404040; border-color:#c0c0c0; }
+
+/* BUTTON */
+.prop-panel button{ border:none; border-radius:4px; background-color:var(--secondary-bg); padding:4px 6px; color: var(--secondary-txt); }
+.prop-panel button:active{ background-color:var(--secondary-bg-hover); }
+.prop-panel button:focus{ outline:0; }
+
+/* PROP GROUP */
+.prop-group > header{ background-color:var(--head-bg); padding:4px 8px 4px 8px; border-radius:6px 6px 0px 0px; }
+.prop-group > header > span{ padding-top:2px; }
+.prop-group > main{ border:2px solid var(--head-bg); border-width:0px 4px 4px 4px; border-radius:0px 0px 6px 6px; padding:4px; opacity:1.0; }
+.prop-group.close > main{ border-width:0px; padding:0px; opacity:0.0 }
+.prop-group.close > header{ border-radius:6px; }
+
+.prop-group > main{ padding:8px; }
+.prop-group > main ::slotted(*:not(:last-child)){ margin-bottom:8px; }
+
+input.chkCircle[type=checkbox]{ position: relative; }
+input.chkCircle[type=checkbox]:before{
+    content:""; position:absolute;
+    width:130%; height:130%; left:-15%; top:-15%;
+    border-radius: 50%; background-color: #555b64;
+    transition: all 0.25s ease-in-out;
+}
+
+input.chkCircle[type=checkbox]:after {
+    content:""; position:absolute;
+    width:130%; height:130%; left:-15%; top:-15%;
+    border-radius:50%; background-color:var(--head-bg);
+    transform:scale(0,0); transition: all 0.25s cubic-bezier(0.75, 0.01, 0.48, 2);
+}
+
+input.chkCircle[type=checkbox]:checked:before{ background-color:var(--secondary-bg); }
+input.chkCircle[type=checkbox]:checked:after{ transform: scale(0.7, 0.7); }
+
+/* #endregion //////////////////////////////////////////////////////// */

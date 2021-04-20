@@ -1,0 +1,176 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import FacedCube from "../../fungi/geo/FacedCube.js";
+import UVSphere  from "../../fungi/geo/UVSphere.js";
+//#####################################################
+App
+	.init( true )
+	.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+// https://www.youtube.com/watch?v=-_IspRG548E
+// https://blog.winter.dev/2020/designing-a-physics-engine/
+
+//#####################################################
+
+function on_render( dt, ss ){
+    PhysicsSystem.run( App.ecs );
+}
+
+async function init(){
+    pkg_init();
+
+    //let eID = FacedCube();
+    let e = UVSphere( "x", "LowPoly" );
+    console.log( e );
+
+    let rb  = App.ecs.add_com( e.id, "RigidBody" );
+    let c   = App.ecs.add_com( e.id, "Collider" );
+    c.as_sphere( 0.5 );
+    let n   = App.ecs.get_com( e.id, "Node" );
+    //n.set_scl( 0.5 );
+
+    console.log( c );
+
+    //console.log( rb, PhysicSystem.gravity );
+    //App.render_by( 1, on_render );
+    //App.delta_time = 0.1;
+    //on_render( 0.1, 0.1 );
+
+    return true;
+}
+
+//#####################################################
+
+function pkg_init(){
+    App.ecs.components
+        .reg( RigidBody )
+        .reg( Collider );
+	//App.ecs.systems.reg( PhysicSystem, 801 );
+}
+
+class RigidBody{
+    velocity = new Vec3();
+    force    = new Vec3();
+    mass     = 1;
+
+    add_force( v ){ this.force.add( v ); return this; }
+    add_velocity( v ){ this.velocity.add( v ); return this; }
+}
+
+class Collider{
+    shape   = null;
+
+    as_sphere( radius ){ this.shape = new SphereCollider( radius ); return this; }
+    as_plane( norm ){    this.shape = new PlaneCollider( norm ); return this; }
+}
+
+class SphereCollider{
+    center = new Vec3();
+    radius = 0;
+    constructor( r ){ this.radius = r; }
+}
+
+class PlaneCollider{
+    plane    = new Vec3(); // normal
+    distance = 0;
+    constructor( norm ){ this.plane.copy( norm ); }
+}
+
+/*
+struct CollisionPoints {
+	vector3 A; // Furthest point of A into B
+	vector3 B; // Furthest point of B into A
+	vector3 Normal; // B – A normalized
+	float Depth;    // Length of B – A
+	bool HasCollision;
+};
+
+CollisionPoints FindSpherePlaneMaifoldPoints(
+		const SphereCollider* a, const Transform* ta,
+		const PlaneCollider*  b, const Transform* tb)
+	{
+		vector3 A  = a->Center + ta->WorldPosition();
+		float   Ar = a->Radius * ta->WorldScale().major();
+
+		vector3 N = b->Plane.P * tb->WorldRotation();
+		N.normalize();
+		
+		vector3 P = N * b->Plane.D + tb->WorldPosition();
+
+		float d = (A - P).dot(N); // distance from center of sphere to plane surface
+
+		if (d > Ar) {
+			return {};
+		}
+		
+		vector3 B = A - N * d;
+		        A = A - N * Ar;
+
+		vector3 AtoB = B - A;
+
+		return {
+			A, B,
+			AtoB.normalized(),
+			AtoB.length(),
+			true
+		};
+	}
+*/
+
+
+class PhysicsSystem{
+    static gravity  = new Vec3( 0, 1, 0 ); //-9.81
+
+    static run( ecs ){
+        let ary = ecs.query_entities( [ "Node", "RigidBody" ] );
+        if( ary.length == 0 ) return; 
+
+        let e, rb, n, v = new Vec3();
+        
+        for( e of ary ){
+            n   = e.Node;
+            rb  = e.RigidBody;
+
+            // Add Gravity : obj->Force += obj->Mass * m_gravity;
+            v.from_scale( this.gravity, rb.mass );
+            rb.add_force( v );
+
+            // Compute Velocity : obj->Velocity += obj->Force / obj->Mass * dt
+            v.from_div_scale( rb.force, rb.mass ).scale( App.delta_time );
+            rb.add_velocity( v );
+
+            // Apply Velocity : obj->Position += obj->Velocity * dt;
+            v.from_scale( rb.velocity, App.delta_time );
+            n.local.pos.add( v );
+
+            console.log( "vel", v );
+
+            // Reset Force
+            rb.force.reset();
+        }
+
+
+        //let a, ary = ecs.query_comp( "Armature" );
+        //if( ary == null ) return; // No Bones Loaded
+        //for( a of ary ) if( a.updated ) a.updated = false;
+
+        /*
+        obj->Force += obj->Mass * m_gravity; // apply a force
+
+        obj->Velocity += obj->Force / obj->Mass * dt;
+        obj->Position += obj->Velocity * dt;
+
+        obj->Force = vector3(0, 0, 0); // reset net force at the end
+        */
+	
+    }
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

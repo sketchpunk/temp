@@ -233,6 +233,22 @@ class Launcher{
 		return this;
 	}
 
+	use_lighting( inc_default=true ){
+		this.task( async()=>{ 
+			let mod = await import("./ecs/Lights.js");
+
+			mod.default();			// Run Setup
+			App.light = mod.Light;	// Access to Light Object Globally
+
+			if( inc_default ){		// Load Default Lighting
+				mod.Light.new_entity( { name:"MainLight", type:"pnt", color:"#ffffff", pos:[5,5,3], attenuation:1 }  );
+			}
+
+			return true; 
+		});
+		return this;
+	}
+
 	use_events(){
 		this.task( async()=>{
 			let mod = await import( "./lib/EventManager.js");

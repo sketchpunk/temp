@@ -203,7 +203,7 @@ function ArmatureSys( ecs ){
 				mat.from_mul( n.model_matrix, arm.bind_pose[ i ] );
 				arm.offset_buffer.set( mat, i*16 );
 			}
-        }
+		}
 	}	
 }
 

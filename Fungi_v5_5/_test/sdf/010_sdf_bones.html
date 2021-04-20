@@ -1,0 +1,485 @@
+<!DOCTYPE html><script type="module">
+import App, {}      from "../../fungi/App.js";
+import VolumeCube   from "../../fungi.sdf/VolumeCube.js";
+
+//#####################################################
+App
+	.init( true )
+    .use_debug()
+	.set_camera( 90, 10, 2, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let $chain;
+
+function on_render( dt, ss ){
+    // Compute Rotation
+    const speed = 2.0;
+    let ang     = Math.sin( ss * speed ) * ( Math.PI / 4 );
+    let q       = Quat.axis_angle( Vec3.LEFT, ang );
+    
+    // Apply it to local space rotation of each bone
+    for( let b of $chain.bones ) b.set_rot( q );
+
+    // Compute World Space Transforms, fill in Buffer for Shader
+    $chain.update_world().update_buffer();
+}
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+    App.Debug.set_depth_test( true ).set_priority( 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup Shader and Volume
+    let mat = init_shader();
+    let e   = VolumeCube( "vb", mat, true );
+    
+    e.node.set_scl( 1.0, 1.0, 1.5 );    // Resize Render Area
+    VolumeCube.debug( e.node.local );   // Draw Volume
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup Bones
+    let blen = 0.3;
+    $chain   = new BoneChain();
+    $chain.add_batch( [ blen, blen, blen ] );
+    
+    /*TEST BONES
+    $chain.bones[0].set_pos( 0, 0.1, 0 );
+    $chain.bones[0].rot_by( -45, "x" );
+    $chain.bones[1].rot_by( 45, "x" );
+    $chain.bones[2].rot_by( 45, "x" );
+    */
+    $chain.update_world().update_buffer();  // Update, Need buffer to exist
+
+    mat.set( "bones", $chain.buffer );      // Pass Reference of buffer to material
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.render_by( 1, on_render );
+    //on_render( 0, 0.01 );
+	return true;
+}
+
+//#####################################################
+
+import Vec3			from "../../fungi/maths/Vec3.js";
+import Quat			from "../../fungi/maths/Quat.js";
+import Transform 	from "../../fungi/maths/Transform.js";
+
+class Bone{
+    // #region MAIN
+    local = new Transform(); // Local 
+    world = new Transform();
+    len   = 0.2;
+    constructor( l ){ if( l ) this.len = l; }
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    // #region POSITION
+	set_pos( x, y, z ){
+		if( arguments.length == 1 ) this.local.pos.copy( x );
+		else						this.local.pos.set( x, y, z );
+		return this;
+    }
+    // #endregion /////////////////////////////////////////////////////////////////////
+    
+    // #region ROTATION
+    set_rot( q ){ this.local.rot.copy( q ); return this; }
+    set_rot_axis( axis, ang ){ this.local.rot.from_axis_angle( axis, ang ); this.updated = true; return this; }
+	set_rot_look( dir, up=null ){ this.local.rot.from_look( dir, up || Vec3.UP ); this.updated = true; return this; }
+	set_rot( q ){ this.local.rot.copy( q ); this.updated = true; return this; }
+    rot_by( deg, axis="y" ){ this.local.rot.rot_deg( deg, axis ); this.updated = true; return this; }
+    // #endregion /////////////////////////////////////////////////////////////////////
+}
+
+class BoneChain{
+    // #region MAIN
+    bones   = new Array();
+    buffer  = null;
+    count   = 0;
+    constructor(){}
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    // #region METHODS
+    add_batch( ary ){
+        for( let i of ary ) this.add( i );
+        return this;
+    }
+
+    add( len=0.2, pos=null ){
+        let b = new Bone( len );
+
+        // If no position, get previous bone's length
+        // and use that to create a local offset positon
+        // for the child bone.
+        if( pos == null && this.bones.length != 0 ){
+            let p = this.bones[ this.bones.length-1 ];
+            b.set_pos( 0, p.len, 0 );
+        }
+
+        this.bones.push( b );
+        this.count = this.bones.length;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    // #region UPDATES
+    update_world(){
+        let b;
+        for( let i=0; i < this.bones.length; i++ ){
+            b = this.bones[ i ];
+            if( i == 0 ) b.world.copy( b.local );
+            else         b.world.from_add( this.bones[ i-1 ].world, b.local );
+        }
+        return this;
+    }
+
+    update_buffer(){
+        let i, ii, b, buf = this.buffer;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Create or recreate buffer if not the currect size
+        if( !buf || buf.length != this.count * 8 ){
+            console.log('new buffer');
+            this.buffer = buf = new Float32Array( this.count * 8 );
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Save Data to Buffer 
+        // stride[8] = rot[4] + pos[3] + len[1]
+        for( i=0; i < this.count; i++ ){
+            b   = this.bones[ i ];
+            ii  = i * 8;
+
+            b.world.rot.to_buf( buf, ii );      // Rotation
+            b.world.pos.to_buf( buf, ii+4 );    // Position
+            buf[ ii + 7 ] = b.len;              // Bone Length
+        }
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////////////////////////
+}
+
+//#####################################################
+function init_shader( sName = "TESTER" ){
+    App.shader.new( sName, VERT_SRC, FRAG_SRC, [
+            { name:"base_color", type:"rgba", value:"#ff7f7fff" },
+            { name:"bones", type:"mat2x4", value:null }
+    ], App.ubo.get_array( "Global", "Model" ) ).set_blend( true );
+
+    return App.shader.new_material( sName );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+    mat4 proj_view; 
+    mat4 camera_matrix;
+    vec3 camera_pos;
+    float delta_time;
+    vec2 screen_size;
+    float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+flat out float time;
+flat out vec3 cam_pos;
+out vec3 frag_to_cam;
+out vec3 frag_wpos;
+
+void main(void){
+    vec4 wpos       = model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    time            = global.clock;
+    cam_pos         = global.camera_pos;
+    frag_wpos       = wpos.xyz;
+    frag_to_cam     = frag_wpos - global.camera_pos;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+const float PI          = 3.1415926535897932;
+const float PI_H		= 1.5707963267948966;
+const float PI_2 		= 6.283185307179586;
+const float PI_2_INV 	= 1.0 / 6.283185307179586;
+const float PI_Q		= 0.7853981633974483;
+const float PI_270		= PI + PI_H;
+const float DEG2RAD		= 0.01745329251; // PI / 180
+const float RAD2DEG		= 57.2957795131; // 180 / PI
+
+const mat3 ROT_X_90     = mat3( 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0 );
+const mat3 ROT_Y_90     = mat3( 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 0.0 );
+
+//-------------------------
+// BONES
+
+#define BONE_CNT 3
+
+uniform mat2x4 bones[ BONE_CNT ];  
+
+struct Bone{
+    vec4  rot;
+    vec3  pos;
+    float len;
+};
+
+Bone get_bone( int i ){
+    return Bone(
+        bones[ i ][ 0 ],
+        bones[ i ][ 1 ].xyz,
+        bones[ i ][ 1 ].w
+    );
+}
+
+//-------------------------
+// VARS
+
+uniform vec4 base_color;
+
+flat in float time;
+flat in vec3 cam_pos;
+in vec3 frag_to_cam;
+in vec3 frag_wpos;
+
+out vec4 out_color;
+
+//-------------------------
+// STATIC FUNCTIONS
+float map_func( vec3 p );  // Forward Decoration
+//vec3 sdf_normal( vec3 p );
+
+// GOOD QUALITY, BAD PERFORMANCE WHEN VERY CLOSE : TRIES 60, MIN 0.001
+// MEDIUM QUALITY, BETTER PERFORMANCE CLOSE BY   : TRIES 30, MIN 0.005
+const int   MARCH_TRIES     = 30;       // How many attempt to march ray
+const float MARCH_EPSILON   = 0.005;    // Min Distance to SDF Surface
+const float MARCH_MAX_DIST  = 20.0;     // Max Distance to Travel on March
+const float MARCH_START     = 0.0;      // Starting Distance for Ro Marching
+
+struct SDFResult{
+    vec3   hit;
+    float  ao;
+    int    id;
+} SR;
+
+bool ray_march( vec3 ro, vec3 rd ){
+    float d     = MARCH_START;  // How much distance on the ray traveled
+    float rng   = 0.0;          // Distance Range to next closets object
+
+    for( int i = 0; i < MARCH_TRIES && d < MARCH_MAX_DIST; i++ ){
+        rng = map_func( ro + rd * d );  // distance to the closets object
+        
+        //if( rng <= MARCH_EPSILON ){
+        //if( abs( rng ) <= MARCH_EPSILON ){ // Help Fix some artifacts
+
+        if( abs( rng ) <= ( MARCH_EPSILON * d ) ){ // spend less time trying to detail long distance pixels. 
+            SR.hit = ro + rd * d;
+            //SR.ao      = 1.0 - float( i ) / float( MARCH_TRIES - 1 );
+            SR.ao      = 1.0 - d / MARCH_MAX_DIST;
+            return true;
+        }
+        d += rng;   // Add save distance for the next check.
+    }
+    return false;
+}
+    
+// OTHER VERSION, COMPILER'S OPTIMIZATION MIGHT CAUSE ISSUES WITH LARGE SETS OF SDF OBJECTS
+uniform int iFrame;
+vec3 normal_sdf( vec3 pos ){
+    #define ZERO min(iFrame,0)
+    vec3 n = vec3( 0.0 );
+    for( int i = ZERO; i < 4; i++ ){
+        vec3 e = 0.5773 * (2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+        n += e * map_func( pos + 0.0005 * e );
+    }
+    return normalize( n );
+}
+
+//-------------------------
+
+// QUATERNIONS
+vec3 quat_mul_vec3( vec4 q, vec3 v ){ return v + (2.0 * cross(q.xyz, cross(q.xyz, v) + (q.w * v))); }
+
+// If quat is normalized, can use conjugate in place of invert
+vec4 quat_conjugate( vec4 q ){ return vec4( -q.xyz, q.w ); }
+
+//-------------------------
+
+float sdf_smin( float a, float b, float k ){
+    float h = max( k-abs(a-b), 0.0 );
+    return min( a, b ) - h*h / (k*4.0);
+}
+
+float sdf_smax( float a, float b, float k ){
+    float h = max( k-abs(a-b), 0.0 );
+    return max( a, b ) + h*h / (k*4.0);
+}
+
+//-------------------------
+
+float cubic_spline_f3( float v0, float v1, float v2, float t ){
+    float a, b, c, d;
+    const float tang_offset = 0.035; // Works well for v <= 0.6
+
+    // Split t in half, a spline made of two curves
+    if( t < 0.5 ){
+        t = t * 2.0;           // Remap to 0-1
+        a = v0 - tang_offset;
+        b = v0;
+        c = v1;
+        d = v2;
+    }else{
+        t = ( t - 0.5 ) * 2.0; // Remap to 0-1
+        a = v0;
+        b = v1;
+        c = v2;
+        d = v2 - tang_offset;
+    }
+
+    // Cublic Interpolation
+    float t2 = t*t;
+	float a0 = d - c - a + b;
+	float a1 = a - b - a0;
+	float a2 = c - a;
+    float a3 = b;
+    
+    return a0*t*t2 + a1*t2 + a2*t + a3;
+}
+
+float sdf_roundcone3( vec3 p, float r0, float r1, float r2, float h ){
+    vec2 q  = vec2( length( p.xz ), p.y );
+    float b = ( r0 - r2 ) / h;
+    float a = sqrt( 1.0 - b * b );          
+    float k = dot( q, vec2( -b, a) );
+
+    if( k < 0.0 ) return length( q ) - r0;
+    if( k > a*h ) return length( q - vec2( 0.0, h ) ) - r2;
+
+    float t = clamp( p.y / h, 0.0, 1.0 );
+    float r = cubic_spline_f3( r0, r1, r2, t );
+
+    return length( q - vec2( 0.0, h*t ) ) - r;
+}
+
+float map_func( vec3 p ){
+    const float R0 = 0.05,
+                R1 = 0.02,
+                R2 = 0.05;
+
+    Bone b      = get_bone( 0 );
+    vec3 bpos   = quat_mul_vec3( quat_conjugate(b.rot), p - b.pos );
+    float d     = sdf_roundcone3( bpos, R0, R1, R2, b.len );
+
+    float dd;
+    for( int i=1; i < 3; i++ ){
+        b    = get_bone( i );
+        bpos = quat_mul_vec3( quat_conjugate(b.rot), p - b.pos );
+        dd   = sdf_roundcone3( bpos, R0, R1, R2, b.len );
+        //d    = min( d, dd ); 
+        d    = sdf_smin( d, dd, 0.03 ); 
+    }
+
+    return d;
+}
+
+//-------------------------
+// LIGHTING
+const vec3  light_pos = vec3( 10.0, 15.0, 2.0 );
+
+vec3 diffuse_lighting( vec3 pos, vec3 norm, float ao ){
+    const float ambient_min = 0.2;
+
+    vec3 to_light   = normalize( light_pos - pos );
+    float dot       = clamp( dot( norm, to_light ), 0.0, 1.0 ) * ao;
+    return base_color.rgb * clamp( dot, ambient_min, 1.0 );
+}
+
+vec3 phong( vec3 color, vec3 pos, vec3 norm, float ao ){
+    vec3 L = normalize( light_pos - pos );      // TO LIGHT
+    vec3 V = normalize( cam_pos - pos );        // TO CAM ( VIEW )
+    vec3 R = normalize( reflect( -L, norm ) );  // REFLECT DIR OF LIGHT TO FRAG
+
+    const float ambient = 0.25;
+
+    float dot_LN = max( dot( L, norm ), ambient );  // How simular is to light dir is to norm dir
+    float dot_RV = max( dot( R, V ), 0.0 );         // How similar is reflection dir is to cam dir
+
+    const vec3 spec_color   = vec3( 0.8 );
+    const float shininess   = 10.0;
+    vec3 spec = spec_color * pow( dot_RV, shininess );
+
+    return color * dot_LN * ao + spec;
+    //return color * dot_LN + spec;
+}
+
+vec3 norm_phong( vec3 pos, vec3 norm, float ao ){
+    vec3 color_norm = ( norm + vec3( 1.0 ) ) * 0.5; // Shift to slighter brighter but duller look
+    return ( color_norm * 0.5 ) + 0.5 * phong( color_norm, pos, norm, ao );
+}
+
+vec3 norm_color( vec3 norm ){
+    vec3 color = vec3( 0.0 );
+    color += pow( 0.5 + 0.5 * norm, vec3(0.45) ); // gamma
+    color += sin( gl_FragCoord.x * 114.0 ) * sin( gl_FragCoord.y * 211.1) / 512.0; // cheap dithering
+    return color;
+}
+
+vec3 multi_light( vec3 norm ){
+    vec3 mate       = vec3( 0.18 ); // Default Color, All Lights will be mul by this as colors lights gets added up.
+
+    if( SR.id == 1 ) mate = vec3( 0.7 );
+    else if( SR.id == 2 ) mate = vec3( 0.001 );
+
+    vec3 sun_dir    = normalize( vec3( 0.8, 0.4, 0.2 ) );        // To Sun Direction
+    float sun_dif   = clamp( dot( norm, sun_dir ), 0.0, 1.0 );   // Sub Diffuse Strength
+    float sky_dif   = clamp( 0.5 + 0.5 * dot( norm, vec3( 0.0, 1.0, 0.0 ) ), 0.0, 1.0 );    // sky diffuse, Shift range of -1,1 to 0,1, so light the bottom too.
+    float bon_dif   = clamp( 0.5 + 0.5 * dot( norm, vec3( 0.0, -1.0, 0.0 ) ), 0.0, 1.0 );   // Bounce light, reflecting light from the ground back up.
+
+    // Shadows of point toward the sun.
+    //float sun_sha   = ( ray_march( hit_pos + norm * 0.001, sun_dir, hit_pos, grp ) )? 0.0 : 1.0;
+
+    vec3 color =  mate * vec3( 7.0, 4.5, 3.0 ) * sun_dif; // * sun_sha;  // Sun Lighting, Yellow
+    color += mate * vec3( 0.5, 0.8, 0.9 ) * sky_dif;            // Light of the sky, Blue
+    color += mate * vec3( 0.7, 0.3, 0.2 ) * bon_dif;            // Bounce light from the ground.
+
+    return color;
+}
+
+//-------------------------
+// MAIN
+
+void main( void ){
+    vec3 ray    = normalize( frag_to_cam );
+    out_color   = vec4( 0.0, 0.0, 0.0, 0.0 );
+
+    if( ray_march( cam_pos, ray ) ){
+        vec3 norm = normal_sdf( SR.hit );
+
+        // Apply Lighing Model
+        //out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+        //out_color.rgb = diffuse_lighting( SR.hit, norm, SR.ao );
+        out_color.rgb = phong( base_color.rgb, SR.hit, norm, SR.ao );
+        //out_color.rgb = norm_color( norm );
+        //out_color.rgb = norm_phong( SR.hit, norm, SR.ao );
+
+        //out_color.rgb   = multi_light( norm );
+        out_color.a     = 1.0;
+
+        gl_FragDepth    = -100.0;
+    } else gl_FragDepth = -100.0;
+}`;
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

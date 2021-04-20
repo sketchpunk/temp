@@ -118,6 +118,8 @@ class ShaderFactory{
 			if( ubos ){
 				let idx, u;
 				for( u of ubos ){
+					if( !u ){ console.log( "UBO Object undefined for ", name, ubos ); continue; }
+
 					idx = this.gl.ctx.getUniformBlockIndex( sh.program, u.name );
 					if( idx > 1000 ){ console.log( "Ubo not found in shader %s : %s ", name, u.name ); continue; }
 					this.gl.ctx.uniformBlockBinding( sh.program, idx, u.bind_point );

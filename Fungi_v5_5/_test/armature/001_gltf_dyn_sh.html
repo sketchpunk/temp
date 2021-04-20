@@ -1,0 +1,57 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+import PhongGen             from "../../fungi/shaders/PhongGen.js";
+
+//#####################################################
+App
+    .init( true )
+    .use_lighting()
+    .load_pkg( { name:"fungi.armature", bone_view:true, mat:false } )
+    .set_camera( 0, 20, 3, 0, 0.7, 0 )
+    .task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let [ json, bin ] = await XhrQueue.url( "../../files/models/", "vegeta.gltf", "vegeta.bin" );
+    let img           = await XhrQueue.url( "../../files/textures/matcap/other", "0004.jpg" );
+    let tex           = App.texture.new( "matcap_tex", img );
+  
+    let sh = PhongGen.build({
+        base_color : "#ffffffff",
+        poly_norm  : true,
+        //gamma      : 0.7272, //.4545
+        skinning   : true,
+        matcap_tex : tex,
+    });
+
+    let mat = App.shader.new_material( sh.name );
+    let e   = GltfUtil.get_skin_view_entity( "Test", json, bin, mat );
+
+    e.arm.get_node( "RightUpLeg" ).rot_by( 65, "x" );
+    e.arm.get_node( "RightLeg" ).rot_by( -90, "x" );
+    e.arm.get_node( "Spine" ).rot_by( -20, "x" );
+    e.arm.get_node( "Spine1" ).rot_by( -20, "x" );
+    e.arm.get_node( "Neck" ).rot_by( -20, "x" );
+    e.arm.get_node( "LeftArm" ).rot_by( -20, "z" );
+    e.arm.get_node( "RightArm" ).rot_by( 20, "z" );
+
+    //debug_node_tree( e.arm.nodes[0] );
+    return true;
+}
+
+function debug_node_tree( n ){
+    let c, spot	= "--";
+    let e		= App.ecs.entities.instances[ n._entity_id ];
+    console.log( "%s [ %s ] %s",spot.repeat( n.level ), n.level, e.name );
+
+	for( c of n.children ) debug_node_tree( c );
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

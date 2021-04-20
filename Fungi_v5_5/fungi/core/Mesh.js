@@ -192,15 +192,20 @@ class MeshFactory{
 		// BONE INDICES AND WEIGHTS
 		if( load_skin && json.joints && json.weights ){
 			// JOINT INDICES
-			// Can make this work BUT need to parse joints out of BIN as a Uint16 array, then
+			// Can make this work BUT need to parse joints out of BIN as a Uint array, then
 			// convert it to a Float32Array. This is a work around since there doesn't 
-			// seem to be a way to use Uint16 as an ARRAY buffer.
+			// seem to be a way to use Uint as an ARRAY buffer.
 			// elmCount * compLen = Total Uints ( not total bytes )
-			
 			o = json.joints;
-			let data = new Float32Array(
-				new Uint16Array( bin, o.byte_offset, o.element_cnt * o.component_len )
-			);
+			
+			let jnt_int_ary;
+			switch( json.joints.data_type ){
+				case "uint8":	jnt_int_ary = new Uint8Array( bin, o.byte_offset, o.element_cnt * o.component_len ); break;
+				case "uint16": 	jnt_int_ary = new Uint16Array( bin, o.byte_offset, o.element_cnt * o.component_len ); break;
+				default: console.error( "Joint Index Buffer Data Type Unknown" ); break;
+			}
+			
+			let data = new Float32Array( jnt_int_ary );
 			buf = this.buffer.new_array( data, o.component_len, true, false );
 			mesh.buffers.set( "skin_idx", buf );
 			config.push( { buffer: buf, attrib_loc: this.shader.SKIN_IDX_LOC } );

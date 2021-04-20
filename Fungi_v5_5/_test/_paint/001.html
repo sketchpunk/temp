@@ -2,351 +2,182 @@
 import App          from "./App.js";
 import PostShader   from "./PostShader.js";
 import DrawShader   from "./DrawShader.js";
+import Quads		from "./Quads.js";
+import Vec2			from "../../fungi/maths/Vec2.js";
 
-//import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import PropPanel	from "../../sage.ui/PropPanel.js";
 
-//import FboFactory from "../../fungi/core/Fbo.js";
 
 //#####################################################
+
+let $move = new Vec2();		// Current Mouse Pos
+let $prev = new Vec2();		// Previous Mouse Pos
+
+let $brush, $quad;
+let $mat_draw, $mat_post;
+
+let $brush_size = 10;
+let $bound		= new Float32Array( 4 );	// Bounding Area to Draw
+let $segment	= new Float32Array( 4 );	// The 2 points of a Segment
+
 window.addEventListener( "load", ()=>{
     if( !App.init() ) return;
 
-    //PostShader.init();
-    //DrawShader.init();
+	PostShader.init();	// Shader that uses a unit quad to draw a texture to screen
+	DrawShader.init();	// Shader that draws a brush over a line segment
 
-    App.on_mouse = on_mouse;
+	$brush		= Quads.unit_corner();
+	$quad		= Quads.ndc();
+	$mat_draw	= App.shader.new_material( "DrawShader" );
+	$mat_post	= App.shader.new_material( "PostRender" );
+	
+	App.on_mouse = on_mouse;
+	init_ui();
 });
 
 
 function on_mouse( state, x, y ){
-    console.log( state, x, y );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$move.set( x, y );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	switch( state ){
+		//case App.MDOWN : break;
+		case App.MUP :
+		case App.MMOVE :
+			// Only render if moved more then one pixel distance.
+			if( Vec2.len_sqr( $move, $prev ) == 0 ) return;
+
+			compute_draw_bound();	// Compute the Drawing Area
+			draw();					// Draw into Custom Frame buffer texture
+			render();				// Render Texture to Screen
+		break;
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$prev.copy( $move );
 }
-/*
-App
-	.init( true )
-	.set_camera( 0, 30, 3.0, 0, 0.5, 0 )
-	.task( init )
-	.then();
-*/
+
 
 //#####################################################
 
-let $ortho;
-let $move = new Float32Array( 2 );
-let $mesh, $quad;
-let $mat, $fbo, $post;
-
-function on_input(){
-	if( !App.input.isMouseActive ) return;
-
-	console.log( App.input.coord );
-	$move[ 0 ] = App.input.coord.x;
-	$move[ 1 ] = App.input.coord.y;
-
-	draw();
-}
-
+// This function handles drawing the brush shader onto a custom frame buffer texture 
 function draw(){
-	//App.gl.clear();
-	App.fbo.bind( $fbo );//.clear( $fbo );
+	let c = App.gl.ctx; // alias
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Setup
-	App.gl.ctx.bindVertexArray( $mesh.vao.id );		// Load Quad
-	App.gl.ctx.useProgram( $mat.shader.program );	// Load Shader
+	App.fbo.bind( App.main_fbo );//.clear( $fbo );	// Load Custom FrameBuffer
+	c.bindVertexArray( $brush.vao.id );				// Load Quad
+	
 	//App.gl.ctx.disable( App.gl.ctx.DEPTH_TEST );
 
-	App.gl.ctx.uniformMatrix4fv( $mat.uniforms.get( "ortho" ).loc, false, $ortho );
-	App.gl.ctx.uniform2fv( $mat.uniforms.get( "move" ).loc, $move );
-
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	App.gl.ctx.drawElements( App.mesh.TRI, $mesh.element_cnt, $mesh.element_type, 0 );
+	// Experiment with Blending Modes to get something that works well
+	c[ "enable" ]( c.BLEND );
+	//c.blendFunc( c.ONE, c.ONE ); //BLEND_ADDITIVE
+	c.blendFunc( c.SRC_ALPHA, c.ONE ); // BLEND_ALPHA_ADDITIVE
+	//c.blendFunc( c.ONE, c.ZERO ); // BLEND_OVERRIDE
+	//c.blendFunc( c.SRC_ALPHA, c.ONE_MINUS_SRC_ALPHA ); //BLEND_ALPHA
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Shader and update uniforms
+	c.useProgram( $mat_draw.shader.program );	
+	c.uniformMatrix4fv( $mat_draw.uniforms.get( "ortho" ).loc, false, App.ortho_proj );
+	//c.uniform2fv( $mat_draw.uniforms.get( "move" ).loc, $move );
+	c.uniform1f( $mat_draw.uniforms.get( "brush_size" ).loc, $brush_size );
+	c.uniform4fv( $mat_draw.uniforms.get( "bound" ).loc, $bound );
+	c.uniform4fv( $mat_draw.uniforms.get( "segment" ).loc, $segment );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Draw
+	c.drawElements( App.mesh.TRI, $brush.element_cnt, $brush.element_type, 0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Cleanup
-	App.gl.ctx.useProgram( null );
-	App.gl.ctx.bindVertexArray( null );
-
-	render();
+	c.useProgram( null );
+	c.bindVertexArray( null );
 }
 
+// This function handles rendering the custom frame buffer texture to the screen
 function render(){
-	App.fbo.unbind();
-	App.gl.clear();
-
-	App.gl.ctx.bindVertexArray( $quad.vao.id );		// Load Quad
-	App.gl.ctx.useProgram( $post.shader.program );	// Load Shader
-
-
-	App.gl.ctx.activeTexture(	App.gl.ctx.TEXTURE0 );
-	App.gl.ctx.bindTexture(		App.gl.ctx.TEXTURE_2D, $fbo.buffers.color.id );
-	App.gl.ctx.uniform1i(		$post.uniforms.get( "buf_color" ).loc, 0 );
-
-	App.gl.ctx.drawElements( App.mesh.TRI, $quad.element_cnt, $quad.element_type, 0 );
-
-	App.gl.ctx.useProgram( null );
-	App.gl.ctx.bindVertexArray( null );
-}
-
-async function init(){
-	App.input.on_input = on_input; //()=>{ App.render(); };
-	App.fbo = new FboFactory( App.gl );
+	App.fbo.unbind();	// Unbind any Custom Frame Buffer
+	App.gl.clear();		// Clear Screen Buffer
+	let c = App.gl.ctx;	// Alias
 	
-	//console.log( App.gl.width, App.gl.height );
-
-
-	$mesh = new_quad_mesh();
-	$quad = post_quad();
-
-	let scl = 1;
-	$ortho = new Mat4().from_ortho( 0, App.gl.width/scl, App.gl.height/scl, 0, -100, 100 );
-
-	init_shader();
-	$mat = App.shader.new_material( "TESTER" );
-	$post = App.shader.new_material( "PostRender" );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Mesh
+	c.bindVertexArray( $quad.vao.id );
 	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SHADER
+	c.useProgram( $mat_post.shader.program );							// Bind Shader
+	c.activeTexture(	c.TEXTURE0 );									// Turn on Texture Slot
+	c.bindTexture(		c.TEXTURE_2D, App.main_fbo.buffers.color.id );	// Bind Texture
+	c.uniform1i(		$mat_post.uniforms.get( "buf_color" ).loc, 0 );	// Set Uniform Loc to Texture Slot
 
-	console.log( $post );
-	console.log( $mesh );
-	console.log( $mat.uniforms.get( "ortho" ) );
-	console.log( $ortho );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Draw
+	c.drawElements( App.mesh.TRI, $quad.element_cnt, $quad.element_type, 0 );
 
-
-	$fbo = App.fbo.new( {
-		width   : App.gl.width,
-		height  : App.gl.height,
-		buffers : [
-			{ attach:0, name:"color", type:"color", mode:"tex", pixel:"byte" },
-		]
-	} );
-
-	console.log( $fbo );
-
-	//App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
-	//App.Debug.set_depth_test( true ).set_priority( 0 );
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    
-
-    //$mat = App.shader.new_material( "TESTER" );
-    //$mat.set( "uLightDir", $light_dir );
-
-	//let e = SkyBox( "sb", $mat );
-	//e.node.set_scl( 2 );
-	
-	//OrbitCamera
-	
-
-    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    return true;
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Cleanup
+	c.useProgram( null );
+	c.bindVertexArray( null );
 }
 
 //#####################################################
 
+// The idea is to create a Quad that can cover the area needed 
+// to draw a line segment. So first we compute the bounding box
+// for the segment, then we enlarge it by the brush size to make
+// we have all the space we need to draw the brush along the segment
+function compute_draw_bound(){
+	let x_min, x_max, y_min, y_max;
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Compute the Min and Max Bounds
+	if( $prev[0] < $move[0] )	{ x_min = $prev[ 0 ]; x_max = $move[ 0 ]; }
+	else						{ x_min = $move[ 0 ]; x_max = $prev[ 0 ]; }
 
-function new_quad_mesh(){
-	let buf_idx		= App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
-	let buf_vert	= App.buffer.new_array( new Float32Array(
-		[ 0, 0, 0,	0,0,
-		  0, 1, 0,	0,1,
-		  1, 1, 0,	1,1, 
-		  1, 0, 0,	1,0 ]
-	));
+	if( $prev[1] < $move[1] )	{ y_min = $prev[ 1 ]; y_max = $move[ 1 ]; }
+	else						{ y_min = $move[ 1 ]; y_max = $prev[ 1 ]; }
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Expand the bounding box by the size of the brush
+	x_min = Math.max( x_min - $brush_size, 0 );
+	y_min = Math.max( y_min - $brush_size, 0 );
+	x_max += $brush_size;
+	y_max += $brush_size;
 
-	/*
-	[ -0.5,  0.5, 0.0,	0,0,1,	0,0,
-		  -0.5, -0.5, 0.0,	0,0,1,	0,1,
-		   0.5, -0.5, 0.0,	0,0,1,	1,1, 
-		   0.5,  0.5, 0.0,	0,0,1,	1,0 ]
-	*/
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$bound[ 0 ] = x_min;				// Position (XY)
+	$bound[ 1 ] = y_min;
+	$bound[ 2 ] = x_max - x_min;		// Scale (W/H)
+	$bound[ 3 ] = y_max - y_min;
 
-	return App.mesh.from_buffer_config([
-		{ name: "indices", buffer: buf_idx },
-		{ name: "quad", buffer: buf_vert, interleaved: [
-			{ attrib_loc:0, size:3, stride_len:5 * 4, offset:0 * 4 },
-			{ attrib_loc:2, size:2, stride_len:5 * 4, offset:3 * 4 },
-		]}
-	], "BrushQuad", 6 );
+	$segment[ 0 ] = $prev[ 0 ];			// Segment Point A
+	$segment[ 1 ] = $prev[ 1 ];
+	$segment[ 2 ] = $move[ 0 ];			// Segment Point B
+	$segment[ 3 ] = $move[ 1 ];
 }
-
-function post_quad(){
-    let buf_idx     = App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
-    let buf_vert    = App.buffer.new_array( new Float32Array(
-        [ -1,  1, 0,	0,0,
-          -1, -1, 0,	0,1,
-           1, -1, 0,	1,1, 
-           1,  1, 0,	1,0 ]
-    ));
-
-    let mesh = App.mesh.from_buffer_config([
-        { name: "indices", buffer: buf_idx },
-        { name: "quad", buffer: buf_vert, interleaved: [
-            { attrib_loc:0, size:3, stride_len:5 * 4, offset:0 * 4 },
-            { attrib_loc:2, size:2, stride_len:5 * 4, offset:3 * 4 },
-        ]}
-    ], "PostQuad", 6 );
-    
-    return mesh;
-}
-
 
 //#####################################################
-
-let gUbo;
-function init_shader(){
-	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
-		{ name:"ortho", type:"mat4", value:null },
-		{ name:"move", type:"vec2", value:null },
-		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
-	], App.ubo.get_array( "Global", "Model" ) );
-	//.set_blend( true );
-
-	App.shader.new( "PostRender", VERT_SRC2, FRAG_SRC2, [
-		{ name:"buf_color", type:"sampler2D", value:"null" },
-	], App.ubo.get_array( "Global" ) );
+function init_ui(){
+	elm_on_input( "lbl_brush_suze" );
 }
 
-const VERT_SRC = `#version 300 es
-layout(location=0) in vec3 a_pos;
-
-uniform Global{ 
-	mediump mat4 proj_view; 
-	mediump mat4 camera_matrix;
-	mediump vec3 camera_pos;
-	mediump float delta_time;
-	mediump vec2 screen_size;
-	mediump float clock;
-} global;
-
-uniform Model{ 
-	mat4 view_matrix;
-} model;
-
-uniform mat4 ortho;
-uniform vec2 move;
-
-out vec3 frag_cam_pos;
-out vec3 frag_wpos;
-out vec3 frag_lpos;
-
-void main(void){
-	//vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
-	vec4 wpos	= vec4( a_pos * 10.0, 1.0 ) + vec4( move, 0.0, 0.0 );
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	frag_lpos 		= a_pos.xyz;
-	frag_wpos		= wpos.xyz;
-	frag_cam_pos	= global.camera_pos;
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//gl_Position = global.proj_view * wpos;
-	
-	gl_Position = ortho * wpos;
-	//gl_Position = wpos;
-
-	//gl_PointSize = 10.0;
-}`;
-
-const FRAG_SRC = `#version 300 es
-precision mediump float;
-
-uniform Global{ 
-	mediump mat4 proj_view; 
-	mediump mat4 camera_matrix;
-	mediump vec3 camera_pos;
-	mediump float delta_time;
-	mediump vec2 screen_size;
-	mediump float clock;
-} global;
-
-out vec4 out_color;
-
-//-------------------------
-
-in vec3 frag_cam_pos;
-in vec3 frag_wpos;
-in vec3 frag_lpos;
-
-//-------------------------
-
-void main( void ){
-    out_color   = vec4( 1.0, 1.0, 0.0, 1.0 );	
-}`;
-
-
-const VERT_SRC2 = `#version 300 es
-    layout(location=0) in vec3 a_pos;
-    layout(location=2) in vec2 a_uv;
-
-	uniform Global{ 
-		mat4 proj_view; 
-		mat4 camera_matrix;
-		vec3 camera_pos;
-		float delta_time;
-		vec2 screen_size;
-		float clock;
-	} global;
-
-	out vec2 frag_uv;
-
-	void main(void){
-        frag_uv     = a_uv;
-        gl_Position = vec4( a_pos, 1.0 );
-	}`;
-
-const FRAG_SRC2 = `#version 300 es
-precision mediump float;
-
-	out vec4 out_color;
-	in vec2 frag_uv;
-
-	//------------------------
-
-    uniform sampler2D buf_color;
-	uniform sampler2D buf_depth;	
-
-	//-------------------------
-
-	float linearize_depth( float z ){ // Good to visualize Depth
-        float n = 0.1;      // camera z near
-        float f = 100.0;    // camera z far
-        return (2.0 * n) / (f + n - z * (f - n));	
+function update_mat( id, value ){
+    switch( id ){
+        case "lbl_brush_suze":     $brush_size  = parseFloat( value ); break;
     }
-    
-    float map_depth_to_proj( float depth ){ // But better for Depth Testing
-        float PROJ_NEAR = 0.1;  //depth is should be between 0:1
-	    float PROJ_FAR  = 100.0;
-		float ndc       = 2.0 * depth - 1.0; // Normalized Device Space -1:1
-		return -(2.0 * PROJ_FAR * PROJ_NEAR) / (ndc * (PROJ_FAR - PROJ_NEAR) - PROJ_FAR - PROJ_NEAR);
-	}
+}
 
-	void main( void ){
-        ivec2 fCoord    = ivec2( gl_FragCoord.xy );     // Get the Int of the current Screen pixel X,Y
-        ivec2 texSize   = textureSize( buf_color, 0 );	// Get Size of Texture
-        
-        vec4 color      = texelFetch( buf_color, fCoord , 0 );
-        float depth     = texelFetch( buf_depth, fCoord , 0 ).x;
-        
-        //depth = linearize_depth( depth );
-        //depth = map_depth_to_proj( depth );
-          
-        out_color = color;
-        //out_color.rgb = vec3( depth );
-
-        /*
-        // Post Effect of Pixalating 
-        float pixelSize = 7.0;
-		float xMod		= mod( float( fCoord.x ), pixelSize );
-		float yMod		= mod( float( fCoord.y ), pixelSize );
-
-		if( xMod == 0.0 || yMod == 0.0 ) out_color = vec4(0.0,0.0,0.0,0.3);
-		else{
-			ivec2 pix = fCoord;
-			pix.x -= int( xMod );
-			pix.y -= int( yMod );
-			out_color = texelFetch( buf_color, pix , 0);
-        }
-        */
-	}`;
+function elm_on_input( name ){
+	document.getElementById( name ).addEventListener( "input", (e)=>{
+        update_mat( e.srcElement.id, e.srcElement.value );
+	});
+}
 
 //#####################################################
 </script>
@@ -364,4 +195,11 @@ precision mediump float;
         Left Mouse Drag [ <b>Move Camera</b> ] <i>::</i>
     </div>
 	-->
+
+	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		
+            <prop-range label="Brush Size" id="lbl_brush_suze" value="10" min="4" max="50" step="1"></prop-range>
+    </prop-panel>
+    
+
 </body></html>

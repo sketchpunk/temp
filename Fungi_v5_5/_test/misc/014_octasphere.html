@@ -2,10 +2,13 @@
 import App, { Maths, Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
 //import Wireframe    from "../../fungi/shaders/Wireframe.js";
 
+import { VRot90 } from "../../fungi/maths/Vec3.js";
+
 //#####################################################
 App
 	.init( true )
-	.load_shaders( "LowPoly.js" )
+    .load_shaders( "LowPoly.js" )
+    //.load_shaders( "BaseColor.js" )
 	.use_debug()
 	.set_camera( 0, 20, 4, 0, 0.5, 0 )
 	.task( init )
@@ -21,6 +24,8 @@ async function init(){
     //octasphere_corner( 2 );
 
     let geo     = octasphere( 2 );
+    
+    //let geo     = octasphereSide( 2 );
     let mesh    = App.mesh.from_data( "x", geo.verts, 3, geo.indices );
 	let e		= App.mesh_entity( "Sphere", mesh, "LowPoly", App.mesh.TRI );
 
@@ -70,7 +75,346 @@ function compute_geodisc( a, b, seg_num ){
 }
 
 
-function octasphere( subdiv ){
+
+function octasphere( subdiv, radius=1 ){
+    return geo( subdiv, radius );
+}
+
+function geo( subdiv=2, radius=1 ){
+    let verts = new Array();
+    let norm  = new Array();
+    let vrows = new Array();
+
+    gen_verts( subdiv, radius, vrows, verts, norm );
+
+    let idx   = gen_indices( subdiv, vrows );
+
+    for( let v of Vec3.f32buf_iter( verts ) ) App.Debug.pnt( v, "white", 0.05 );
+
+    //return { verts, norm };
+    //let v = new Vec3();
+    //v.from_buf( verts, 2 * 3 );
+
+    //App.Debug.pnt( v, "red", 0.1 );
+    
+
+    return {
+        verts   : new Float32Array( verts ),
+        norm    : new Float32Array( norm ),
+        indices : new Uint16Array( idx ),
+    };
+}
+
+function gen_verts( subdiv, radius, vrows, verts, norm ){
+    let irow    = new Array();
+    let buf     = gen_corner( subdiv, irow );
+    let s_up    = new Vec3( 1,1,1 ).scale( radius );
+    let s_dn    = new Vec3( 1,-1,1).scale( radius );
+    let row_cnt = irow.length - 1;
+    let i, cnt;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create the Equator
+    vrows.push( verts.length/3 );
+    repeat_points( buf, irow[0], irow[1]-irow[0], s_up, verts, norm );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create the sphere 2 rows at a time, Moving toward the poles
+    for( i=1; i < row_cnt; i++ ){
+        cnt = irow[ i+1 ] - irow[ i ];                         // How Many Points in One Row
+        
+        vrows.push( verts.length/3 );
+        repeat_points( buf, irow[i], cnt, s_up, verts, norm ); // Upper Row
+
+        vrows.push( verts.length/3 );
+        repeat_points( buf, irow[i], cnt, s_dn, verts, norm, true ); // Lower Row
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create Pole Points
+    let v = new Vec3();
+    i = irow[ row_cnt ] * 3;
+
+    vrows.push( verts.length/3 );
+    v.from_buf( buf, i ).mul( s_up ).push_to( verts );
+
+    vrows.push( verts.length/3 );
+    v.from_buf( buf, i ).mul( s_dn ).push_to( verts );
+}
+
+function repeat_points( buf, offset, cnt, scl, verts, norm ){
+    const fn    = [ ()=>{}, VRot90.yn, VRot90.y2, VRot90.yp ];
+    let len     = cnt - 1; // Skip the last Point
+    let rng     = len * 4; // Repeat the Points 4 times, Skipping the last Point
+    let v       = new Vec3();
+    let bi; // Buffer Index
+    let fi; // Rot Fn Idx
+    
+    for( let i=0; i < rng; i++ ){
+        fi = Math.floor( i / len );         // Function Index, 4 Groups, each one has a Rotation Applied
+        bi = (( i % len ) + offset ) * 3;   // Buffer Index, repeat the verts
+
+        v.from_buf( buf, bi );
+        fn[ fi ]( v, v );
+
+        v.push_to( norm );
+        v.mul( scl ).push_to( verts );
+    } 
+}
+
+function gen_indices( subdiv, vrows ){
+    //let rng = ( vrows.length - 1 ) / 2 - 1;
+    let d_len = vrows[ 1 ] - vrows[ 0 ];
+    let a, b, c, d;
+    //let ai, bi;
+    let out = new Array();
+    //let spare;
+
+    let a_len, b_len, q_cnt, q_loop;
+
+    // The Bottom Half of the sphere's vertices are mirrored, this causes a problem
+    // where the face winding needs to be in reverse.
+    const ring = ( ai, bi, rev )=>{
+        let aii = 0, bii = 0;
+        for( let j=0; j < q_loop; j++ ){
+            //---------------------------------
+            a = ai + aii;  b = bi + bii;
+            c = b + 1;     d = a + 1;
+            
+            //---------------------------------
+            if( aii + 1 >= a_len ) d = ai;
+            if( !rev )  out.push( a, b, c, c, d, a );
+            else        out.push( c, b, a, a, d, c );
+    
+            //---------------------------------
+            // Test for the extra triangle
+            if( ((j+1) % q_cnt) == 0 ){ //&& j != 0
+                bii += 1;
+                if( bii+1 < b_len ) ( !rev )? out.push( d, c, c+1 ) : out.push( c+1, c, d );
+                else                ( !rev )? out.push( d, c, bi )  : out.push( bi, c, d );
+            }
+            
+            //---------------------------------
+            aii++; bii++; 
+            //if( j == 0 ) break;
+        }
+    };
+
+    // Last two vrows items are the index of the poles.
+    const pole = ( pidx, rev )=>{
+        b_len = vrows[ pidx-1 ] - vrows[ pidx-2 ];
+        a     = vrows[ pidx ];
+        b     = vrows[ pidx-2 ];
+
+        for( let j=0; j < b_len; j++ ){
+            c = b + j;
+            d = b + ((j + 1) % b_len);
+            
+            if( !rev )  out.push( a, c, d );
+            else        out.push( d, c, a );
+        }
+    };
+
+
+
+    /*
+    b_len = vrows[ 6 ] - vrows[ 5 ];
+    a     = vrows[ 7 ];
+    b     = vrows[ 5 ];
+    
+    for( let j=0; j < b_len; j++ ){
+        c = b + j;
+        d = b + ((j + 1) % b_len);
+        
+        out.push( a, c, d );
+        console.log( j, c, d );
+    }
+    */
+
+
+    //----------------------------------------
+    // Build the EQUATOR Rows
+    a_len   = vrows[ 2 ] - vrows[ 1 ];
+    b_len   = vrows[ 1 ] - vrows[ 0 ];
+    q_cnt   = b_len / 4 - 1;
+    q_loop  = q_cnt * 4;
+    ring( vrows[1], vrows[0], false );
+    ring( vrows[2], vrows[0], true );
+
+    //----------------------------------------
+    // Build Rings between Equator and Poles
+    for( let i=1; i < vrows.length-4; i+=2 ){
+        a_len   = vrows[ i+3 ] - vrows[ i+2 ];
+        b_len   = vrows[ i+1 ] - vrows[ i ];
+        q_cnt   = b_len / 4 - 1;
+        q_loop  = q_cnt * 4;
+        ring( vrows[i+2], vrows[i], false );
+        ring( vrows[i+3], vrows[i+1], true );
+
+        console.log( i );
+    
+
+        /**/
+
+        /*
+        a_len   = vrows[ 4 ] - vrows[ 3 ];
+        b_len   = vrows[ 2 ] - vrows[ 1 ];
+        q_cnt   = b_len / 4 - 1;
+        q_loop  = q_cnt * 4;
+
+        console.log( "a", a_len, "b", b_len );
+        console.log( vrows );
+        ring( vrows[3], vrows[1], false );
+        ring( vrows[4], vrows[2], true );
+        
+
+        a_len   = vrows[ 6 ] - vrows[ 5 ];
+        b_len   = vrows[ 4 ] - vrows[ 3 ];
+        q_cnt   = b_len / 4 - 1;
+        q_loop  = q_cnt * 4;
+
+        console.log( "a", a_len, "b", b_len );
+        console.log( vrows );
+        ring( vrows[5], vrows[3], false );
+        ring( vrows[6], vrows[4], true );
+
+
+        //a_len   = vrows[ 8 ] - vrows[ 7 ];
+        b_len = vrows[ 6 ] - vrows[ 5 ];
+        a     = vrows[ 7 ];
+        b     = vrows[ 5 ];
+        
+        for( let j=0; j < b_len; j++ ){
+            c = b + j;
+            d = b + ((j + 1) % b_len);
+            
+            out.push( a, c, d );
+            console.log( j, c, d );
+        }
+        */
+
+        //break;
+    }
+
+    let ri_last = vrows.length - 1;
+    pole( ri_last-1, false );
+    pole( ri_last, true );
+
+        /*
+        let aii = 0;
+        let bii = 0;
+        for( let j=0; j < q_loop; j++ ){
+            a = ai + aii;  b = bi + bii;
+            c = b + 1;     d = a + 1;
+
+            if( aii + 1 >= a_len ) d = ai;
+            out.push( a, b, c, c, d, a );
+
+            // Test for the extra triangle
+            if( ((j+1) % q_cnt) == 0 && j != 0 ){
+                bii += 1;
+                if( bii+1 < b_len ) out.push( d, c, c+1 ); // Regular Extra Triangle
+                else                out.push( d, c, bi );  // Final Extra Tri, Need to reconnect back to beginning
+            }
+
+            aii++; bii++; 
+        }
+        */
+
+        /*
+        d_len  = vrows[ i ] - vrows[ i-1 ];
+        a      = vrows[ i ]
+        b      = vrows[ i-1 ];
+        spare  = d_len / 4 + 1;
+
+        console.log( "dlen", d_len, d_len/4 );
+
+        for( let j=0; j < 22; j++ ){
+            if( (j & 1) == 0 ){ out.push( a, b, b+1 ); b++; }   // Bottom Tri
+            else{               out.push( b, a+1, a ); a++; }   // Top Tri
+
+            // Extra Bottom Triangle at the end of the corner
+            // Create and move bottom forward so the next corner starts
+            // with a bottom Tri
+            if( (j % spare) == 0 && j != 0 ){
+                out.push( a, b, b+1 );
+                b++;
+            }
+        }
+        */
+
+        /*
+        for( let j=0; j < d_len; j++ ){
+            a = vrows[ i ] + j;
+            b = vrows[ ai ] + j;
+            c = b + 1;
+            d = a + 1;
+
+            console.log( a, b, c, d );
+
+            out.push( a, b, c, c, d, a );
+            break;
+            if( j==5 ) break;
+        }
+
+        */
+
+        
+
+    //console.log( out );
+    //console.log( vrows );
+    
+    /*
+    out.push(
+        vrows[ 1 ],
+        vrows[ 0 ],
+        vrows[ 0 ]+1,
+        vrows[ 0 ]+1,
+        vrows[ 1 ]+1,
+        vrows[ 1 ],
+
+        
+        vrows[ 1 ]+1,
+        vrows[ 0 ]+1,
+        vrows[ 0 ]+2,
+        vrows[ 0 ]+2,
+        vrows[ 1 ]+2,
+        vrows[ 1 ]+1,
+        
+        
+    );
+
+    */
+
+    return out;
+
+
+    /*
+        let cnt = 2**subdiv -1;
+    let a, b, c, d;
+    for( let i=0; i < irow.length-2; i++ ){
+        //console.log( i, irow[ i ], cnt-i );
+        //console.log( "--" );
+        for( let j=0; j < cnt-i; j++ ){
+            a = irow[ i+1 ] + j;
+            b = irow[ i ] + j;
+            c = b + 1;
+            d = a + 1;
+            //console.log( j, "-", a, b, c, d );
+            idx.push( a, b, c, c, d, a );
+        }
+
+        //console.log( d, c, c+1 );
+        idx.push( d, c, c+1 );
+    }
+
+    a = irow[ irow.length-1 ];
+    idx.push( a, a-2, a-1 );
+    */
+
+}
+
+function octasphereSide( subdiv ){
     let irow = new Array();
     let buf = gen_corner( subdiv, irow );
     let idx = new Array;

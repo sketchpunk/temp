@@ -2,15 +2,22 @@
 import PropPanel	from "../../sage.ui/PropPanel.js";
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
-</head><body>
-	<canvas id="pg_canvas"></canvas>
+</head><body style="background-color:black;">
+	<!--<canvas id="pg_canvas"></canvas>-->
+
+	<svg style="fill:white;">
+		<path style="stroke: white;stroke-dasharray: 2px 2px;" d="M 0,4 L15.5,4"></path>
+		<path style="fill:white;" d="M 10.5,0 L14.5,4 L10.5,8 M 15.5,-1 L15.5,9"></path>
+	</svg>
 
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
+		
 		<select label="Mode" id="rend_mode">
 			<option value="0">Linear Tube</option>
 			<option value="1">Capped Curve</option>
 			<option value="2">Full Curve</option>
 		</select>
+
 		<prop-vector label="Eular Rot"	id="base_rot" value="0,0,0" step="5"></prop-vector>
 		<prop-vector label="Offset"		id="base_pos" value="0,0,0" step="0.1"></prop-vector>
 		
@@ -27,5 +34,123 @@ import PropPanel	from "../../sage.ui/PropPanel.js";
 			<button id="btn_canon"><b>ARM CANNON</b></button>
 			<button id="btn_claw"><b>CLAW / FANG</b></button>
 		</prop-group>
+
+		<prop-checkstack label="ChkBoxes">
+			<input type="checkbox" title="ItemA" id="itma">
+			<input type="checkbox" title="ItemB" id="itmb">
+			<input type="checkbox" title="ItemC" id="itmc">
+		</prop-checkstack>
+		<prop-range label="Range"></prop-range>
 	</prop-panel>
+
+<style>
+	 .container{ position:absolute; bottom:10px; right:10px; }
+    .Proxy{ border:0px solid red; width:50px; height:50px; position:relative; }
+    .Proxy > button{
+        background-color: rgb(83, 89, 199);
+        box-shadow: 0px 0px 0px 0px rgba(92, 103, 255, 0.0);
+        border:none;
+        padding:4px; margin:0px;
+        border-radius:50%;
+
+        width: 50px;
+        height: 50px;
+        position:absolute;
+
+        display:flex; flex-direction:column; align-items: stretch;
+        box-sizing: border-box;
+
+        transition: all 0.3s ease-in-out;
+
+    }
+    .Proxy > button > div{
+        background-color: rgb(83, 89, 199);
+        flex:1 1 auto;
+        border-radius:50%;
+        transition: all 0.3s ease-in-out;
+    }
+
+    
+    .Proxy > button:focus{ outline:none; }
+    .Proxy > button:hover{ 
+        background-color: #00000000;
+        box-shadow: 0px 0px 0px 4px #5c67ff;
+    }
+
+    .Proxy > button:hover div{
+        background-color:#5c67ff;
+    }
+
+    .Proxy > section{
+        border:1px solid green;
+        position:absolute; width:100px;
+        bottom:70%;
+        right:70%;
+        background-color:white;
+
+        opacity: 1; transform: scale(1);
+        transform-origin: bottom right;
+        transition: all 0.3s ease 0.1s;
+        border-radius:8px;
+    }
+
+    .Proxy > section.active{
+        opacity: 0;
+        transform: scale(0);
+    }
+</style>
+
+
+<div class="container">
+    <div class="Proxy">
+        <section>
+                xx<br>xxx<br>xxx<br>xx
+        </section>
+        <button><div>x</div></button>
+    </div>
+	</div>
+	
+	<script>
+        document.querySelector('div.Proxy').addEventListener('click', function () {
+            document.querySelector( 'div.Proxy > section' ).classList.toggle('active');
+        });
+	</script>
+	
+<!--
+https://davidwalsh.name/css-variables-javascript
+
+Slide Panel
+Button Panel
+Panel which loads in Components
+
+
+<prop-panel-btncont>
+
+	<prop label="" id=""></prop>
+	<select id="" no_node> // Does not wrap into a PropNode
+</prop-pop-btncontainer>
+
+<prop-panel-slidecont>
+
+select
+button
+text
+vector
+slider
+range
+checkboxes
+
+class Panel{
+	elements/items/data/values/proxy ?
+
+	on_input();
+	on_change();
+}
+
+Panel.elm.slider1 = 5;
+let v = Panel.elm.slider1;
+
+
+-->
+
 </body></html>

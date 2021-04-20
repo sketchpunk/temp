@@ -6,7 +6,6 @@ import Mesh			from "../../fungi/core/Mesh.js";
 import Fbo			from "../../fungi/core/Fbo.js";
 //import Colour		from "../../fungi/core/Colour.js";
 import Texture		from "../../fungi/core/Texture.js";
-
 import Mat4         from "../../fungi/maths/mat4.js";
 
 class App{
@@ -27,6 +26,11 @@ class App{
 
     static on_mouse     = null;
 
+    static MUP          = 0;
+    static MDOWN        = 1;
+    static MMOVE        = 2;
+
+
     //#################################################
 
     static init(){
@@ -37,7 +41,7 @@ class App{
         App.gl = new Context( "pg_canvas" );
         if( !App.gl.ctx ) return false;
     
-        App.gl.set_color( "#363636" ).fit_screen().clear();
+        App.gl.set_color( "#000000" ).fit_screen().clear();
         //window.addEventListener( "resize", (e)=>{ App.gl.fit_screen(); });
     
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -71,7 +75,7 @@ class App{
                 let x = e.pageX - App.offset_x,
                     y = e.pageY - App.offset_y;
 
-                App.on_mouse( 1, x, y );
+                App.on_mouse( App.MDOWN, x, y );
                 c.addEventListener( "mousemove", App.on_mouse_move );
             }
         });
@@ -83,7 +87,7 @@ class App{
                 let x = e.pageX - App.offset_x,
                     y = e.pageY - App.offset_y;
 
-                App.on_mouse( 0, x, y );
+                App.on_mouse( App.MUP, x, y );
             }
         });
 
@@ -93,7 +97,7 @@ class App{
     static on_mouse_move( e ){
         let x = e.pageX - App.offset_x,
             y = e.pageY - App.offset_y;
-        App.on_mouse( 2, x, y );
+        App.on_mouse( App.MMOVE, x, y );
     }
 
 }

@@ -2,9 +2,9 @@ import App, { Vec3 } from "../fungi/App.js";
 
 let MESH;
 
-function VolumeCube( name = "VolumeCube", mat ){
+function VolumeCube( name = "VolumeCube", mat, backface=false ){
 	if( !MESH ){
-		let geo = VolumeCube.geo();
+		let geo = VolumeCube.geo( 1,1,1, false, backface );
 		MESH    = App.mesh.from_data( "VolCube", geo.vert, 3, geo.idx );
 	
 		set_bound( geo );	
@@ -24,12 +24,22 @@ VolumeCube.from_origin = function( name = "VolumeCube", mat ){
 
 
 VolumeCube.debug = function( tran ){
+	//let min = new Vec3(), max = new Vec3();
+	//tran.transform_vec( VolumeCube.bound_min, min );
+	//tran.transform_vec( VolumeCube.bound_max, max );
+
     let min = Vec3.mul( VolumeCube.bound_min, tran.scl ).add( tran.pos );
     let max = Vec3.mul( VolumeCube.bound_max, tran.scl ).add( tran.pos );
-    App.Debug.box( min, max, "yellow", true );
+	
+	App.Debug.box( min, max, "yellow", true );
 }
 
-VolumeCube.geo = function( ww=1, hh=1, dd=1, center_origin=false ){
+VolumeCube.debug_tran = function( tran ){
+	let ary = App.Debug.transform_bound( VolumeCube.bound_min, VolumeCube.bound_max, tran );
+	App.Debug.box_pnt( ary, "yellow", true );
+}
+
+VolumeCube.geo = function( ww=1, hh=1, dd=1, center_origin=false, backface=false ){
 	let x = 0, y = 0.501, z = 0;
 	if( center_origin ) y = 0;
 
@@ -63,14 +73,14 @@ VolumeCube.geo = function( ww=1, hh=1, dd=1, center_origin=false ){
 	];
 
 	// Reverse Triangle Winding
-	/*
-	let t;
-	for( let i=0; i < idx.length; i+=3 ){
-		t			= idx[ i ];
-		idx[ i ]	= idx[ i+2 ];
-		idx[ i+2 ]	= t;
+	if( backface ){
+		let t;
+		for( let i=0; i < idx.length; i+=3 ){
+			t			= idx[ i ];
+			idx[ i ]	= idx[ i+2 ];
+			idx[ i+2 ]	= t;
+		}
 	}
-	*/
 
 	return { vert: new Float32Array( vert ), idx: new Uint16Array( idx ) };
 }

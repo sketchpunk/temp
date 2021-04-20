@@ -1,0 +1,270 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import Wireframe    from "../../fungi/shaders/Wireframe.js";
+import { VRot90 }   from "../../fungi/maths/Vec3.js";
+
+//#####################################################
+App
+	.init( true )
+    .load_shaders( "LowPoly.js" )
+    //.load_shaders( "BaseColor.js" )
+	.use_debug()
+	.set_camera( 20, 20, 6, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+// https://prideout.net/blog/octasphere/
+// https://twitter.com/prideout/status/1207329956616798208
+
+//#####################################################
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let geo     = octasphere( 4 );
+    
+    /* INDICES TEST*/
+    let mesh    = App.mesh.from_data( "x", geo.verts, 3, geo.indices );
+	let e		= App.mesh_entity( "Sphere", mesh, "LowPoly", App.mesh.TRI );
+    
+
+    /* WIREFRAME VIEW 
+    Wireframe.init();
+    let verts   = Wireframe.from_tri( geo.indices, geo.verts );
+    let mesh    = App.mesh.from_data( "x", verts, 4 );
+    let mat     = App.shader.new_material( "Wireframe", { face_color:"#707070cc" } );
+    let e		= App.mesh_entity( "Sphere", mesh, mat, App.mesh.TRI );
+    */
+    e.node.set_pos( 0, 1.1, 0 );
+
+    /* DRAW POINTS TO SEE VERTS 
+    for( let v of Vec3.f32buf_iter( geo.verts ) ) App.Debug.pnt( v.add( [0,1.1,0]) , "white", 0.02 );
+    */
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+
+function octasphere( subdiv, radius=1 ){
+    return geo( subdiv, radius );
+}
+
+// Create Octasphere Geometry Data
+function geo( subdiv=2, radius=1 ){
+    let verts = new Array();
+    let norm  = new Array();
+    let vrows = new Array();
+    
+    gen_verts( subdiv, radius, vrows, verts, norm );
+
+    let idx   = gen_indices( subdiv, vrows );
+
+    return {
+        verts   : new Float32Array( verts ),
+        norm    : new Float32Array( norm ),
+        indices : new Uint16Array( idx ),
+    };
+}
+
+// Create the Vertices and Normal Direction
+function gen_verts( subdiv, radius, vrows, verts, norm ){
+    let irow    = new Array();
+    let buf     = gen_corner( subdiv, irow );
+    let s_up    = new Vec3( 1,1,1 ).scale( radius );
+    let s_dn    = new Vec3( 1,-1,1).scale( radius );
+    let row_cnt = irow.length - 1;
+    let i, cnt;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create the Equator
+    vrows.push( verts.length/3 );
+    repeat_points( buf, irow[0], irow[1]-irow[0], s_up, verts, norm );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create the sphere 2 rows at a time, Moving toward the poles
+    for( i=1; i < row_cnt; i++ ){
+        cnt = irow[ i+1 ] - irow[ i ];                         // How Many Points in One Row
+        
+        vrows.push( verts.length/3 );
+        repeat_points( buf, irow[i], cnt, s_up, verts, norm ); // Upper Row
+
+        vrows.push( verts.length/3 );
+        repeat_points( buf, irow[i], cnt, s_dn, verts, norm, true ); // Lower Row
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create Pole Points
+    let v = new Vec3();
+    i = irow[ row_cnt ] * 3;
+
+    vrows.push( verts.length/3 );
+    v.from_buf( buf, i ).mul( s_up ).push_to( verts );
+
+    vrows.push( verts.length/3 );
+    v.from_buf( buf, i ).mul( s_dn ).push_to( verts );
+}
+
+// gen_verts helper : Duplicate and Rotate a set of vertices, 
+function repeat_points( buf, offset, cnt, scl, verts, norm ){
+    const fn    = [ ()=>{}, VRot90.yn, VRot90.y2, VRot90.yp ];
+    let len     = cnt - 1; // Skip the last Point
+    let rng     = len * 4; // Repeat the Points 4 times, Skipping the last Point
+    let v       = new Vec3();
+    let bi; // Buffer Index
+    let fi; // Rot Fn Idx
+    
+    for( let i=0; i < rng; i++ ){
+        fi = Math.floor( i / len );         // Function Index, 4 Groups, each one has a Rotation Applied
+        bi = (( i % len ) + offset ) * 3;   // Buffer Index, repeat the verts
+
+        v.from_buf( buf, bi );
+        fn[ fi ]( v, v );
+
+        v.push_to( norm );
+        v.mul( scl ).push_to( verts );
+    } 
+}
+
+// Create the Triangle indices for the Octasphere
+function gen_indices( subdiv, vrows ){
+    let out = new Array();
+    let a_len, b_len, q_cnt, q_loop,
+        a, b, c, d;
+
+    // Create a ring of triangles bases on 2 rows of vertices
+    // The Bottom Half of the sphere's vertices are mirrored, this causes a problem
+    // where the face winding needs to be in reverse.
+    const ring = ( ai, bi, rev )=>{
+        let aii = 0, bii = 0; // rows are iregular, so need to move 2 indices
+        for( let j=0; j < q_loop; j++ ){
+            //---------------------------------
+            // Define the Quad by suing the top and bottom row
+            a = ai + aii;  b = bi + bii;
+            c = b + 1;     d = a + 1;
+            
+            //---------------------------------
+            if( aii + 1 >= a_len ) d = ai;              // At end of ring, Loop back to start of the ring
+            if( !rev )  out.push( a, b, c, c, d, a );
+            else        out.push( c, b, a, a, d, c );
+    
+            //---------------------------------
+            // Test for the extra triangle, With iregular sizes per row, the only
+            // I see is that for each corner there is a set of quads, but with an extra
+            // triangle at the end, 
+            if( ((j+1) % q_cnt) == 0 ){ 
+                bii += 1;               // Move ahead to start fresh with a quad at the next corner 
+                if( bii+1 < b_len ) ( !rev )? out.push( d, c, c+1 ) : out.push( c+1, c, d );    // Extra tri
+                else                ( !rev )? out.push( d, c, bi )  : out.push( bi, c, d );     // FINAL extra tri,tie back to start
+            }
+            
+            //---------------------------------
+            // Move the row indicies forward
+            aii++; bii++; 
+        }
+    };
+
+    // Last two vrows items are the index of the poles.
+    // So the triangles just links the final row woth the pole point
+    const pole = ( pidx, rev )=>{
+        b_len = vrows[ pidx-1 ] - vrows[ pidx-2 ];
+        a     = vrows[ pidx ];
+        b     = vrows[ pidx-2 ];
+
+        for( let j=0; j < b_len; j++ ){
+            c = b + j;                  // Compute the bottom row start
+            d = b + ((j + 1) % b_len);  // If last point, need to  loop back to start
+            
+            if( !rev )  out.push( a, c, d );
+            else        out.push( d, c, a );
+        }
+    };
+
+    //----------------------------------------
+    // Build the EQUATOR Rows
+    a_len   = vrows[ 2 ] - vrows[ 1 ];  // Hoq Long is the Top Row, Determine by using the starting index of each row
+    b_len   = vrows[ 1 ] - vrows[ 0 ];  // How long is the bot row, 
+    q_cnt   = b_len / 4 - 1;            // How many quads per corner can be created  
+    q_loop  = q_cnt * 4;                // Total Number of quads being made per row
+    ring( vrows[1], vrows[0], false );  // Make top Ring
+    ring( vrows[2], vrows[0], true );   // Make Bot Ring, with rev winding
+
+    //----------------------------------------
+    // Build Rings between Equator and Poles
+    for( let i=1; i < vrows.length-4; i+=2 ){
+        a_len   = vrows[ i+3 ] - vrows[ i+2 ];
+        b_len   = vrows[ i+1 ] - vrows[ i ];
+        q_cnt   = b_len / 4 - 1;
+        q_loop  = q_cnt * 4;
+        ring( vrows[i+2], vrows[i], false );
+        ring( vrows[i+3], vrows[i+1], true );
+    }
+
+    //----------------------------------------
+    // Use the Pole points and final rows to finish the sphere.
+    let ri_last = vrows.length - 1;
+    pole( ri_last-1, false );
+    pole( ri_last, true );
+
+    return out;
+}
+
+// Create the base vertices that forms the corner of
+// of Octa Sphere based on sub division Value.
+// The Main concept is that you form 2 vertical arcs
+// that are 90 degrees apart. Then create inbetween
+// arcs by rotating the verts of the first arc towards the second.
+// Build the corner up from the equator to pole horizontally,
+// like one row at a time.
+// Since each row of verts have a different size, Its best to 
+// keep track the starting index of each row for further processing
+function gen_corner( subdiv, irow ){
+    const pi_h = Math.PI * 0.5;
+    let n      = 2 ** subdiv; 
+    let out    = new Array();
+    let a      = new Vec3();
+    let b      = new Vec3();
+    let cnt    = 0;
+    let rad, s, c;
+
+    for( let i=0; i < n; i++ ){
+        irow.push( cnt );           // Starting Index of Each Row
+        cnt += n - i + 1;           // How Many points created for this row
+        
+        rad = pi_h * i / n;         // Vertical Angle         
+        s   = Math.sin( rad );      
+        c   = Math.cos( rad );
+        a.set( 0, s, c );           // Left Point
+        b.set( c, s, 0 );           // Right Point
+
+        a.push_to( out );           // Start of Row
+        arc_lerp( a, b, n-i, out ); // in Between Verts
+        b.push_to( out );           // End of Row
+    }
+
+    out.push( 0, 1, 0 );            // Pole Point
+    irow.push( cnt );               // Pole Index
+    return out;
+}
+
+// Create the inbetween points of two arcs.
+// Need to compute a rotating axis for each row,
+// doing so will make each arc spherical
+function arc_lerp( a, b, seg_num, ary ){
+    if( seg_num < 2 ) return;                   // Dont bother making points
+
+    let ang  = Math.acos( Vec3.dot( a, b ) ); //Vec3.angle( a, b ); 
+    let axis = Vec3.cross( a, b ).norm();       // MUST normalize rotation axis, 
+    let inc  = ang / seg_num;                   // Angle Incremeter for each pass
+    let v    = new Vec3();
+
+    for( let i=1; i < seg_num; i++ ){
+        v
+            .from_axis_angle( axis, i*inc, a )  // Rotate the first point
+            .push_to( ary );                    // Save it to array buffer
+    }
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

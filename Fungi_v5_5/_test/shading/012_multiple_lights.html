@@ -1,0 +1,392 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour, Vec3 } from "../../fungi/App.js";
+import Capsule	    from "../../fungi/geo/Capsule.js";
+import Points 	    from "../../fungi/geo/Points.js";
+import MotionStack 	from "../../fungi.test/MotionStack.js";
+import GltfUtil     from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	    from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+    .use_debug()
+	.set_camera( 40, 10, 4, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gMotion, gUbo;
+let gLights;
+
+//#####################################################
+
+function on_render( dt, ss ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Compute Point Light Locations
+    let r   = Math.sin( ss ) * 0.5 + 0.5;
+    let rp  = Vec3.scale( Vec3.FORWARD, r * 3 + 0.5 ).add( [0,0.5,0]);
+    
+    let g   = Math.sin( ss * 0.7 ) * 0.5 + 0.5;
+    let gp  = Vec3.scale( Vec3.LEFT, g * 3 + 0.5 ).add( [0,0.5,0]);
+
+    let b   = Math.sin( ss * 0.4 ) * 0.5 + 0.5;
+    let bp  = Vec3.scale( Vec3.LEFT, b * -3 + -0.5 ).add( [0,0.5,0]);
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Visually See Light Locations
+    App.Debug.reset();
+    App.Debug
+        .pnt( [0,1.5,0], "yellow", 0.1 )    // Sun
+        .pnt( [0,0,0], "#262626", 0.1 )     // 
+        .pnt( rp, "#ff0000", 0.1 )
+        .pnt( gp, "#00ff00", 0.1 )
+        .pnt( bp, "#0000ff", 0.1 )
+    ;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Update Lights with new Position and Upload to GPU
+    gLights.lights[ 2 ].pos = rp;
+    gLights.lights[ 3 ].pos = gp;
+    gLights.lights[ 4 ].pos = bp;
+    gLights.update();
+}
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader and Light UBO
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	let e = GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup Lights
+    gLights = new LightCollection( gUbo )
+        .set_ambient_color( "#101010" )
+        .add( new DirectionLight( [ 0, 1, 0 ], "yellow", 0.8 ) )    // SunLight
+        .add( new DirectionLight( [ 0, -1, 0 ], "#363636", 1.4 ) )  // Ground Reflection
+        .add( new PointLight( "#ff0000", [0,0,5] ) )                // Red Light
+        .add( new PointLight( "#00ff00", [5,0,0] ) )                // Green Light
+        .add( new PointLight( "#0000ff", [-5,0,0] ) )                // Green Light
+    ;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //on_render( 0, 0.01 );
+	App.render_by( 1, on_render );
+	return true;
+}
+
+class LightCollection{
+    constructor( ubo=null ){
+        this.buffer = new LightBuffer();
+        this.lights = new Array();
+        this.ubo    = ubo;
+    }
+
+    set_ambient_color( c ){ this.buffer.ambient_color = c; return this }
+
+    add( lo ){ this.lights.push( lo ); return this; }
+
+    update(){
+        // Copy the Byte Array of each light into the stand in ubo buffer.
+        let i = 0;
+        for( i; i < this.lights.length; i++ ){
+            this.buffer.set_light( i, this.lights[ i ] );
+        }
+
+        this.buffer.light_cnt = i;                          // Update How Many Lights exists        
+        App.ubo.update( this.ubo.copy( this.buffer.buf ) ); // Post to GPU
+    }
+}
+
+//#####################################################
+
+// Light Type
+class DirectionLight{
+    /*struct{
+        int     type;           // 0
+        vec3    dir;            // 4, 8, 12
+        vec3    color;          // 16, 20, 24
+        float   strength;       // 28
+        vec3    spec_color;     // 32
+    }*/
+    buf         = new ArrayBuffer( 16 * 4 );            // Main Buffer : Space of a Mat4x4
+    bytes       = new Uint8Array( this.buf );           // Byte Access to Array Buffer, used for Coping to LightBuffer
+    dv          = new DataView( this.buf );             // Modifer for ArrayBuffer
+    _dir        = new Float32Array( this.buf, 4, 3 );   // Direction of light, its usually inverse direction from origin
+    _color      = new Float32Array( this.buf, 16, 3 );  // Color of Light
+    _spec_color = new Float32Array( this.buf, 32, 3 );  // Color of Specular Light
+    updated     = true;
+
+    set strength( v ){ this.dv.setFloat32( 28, v, true ); }             // Weight of light source, can lower for less influense 
+    set color( v ){ this._color.set( new Colour( v ).rgb ); }           // Set Light Color
+    set spec_color( v ){ this._spec_color.set( new Colour( v ).rgb ); } 
+    set dir( v ){ this._dir.set( v ); }
+
+    from_pos( v ){
+        let len = 1 / Math.sqrt( v[0]**2 + v[1]**2 + v[2]**2 ); // Mag
+        this._dir[ 0 ] = -( v[ 0 ] * len ); // Normalize and Invert
+        this._dir[ 1 ] = -( v[ 1 ] * len );
+        this._dir[ 2 ] = -( v[ 2 ] * len );
+        return this;
+    }
+
+    constructor( dir=null, color=null, strength=1.0 ){
+        this.dv.setFloat32( 0, 0, true ); // Set Type ID
+        this.strength   = strength;
+        this.dir        = [ 0, 1, 0 ];
+        this.spec_color = "#707070";
+
+        if( dir )   this.dir   = dir;
+        if( color ) this.color = color;
+    }
+}
+
+// Light Type
+class PointLight{
+    /*struct{
+        int     type;           // 0    
+        vec3    pos;            // 4, 8, 12     vec4
+        vec3    color;          // 16,20,24,28  vec4
+        vec3    spec_color;     // 32,36,40,44  vec4
+        float   constant;       // 48
+        float   linear;         // 52
+        float   quadratic;      // 56           vec3
+        float   attenuation;    // 60           vec4
+    }*/
+
+    buf         = new ArrayBuffer( 16 * 4 );                    // Main Buffer : Space of a Mat4x4
+    bytes       = new Uint8Array( this.buf );                   // Byte Access to Array Buffer, used for Coping to LightBuffer
+    dv          = new DataView( this.buf );                     // Modifer for ArrayBuffer
+    _pos        = new Float32Array( this.buf, 4, 3 );           // World Space Position of Light
+    _color      = new Float32Array( this.buf, 16, 3 );          // Light Color
+    _spec_color = new Float32Array( this.buf, 32, 3 );          // Color of Specular Light
+    updated     = true;
+
+    set attenuation( v ){ this.dv.setFloat32( 60, v, true ); }  // Toggle to enable it
+    set constant( v ){ this.dv.setFloat32( 48, v, true ); }     // Part of Atten : Constant 1, but less can make light more intense.
+    set linear( v ){ this.dv.setFloat32( 52, v, true ); }       // Part of Atten : Kinda help control distance
+    set quadratic( v ){ this.dv.setFloat32( 56, v, true ); }    // Part of Atten : Curve the strength based on distance
+    
+    set pos( v ){ this._pos.set( v ); }
+    set color( v ){ this._color.set( new Colour( v ).rgb ); }
+    set spec_color( v ){ this._spec_color.set( new Colour( v ).rgb ); }
+
+    constructor( color=null, pos=null ){
+        this.dv.setFloat32( 0, 1, true ); // Set Type ID
+        this.constant    = 1.0;
+        this.linear      = 0.1;
+        this.quadratic   = 1.8;
+        this.color       = color || "#ffffff";
+        this.spec_color  = "#ffffff";
+        this.pos         = pos || [ 0.0, 1.5, 0 ];
+        this.attenuation = 0;
+    }
+}
+
+// A byte buffer that replicated the UBO for Light Data
+class LightBuffer{
+    /*struct{
+        vec3  ambient;          // 0, 4, 8
+        float spec_strength;    // 12            Vec4
+        float spec_shinness;    // 16
+        int   light_cnt;        // 20 ( 24, 28 ) Vec4
+        mat4  lights[ 5 ];      // 32, 96, 160
+    } 224 bytes total*/
+
+    buf      = new ArrayBuffer( 32 + 64 * 5 );      // Base Byte Buffer
+    dv       = new DataView( this.buf );            // Modifer for Array Buffer
+    _lights  = new Uint8Array( this.buf, 32 );      // Slice of Array Buffer that Contains the Array of Lights
+    _ambient = new Float32Array( this.buf, 0, 3 );  // Slice of AB that holds the ambient light color. 
+
+    set spec_strength( v ){ this.dv.setFloat32( 12, v, true ); }
+    set spec_shinness( v ){ this.dv.setFloat32( 16, v, true ); }
+    set light_cnt( v ){ this.dv.setInt32( 20, v, true ); }  
+    set ambient_color( v ){ this._ambient.set( new Colour( v ).rgb ); }
+
+    set_light( idx, lit ){ this._lights.set( lit.bytes, idx * 64 ); }
+
+    constructor(){
+        this.light_cnt      = 0;            // How many active lights
+        this.spec_strength  = 1;            
+        this.spec_shinness  = 32;
+        this.ambient_color  = "#101010";    // Starting World Light
+    }
+}
+
+//#####################################################
+
+function init_shader(){    
+    gUbo = App.ubo.new( "Lights", 10, [
+        { name:"ambient",       type:"vec3" },
+        { name:"spec_strength", type:"float" },
+        { name:"spec_shinness", type:"float" },
+        { name:"light_cnt",     type:"int32" },
+        { name:"lights",        type:"mat4",    ary_len:5 },
+    ]);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"base_color", type:"rgba", value:"#ffffffff" }, //ff7f7fff
+	], App.ubo.get_array( "Global", "Model", "Lights" ) );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+
+uniform Global{ 
+    mat4 proj_view; 
+    mat4 camera_matrix;
+    vec3 camera_pos;
+    float delta_time;
+    vec2 screen_size;
+    float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_cam_pos;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+    vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_lpos 		= a_pos.xyz;
+    frag_wpos		= wpos.xyz;
+    frag_cam_pos	= global.camera_pos;
+    frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+out vec4 out_color;
+
+//-------------------------
+uniform vec4 base_color;
+
+in vec3 frag_norm;
+in vec3 frag_cam_pos;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+const int MAX_LIGHTS = 5;
+
+uniform Lights{ 
+    vec3  ambient_color;        // 0, 4, 8
+    float spec_strength;        // 12            Vec4
+    float spec_shininess;       // 16
+    int   count;                // 20 ( 24, 28 ) Vec4
+    mat4  list[ 5 ];   // 32, 96, 160
+} light;
+
+struct DirLight{
+    vec3    dir;            // 4, 8, 12
+    vec3    color;          // 16, 20, 24
+    float   strength;       // 28
+    vec3    spec_color;     // 32
+};
+
+struct PntLight{
+    vec3    pos;            // 4, 8, 12     vec4
+    vec3    color;          // 16,20,24,28  vec4
+    vec3    spec_color;     // 32,36,40,44  vec4
+    float   constant;       // 48
+    float   linear;         // 52
+    float   quadratic;      // 56           
+    float   attenuation;    // 60           vec4
+};
+
+DirLight parse_dir_light( mat4 d ){ return DirLight( d[0].yzw, d[1].xyz, d[1].w, d[2].xyz ); }
+PntLight parse_pnt_light( mat4 d ){ return PntLight( d[0].yzw, d[1].xyz, d[2].xyz, d[3].x, d[3].y, d[3].z, d[3].w ); }
+
+vec3 get_dir_light( vec3 pos, vec3 norm, vec3 cam_dir, mat4 LData ){
+    DirLight lit = parse_dir_light( LData );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// DIFFUSE
+    float diff   = max( dot( norm, lit.dir ), 0.0 );    // Angle between Frag Normal and Light Direction ( 0 to 1 )
+    vec3 diffuse = diff * lit.color;                    // Use the angle to scale the amount of light to use.
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SPECULAR
+	vec3 reflect_lite_n	= reflect( -lit.dir, norm );  // Light to Frag Dir (negated),
+	float spec 			= pow( max( dot( cam_dir, reflect_lite_n ), 0.0 ), light.spec_shininess );
+	vec3 specular_clr	= light.spec_strength * spec * lit.spec_color;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return clamp( ( diffuse + specular_clr ) * lit.strength, 0.0, 1.0 );
+}
+
+vec3 get_pnt_light( vec3 pos, vec3 norm, vec3 cam_dir, mat4 LData ){
+    PntLight lit     = parse_pnt_light( LData );
+    vec3     delta   = lit.pos - pos;
+    float    dist    = length( delta );
+    vec3     lit_dir = normalize( delta );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// DIFFUSE
+    float diff   = max( dot( norm, lit_dir ), 0.0 );    // Angle between Frag Normal and Light Direction ( 0 to 1 )
+    vec3 diffuse = diff * lit.color;                    // Use the angle to scale the amount of light to use.
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// SPECULAR
+	vec3 reflect_lite_n	= reflect( -lit_dir, norm );  // Light to Frag Dir (negated),
+	float spec 			= pow( max( dot( cam_dir, reflect_lite_n ), 0.0 ), light.spec_shininess );
+	vec3 specular	    = light.spec_strength * spec * lit.spec_color;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // ATTENUATION
+    float attenuation = 1.0;
+    if( lit.attenuation < 0.9 ) attenuation = 1.0 / ( lit.constant + lit.linear * dist + lit.quadratic * (dist * dist) );
+    //attenuation = 0.2 / distance; // Simpler/Linear Attenuation : MaxDistance / Current Distance
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return clamp( ( diffuse + specular ) * attenuation, 0.0, 1.0 );
+}
+
+vec3 phong_multi(){
+    vec3 norm       = normalize( frag_norm );	// Must normalized, Since it has been interpolated
+    vec3 cam_dir    = normalize( frag_cam_pos - frag_wpos );
+    vec3 lit        = light.ambient_color;
+
+    for( int i=0; i < light.count; i++ ){
+        // DIRECTION LIGHT
+        if( int( light.list[ i ][ 0 ].x ) == 0 )
+            lit += get_dir_light( frag_wpos, norm, cam_dir, light.list[ i ] );
+
+        // POINT LIGHT
+        else if( int( light.list[ i ][ 0 ].x ) == 1 )
+            lit += get_pnt_light( frag_wpos, norm, cam_dir, light.list[ i ] );
+    }
+
+    return lit;
+}
+
+//-------------------------
+
+void main( void ){
+    vec3 lit    = phong_multi();
+    out_color   = vec4( base_color.rgb * lit, 1.0 );
+}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

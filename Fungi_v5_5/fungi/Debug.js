@@ -77,6 +77,35 @@ class Debug{
 		return this;
 	}
 
+	static transform_bound( v0, v1, tran ){
+		let x1 = v0[0], y1 = v0[1], z1 = v0[2], 
+        	x2 = v1[0], y2 = v1[1], z2 = v1[2];
+		
+			let ary = [
+			new Vec3( x1,y1,z1 ), // BBL
+			new Vec3( x1,y1,z2 ), // BBR
+			new Vec3( x2,y1,z2 ), // BFR
+			new Vec3( x2,y1,z1 ), // BFL
+			new Vec3( x1,y2,z1 ), // TBL
+			new Vec3( x1,y2,z2 ), // TBR
+			new Vec3( x2,y2,z2 ), // TFR
+			new Vec3( x2,y2,z1 ), // TFL
+		];
+
+		let v;
+		for( v of ary ) tran.transform_vec( v );
+		return ary;
+	}
+	static box_pnt( ary, col=ln_color, is_dash=false ){
+		let ii;
+		for( let i=0; i < 4; i++ ){
+			ii = (i + 1) % 4;
+			App.Debug.ln( ary[ i ], ary[ ii ],		col, null, is_dash );  // Bottom
+			App.Debug.ln( ary[ i+4 ], ary[ ii+4 ],	col, null, is_dash );  // Top
+			App.Debug.ln( ary[ i ], ary[ i+4 ],		col, null, is_dash );  // Bot to Top
+		}
+	}
+
 	static box_at( pos, x=1, y=1, z=1, col="red", is_dash=false ){
 		return this.box( pos, [ pos[0] + x, pos[1] + y, pos[2] + z ], col, is_dash )
 	}

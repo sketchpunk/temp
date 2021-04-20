@@ -1,0 +1,375 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+
+import FacedCube from "../../fungi/geo/FacedCube.js";
+
+//#####################################################
+App
+	.init( true )
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+// C:\Personal\Unity\SpringTest\Assets\Boing Kit\Script
+// http://allenchou.net/2014/04/game-math-interpolating-quaternions-with-circular-blending/
+// https://gafferongames.com/post/spring_physics/
+// http://allenchou.net/2015/04/game-math-more-on-numeric-springing/
+// http://allenchou.net/2015/04/game-math-precise-control-over-numeric-springing/
+
+//#####################################################
+
+let $cube;
+let $spring;
+let $cnt = 0;
+
+window.addEventListener( "keypress", (e)=>{
+    if( e.keyCode == 32 ){
+        //$spring.set_target( 3 * (( (++$cnt & 1) == 1 )?1:-1) );
+
+        let s = ( (++$cnt & 1) == 1 )? 1 :-1 ;
+        $spring.set_target( [ 2*s, 1*-s, 0 ] );
+    }
+});
+
+function on_render( dt ){
+    if( $spring.update( dt ) ){
+        //console.log( $spring.vel, $spring.tar - $spring.val );
+        //$cube.local.pos.x = $spring.val;
+        //$cube.updated = true;
+
+        $cube.set_pos( $spring.val );
+    }
+}
+
+async function init(){
+    let eid = FacedCube();
+
+    $cube = App.ecs.get_com( eid, "Node" );
+    $cube.set_scl( 0.5 ).set_pos( 0, 0.3, 0 );
+
+    //$spring = new IESpring_f().set_osc_ps( 1.0 );
+    $spring = new IESpring_Vec3().set_osc_ps( 1.0 );
+
+    //$spring.set_damp( 1 ); // Critical Damp
+    $spring.set_damp( 0.4 );
+    //$spring.set_damp_ratio( 0.8, 0.1 );
+    //$spring.set_damp_halflife( 0.5 );
+    //$spring.set_damp_expo( 0.2 );
+
+    App.render_by( 1, on_render );
+    return true;
+}
+
+
+
+// http://box2d.org/files/GDC2011/GDC2011_Catto_Erin_Soft_Constraints.pdf
+// http://allenchou.net/2015/04/game-math-precise-control-over-numeric-springing/
+// http://allenchou.net/2015/04/game-math-more-on-numeric-springing/
+
+// implicit euler base class
+class IESpring_Base{
+    // #region MAIN
+    osc_ps  = Math.PI * 2;  // Oscillation per Second : How many Cycles (Pi*2) per second.	
+    damping = 1;            // How much to slow down : Value between 0 and 1. 1 creates critical damping.
+    epsilon = 0.01;
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    // #region SETTERS / GETTERS
+    set_target( v ){ console.log( "SET_TARGET NOT IMPLEMENTED"); return this; }
+    set_osc_ps( sec ){ this.osc_ps = Math.PI * 2 * sec; return this; }
+    set_damp( damping ){ this.damping = damping; return this; }
+    
+    // Damp Time, in seconds to damp. So damp 0.5 for every 2 seconds.
+    // With the idea that for every 2 seconds, about 0.5 damping has been applied
+    set_damp_ratio( damping, damp_time ){ this.damping = Math.log( damping ) / ( -this.osc_ps * damp_time ); return this; }
+    
+    // Reduce oscillation by half in X amount of seconds
+    set_damp_halflife( damp_time ){
+        this.damping = 0.6931472 / ( this.osc_ps * damp_time ); // float zeta = -ln(0.5f) / ( omega * lambda );
+        return this;
+    }
+
+    // Critical Damping with a speed control of how fast the cycle to run
+    set_damp_expo( damp_time ){
+        this.osc_ps  = 0.6931472 / damp_time; // -Log(0.5) but in terms of OCS its 39.7 degrees over time
+        this.damping = 1;
+        return this
+    }
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    update( dt ){ console.log( "UPDATE NOT IMPLEMENTED"); return false; }
+}
+
+// implicit euler spring
+class IESpring_f extends IESpring_Base {
+    // #region MAIN
+    vel     = 0; // Velocity
+    val     = 0; // Currvent Value
+    tar     = 0; // Target Value
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    // #region SETTERS / GETTERS
+    set_target( v ){ this.tar = v; return this; }
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    update( dt ){
+        if( this.vel == 0 && this.tar == this.val ) return false;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if ( Math.abs( this.vel ) < this.epsilon && Math.abs( this.tar - this.val ) < this.epsilon ) {
+            this.vel = 0;
+            this.val = this.tar;
+            return true;
+        }
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let friction = 1.0 + 2.0 * dt * this.damping * this.osc_ps,
+            dt_osc	 = dt * this.osc_ps**2,
+            dt2_osc  = dt * dt_osc,
+            det_inv  = 1.0 / ( friction + dt2_osc );
+
+        this.vel = ( this.vel + dt_osc * ( this.tar - this.val ) ) * det_inv;
+        this.val = ( friction * this.val + dt * this.vel + dt2_osc * this.tar ) * det_inv;
+        
+        return true;
+    }
+}
+
+class IESpring_Vec3 extends IESpring_Base {
+    // #region MAIN
+    vel     = new Vec3(); // Velocity
+    val     = new Vec3(); // Current Value
+    tar     = new Vec3(); // Target Value
+    epsilon = 0.00001;
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    // #region SETTERS / GETTERS
+    set_target( v ){ this.tar.copy( v ); return this; }
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    update( dt ){
+        if( this.vel.is_zero() && Vec3.len_sqr( this.tar, this.val ) == 0 ) return false;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if ( this.vel.len_sqr() < this.epsilon && Vec3.len_sqr( this.tar, this.val ) < this.epsilon ) {
+            this.vel.set( 0, 0, 0 );
+            this.val.copy( this.tar );
+            return true;
+        }
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let friction = 1.0 + 2.0 * dt * this.damping * this.osc_ps,
+            dt_osc	 = dt * this.osc_ps**2,
+            dt2_osc  = dt * dt_osc,
+            det_inv  = 1.0 / ( friction + dt2_osc );
+
+        this.vel[0] = ( this.vel[0] + dt_osc * ( this.tar[0] - this.val[0] ) ) * det_inv;
+        this.vel[1] = ( this.vel[1] + dt_osc * ( this.tar[1] - this.val[1] ) ) * det_inv;
+        this.vel[2] = ( this.vel[2] + dt_osc * ( this.tar[2] - this.val[2] ) ) * det_inv;
+
+        this.val[0] = ( friction * this.val[0] + dt * this.vel[0] + dt2_osc * this.tar[0] ) * det_inv;
+        this.val[1] = ( friction * this.val[1] + dt * this.vel[1] + dt2_osc * this.tar[1] ) * det_inv;
+        this.val[2] = ( friction * this.val[2] + dt * this.vel[2] + dt2_osc * this.tar[2] ) * det_inv;
+
+        return true;
+    }
+}
+
+class IESpring_Quat extends IESpring_Base {
+    // #region MAIN
+    vel     = new Quat(); // Velocity
+    val     = new Quat(); // Current Value
+    tar     = new Quat(); // Target Value
+    epsilon = 0.00001;
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    // #region SETTERS / GETTERS
+    set_target( v ){ this.tar.copy( v ); return this; }
+    // #endregion ///////////////////////////////////////////////////////////////////
+
+    update( dt ){
+        if( this.vel.is_zero() && Quat.len_sqr( this.tar, this.val ) == 0 ) return false;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if ( this.vel.len_sqr() < this.epsilon && Quat.len_sqr( this.tar, this.val ) < this.epsilon ) {
+            this.vel.set( 0, 0, 0, 0 );
+            this.val.copy( this.tar );
+            return true;
+        }
+
+        if( Quat.dot( this.tar, this.val ) < 0 ) this.tar.negate(); // Can screw up skinning if axis not in same hemisphere
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let friction = 1.0 + 2.0 * dt * this.damping * this.osc_ps,
+            dt_osc	 = dt * this.osc_ps**2,
+            dt2_osc  = dt * dt_osc,
+            det_inv  = 1.0 / ( friction + dt2_osc );
+
+        this.vel[0] = ( this.vel[0] + dt_osc * ( this.tar[0] - this.val[0] ) ) * det_inv;
+        this.vel[1] = ( this.vel[1] + dt_osc * ( this.tar[1] - this.val[1] ) ) * det_inv;
+        this.vel[2] = ( this.vel[2] + dt_osc * ( this.tar[2] - this.val[2] ) ) * det_inv;
+        this.vel[3] = ( this.vel[3] + dt_osc * ( this.tar[3] - this.val[3] ) ) * det_inv;
+
+        this.val[0] = ( friction * this.val[0] + dt * this.vel[0] + dt2_osc * this.tar[0] ) * det_inv;
+        this.val[1] = ( friction * this.val[1] + dt * this.vel[1] + dt2_osc * this.tar[1] ) * det_inv;
+        this.val[2] = ( friction * this.val[2] + dt * this.vel[2] + dt2_osc * this.tar[2] ) * det_inv;
+        this.val[3] = ( friction * this.val[3] + dt * this.vel[3] + dt2_osc * this.tar[3] ) * det_inv;
+
+        return true;
+    }
+}
+
+
+/*
+
+/*
+ [StructLayout(LayoutKind.Sequential, Pack = 0)]
+  public struct QuaternionSpring
+  {
+    public static readonly int Stride = 8 * sizeof(float);
+
+    public Vector4 ValueVec;
+    public Vector4 VelocityVec;
+
+    public Quaternion ValueQuat
+    {
+      get { return QuaternionUtil.FromVector4(ValueVec); }
+      set { ValueVec = QuaternionUtil.ToVector4(value); }
+    }
+
+    public void Reset()
+    {
+      ValueVec = QuaternionUtil.ToVector4(Quaternion.identity);
+      VelocityVec = Vector4.zero;
+    }
+
+    public void Reset(Vector4 initValue)
+    {
+      ValueVec = initValue;
+      VelocityVec = Vector4.zero;
+    }
+
+    public void Reset(Vector4 initValue, Vector4 initVelocity)
+    {
+      ValueVec = initValue;
+      VelocityVec = initVelocity;
+    }
+
+    public void Reset(Quaternion initValue)
+    {
+      ValueVec = QuaternionUtil.ToVector4(initValue);
+      VelocityVec = Vector4.zero;
+    }
+
+    public void Reset(Quaternion initValue, Quaternion initVelocity)
+    {
+      ValueVec = QuaternionUtil.ToVector4(initValue);
+      VelocityVec = QuaternionUtil.ToVector4(initVelocity);
+    }
+
+    public Quaternion TrackDampingRatio(Vector4 targetValueVec, float angularFrequency, float dampingRatio, float deltaTime)
+    {
+      if (angularFrequency < MathUtil.Epsilon)
+      {
+        VelocityVec = QuaternionUtil.ToVector4(Quaternion.identity);
+        return QuaternionUtil.FromVector4(ValueVec);
+      }
+
+      // keep in same hemisphere for shorter track delta
+      if (Vector4.Dot(ValueVec, targetValueVec) < 0.0f)
+      {
+        targetValueVec = -targetValueVec;
+      }
+
+      Vector4 delta = targetValueVec - ValueVec;
+
+      float f = 1.0f + 2.0f * deltaTime * dampingRatio * angularFrequency;
+      float oo = angularFrequency * angularFrequency;
+      float hoo = deltaTime * oo;
+      float hhoo = deltaTime * hoo;
+      float detInv = 1.0f / (f + hhoo);
+      Vector4 detX = f * ValueVec + deltaTime * VelocityVec + hhoo * targetValueVec;
+      Vector4 detV = VelocityVec + hoo * delta;
+
+      VelocityVec = detV * detInv;
+      ValueVec = detX * detInv;
+
+      if (VelocityVec.magnitude < MathUtil.Epsilon && delta.magnitude < MathUtil.Epsilon)
+      {
+        VelocityVec = Vector4.zero;
+        ValueVec = targetValueVec;
+      }
+
+      return QuaternionUtil.FromVector4(ValueVec);
+    }
+
+    public Quaternion TrackDampingRatio(Quaternion targetValue, float angularFrequency, float dampingRatio, float deltaTime)
+    {
+      return TrackDampingRatio(QuaternionUtil.ToVector4(targetValue), angularFrequency, dampingRatio, deltaTime);
+    }
+
+    public Quaternion TrackHalfLife(Vector4 targetValueVec, float frequencyHz, float halfLife, float deltaTime)
+    {
+      if (halfLife < MathUtil.Epsilon)
+      {
+        VelocityVec = Vector4.zero;
+        ValueVec = targetValueVec;
+        return QuaternionUtil.FromVector4(targetValueVec);
+      }
+
+      float angularFrequency = frequencyHz * MathUtil.TwoPi;
+      float dampingRatio = 0.6931472f / (angularFrequency * halfLife);
+      return TrackDampingRatio(targetValueVec, angularFrequency, dampingRatio, deltaTime);
+    }
+
+    public Quaternion TrackHalfLife(Quaternion targetValue, float frequencyHz, float halfLife, float deltaTime)
+    {
+      if (halfLife < MathUtil.Epsilon)
+      {
+        VelocityVec = QuaternionUtil.ToVector4(Quaternion.identity);
+        ValueVec = QuaternionUtil.ToVector4(targetValue);
+        return targetValue;
+      }
+
+      float angularFrequency = frequencyHz * MathUtil.TwoPi;
+      float dampingRatio = 0.6931472f / (angularFrequency * halfLife);
+      return TrackDampingRatio(targetValue, angularFrequency, dampingRatio, deltaTime);
+    }
+
+    public Quaternion TrackExponential(Vector4 targetValueVec, float halfLife, float deltaTime)
+    {
+      if (halfLife < MathUtil.Epsilon)
+      {
+        VelocityVec = Vector4.zero;
+        ValueVec = targetValueVec;
+        return QuaternionUtil.FromVector4(targetValueVec);
+      }
+
+      float angularFrequency = 0.6931472f / halfLife;
+      float dampingRatio = 1.0f;
+      return TrackDampingRatio(targetValueVec, angularFrequency, dampingRatio, deltaTime);
+    }
+
+    public Quaternion TrackExponential(Quaternion targetValue, float halfLife, float deltaTime)
+    {
+      if (halfLife < MathUtil.Epsilon)
+      {
+        VelocityVec = QuaternionUtil.ToVector4(Quaternion.identity);
+        ValueVec = QuaternionUtil.ToVector4(targetValue);
+        return targetValue;
+      }
+
+      float angularFrequency = 0.6931472f / halfLife;
+      float dampingRatio = 1.0f;
+      return TrackDampingRatio(targetValue, angularFrequency, dampingRatio, deltaTime);
+    }
+  }
+*/
+
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

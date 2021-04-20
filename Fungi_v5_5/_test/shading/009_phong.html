@@ -300,7 +300,7 @@ const frag_src = `#version 300 es
 		vec4 met_rou 			= texture( mr_tex, frag_uv ); // B=Metal, G=Roughness, GLTF Spec Says so
 
 		// Guess how many mips level the texture might have
-		ivec2 met_rou_size		= textureSize( mr_tex, 0 );
+		ivec2 met_rou_size		= textureSize( env_tex, 0 );
 		float met_rou_mips		= 1.0 + floor( log2( float( max( met_rou_size.x, met_rou_size.y ) ) ) );
 
 		// Setup some properties
