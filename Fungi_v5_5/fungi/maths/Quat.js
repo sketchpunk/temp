@@ -101,7 +101,27 @@ class Quat extends Float32Array{
  				out[0] = this[0] / s;
 				out[1] = this[1] / s;
 				out[2] = this[2] / s;
- 			}
+			 }
+			 
+		/*        double x = this.x;
+        double y = this.y;
+        double z = this.z;
+
+        double length = this.getLength();
+        if (!isZero(length) && (length != 1.0))
+        {
+            x /= length;
+            y /= length;
+            z /= length;
+        }
+
+        double vecLength = Math.sqrt((x * x) + (y * y) + (z * z));
+        if (!isZero(vecLength) && (vecLength != 1.0))
+        {
+            x /= vecLength;
+            y /= vecLength;
+            z /= vecLength;
+        }*/
 
  			return out;
 		}
@@ -150,6 +170,8 @@ class Quat extends Float32Array{
 		}
 
 		len_sqr( v ){ return this[0]**2 + this[1]**2 + this[2]**2 + this[3]**2; }
+		
+		is_zero(){ return ( this[0] == 0 && this[1] == 0 && this[2] == 0 && this[3] == 0 ); }
 
 	////////////////////////////////////////////////////////////////////
 	// FROM SETTERS
@@ -225,6 +247,65 @@ class Quat extends Float32Array{
 			this.from_look( v, up || Vec3.UP );
 			return this;
 		}
+
+	/*
+     * Returns a Quaternion created from latitude and longitude rotations.
+     * Latitude and longitude can be extracted from a Quaternion by calling
+     * {@link #getLatLon}.
+     *
+     * @param latitude Angle rotation of latitude.
+     * @param longitude Angle rotation of longitude.
+     * @return Quaternion representing combined latitude and longitude rotation.
+    public static Quaternion fromLatLon(Angle latitude, Angle longitude)
+    {
+        if (latitude == null || longitude == null)
+        {
+            String msg = Logging.getMessage("nullValue.AngleIsNull");
+            Logging.logger().severe(msg);
+            throw new IllegalArgumentException(msg);
+        }
+
+        double clat = latitude.cosHalfAngle();
+        double clon = longitude.cosHalfAngle();
+        double slat = latitude.sinHalfAngle();
+        double slon = longitude.sinHalfAngle();
+        
+        // The order in which the lat/lon angles are applied is critical. This can be thought of as multiplying two
+        // quaternions together, one for each lat/lon angle. Like matrices, quaternions affect vectors in reverse
+        // order. For example, suppose we construct a quaternion
+        //     Q = QLat * QLon
+        // then transform some vector V by Q. This can be thought of as first transforming V by QLat, then QLon. This
+        // means that the order of quaternion multiplication is the reverse of the order in which the lat/lon angles
+        // are applied.
+        //
+        // The ordering below refers to order in which angles are applied.
+        //
+        // QLat = (0,    slat, 0, clat)
+        // QLon = (slon, 0,    0, clon)
+        //
+        // 1. LatLon Ordering
+        // (QLon * QLat)
+        // qw = clat * clon;
+        // qx = clat * slon;
+        // qy = slat * clon;
+        // qz = slat * slon;
+        //
+        // 2. LonLat Ordering
+        // (QLat * QLon)
+        // qw = clat * clon;
+        // qx = clat * slon;
+        // qy = slat * clon;
+        // qz = - slat * slon;
+        //
+
+        double qw = clat * clon;
+        double qx = clat * slon;
+        double qy = slat * clon;
+        double qz = 0.0 - slat * slon;
+
+        return new Quaternion(qx, qy, qz, qw);
+	}
+	*/
 
 		to_polar(){
 			let fwd		= Vec3.transform_quat( Vec3.FORWARD, this );	// Forward Direction
@@ -571,6 +652,12 @@ class Quat extends Float32Array{
 			out[2] = -this[2];
 			out[3] = -this[3];
 			return out;
+		}
+
+		// Checks of on opposite hemisphere, if so, negate this quat
+		dot_negate( q ){ 
+			if( Quat.dot( this, q ) < 0 ) this.negate();
+			return this;
 		}
 
 		conjugate(){
@@ -1072,6 +1159,42 @@ export default Quat;
 
 
 /*
+    public final Quaternion getConjugate()
+    {
+        return new Quaternion(
+            0.0 - this.x,
+            0.0 - this.y,
+            0.0 - this.z,
+            this.w);
+	}
+
+// Rotation Axis, The length of the vector determines how much to rotate around that axis.
+// The math is very much from_axis_angle
+public static Quaternion FromAngularVector(Vector3 v)
+    {
+      float len = v.magnitude;
+      if (len < MathUtil.Epsilon)
+        return Quaternion.identity;
+
+      v /= len;
+
+      float h = 0.5f * len;
+      float s = Mathf.Sin(h);
+      float c = Mathf.Cos(h);
+
+      return new Quaternion(s * v.x, s * v.y, s * v.z, c);
+    }
+
+    public static Vector3 ToAngularVector(Quaternion q)
+    {
+      Vector3 axis = GetAxis(q);
+      float angle = GetAngle(q);
+
+      return angle * axis;
+    }
+
+
+
 function decompSwingTwist( q, qSwing, qTwist ){
 	//q_z = ( 0, 0, z, w ) / sqrt( z^2 + w^2 )
 	let denom = Math.sqrt( q[2]*q[2] + q[3]*q[3] );
@@ -1167,6 +1290,48 @@ Quat QuatIntegrate(const Quat& q, const Vector& omega, float deltaT)
 }
 
 
+
+
+
+    public final Angle getRotationX()
+    {
+        double radians = Math.atan2((2.0 * this.x * this.w) - (2.0 * this.y * this.z),
+                                    1.0 - 2.0 * (this.x * this.x) - 2.0 * (this.z * this.z));
+        if (Double.isNaN(radians))
+            return null;
+
+        return Angle.fromRadians(radians);
+    }
+
+    public final Angle getRotationY()
+    {
+        double radians = Math.atan2((2.0 * this.y * this.w) - (2.0 * this.x * this.z),
+                                    1.0 - (2.0 * this.y * this.y) - (2.0 * this.z * this.z));
+        if (Double.isNaN(radians))
+            return null;
+
+        return Angle.fromRadians(radians);
+    }
+
+    public final Angle getRotationZ()
+    {
+        double radians = Math.asin((2.0 * this.x * this.y) + (2.0 * this.z * this.w));
+        if (Double.isNaN(radians))
+            return null;
+
+        return Angle.fromRadians(radians);
+    }
+
+    public final LatLon getLatLon()
+    {
+        double latRadians = Math.asin((2.0 * this.y * this.w) - (2.0 * this.x * this.z));
+        double lonRadians = Math.atan2((2.0 * this.y * this.z) + (2.0 * this.x * this.w),
+                                       (this.w * this.w) - (this.x * this.x) - (this.y * this.y) + (this.z * this.z));
+        if (Double.isNaN(latRadians) || Double.isNaN(lonRadians))
+            return null;
+
+        return LatLon.fromRadians(latRadians, lonRadians);
+    }
 
 */
 

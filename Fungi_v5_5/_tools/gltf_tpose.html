@@ -1,0 +1,237 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform } from "../fungi/App.js";
+import XhrQueue 			from "../fungi/lib/XhrQueue.js";
+import GltfUtil, { Gltf }	from "../fungi/lib/GltfUtil.js";
+
+//#####################################################
+App
+    .init( true )
+    .use_debug()
+    .load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+    .set_camera( 0, 20, 3, 0, 0.7, 0 )
+    .task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let mname = "tina";
+
+    let [ json, bin ] = await XhrQueue.url( "../../files/models/"+mname+"/", mname+".gltf", mname+".bin" );
+    let e  = GltfUtil.get_skin_view_entity( "Test", json, bin, "LowPolySkin" );
+    
+    let bmap = BoneFinder.in_armature( e.arm, false );
+    //console.log( bmap );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let tp = new TPose( e.arm );
+    tp.debug_node_tree();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let fl_axis = tp.get_alt_axis( bmap.foot_l );
+    let fr_axis = tp.get_alt_axis( bmap.foot_r );
+    
+    tp.align_chain( [ bmap.upperarm_l, bmap.forearm_l, bmap.hand_l ], Vec3.LEFT );
+    tp.align_chain( [ bmap.upperarm_r, bmap.forearm_r, bmap.hand_r ], Vec3.RIGHT );
+
+    tp.align_chain( [ bmap.thigh_l, bmap.shin_l ], Vec3.DOWN );
+    tp.align_alt_axis( bmap.foot_l, fl_axis );
+
+    tp.align_chain( [ bmap.thigh_r, bmap.shin_r ], Vec3.DOWN );
+    tp.align_alt_axis( bmap.foot_r, fr_axis );
+
+    tp.apply();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    /*
+    tp.serialize_bones([
+        bmap.thigh_l, bmap.shin_l, bmap.foot_l,
+        bmap.thigh_r, bmap.shin_r, bmap.foot_r,
+        bmap.upperarm_l, bmap.forearm_l, bmap.hand_l,
+        bmap.upperarm_r, bmap.forearm_r, bmap.hand_r,
+    ]);
+    */
+    return true;
+}
+
+class TPose{
+    constructor( arm ){
+        this.pose = arm.new_pose();
+        this.pose.update_world();
+    }
+
+    apply(){ this.pose.apply(); }
+
+    tail_pos( b, t, v ){ return v.from_scale( Vec3.UP, b.len ).transform_quat( t.rot ).add( t.pos ); }
+    tail_dir( t, v ){ return v.from_quat( t.rot, Vec3.UP ); }
+
+    align_chain( nAry, up_dir ){
+        let p   = this.pose,
+            pt  = new Transform(),
+            ct  = new Transform(),
+            b   = null,
+            q   = new Quat(),
+            v   = new Vec3(),
+            dir = new Vec3();
+
+        for( let n of nAry ){
+            b = p.get_bone( n );
+            
+            p.get_parent_world( b.idx, pt );
+            ct.from_add( pt, b.local );
+
+            this.tail_dir( ct, dir );
+
+            q   .from_unit_vecs( dir, up_dir )  // Swing Rotation
+                .dot_negate( ct.rot )           // Negate if Dot < 0
+                .mul( ct.rot )                  // Apply Rotation
+                .pmul_invert( pt.rot );         // Convert to Local Space
+
+            p.set_local_rot( b.idx, q );
+        }
+    }
+
+    get_alt_axis( n ){
+        let p   = this.pose,
+            pt  = new Transform(),
+            ct  = new Transform(),
+            b   = p.get_bone( n ),
+            q   = new Quat(),
+            axis = {};
+            
+        p.get_parent_world( b.idx, pt, ct );
+        q.from_invert( ct.rot );
+
+        axis.fwd = Vec3.transform_quat( Vec3.FORWARD, q );
+        //axis.lft = Vec3.transform_quat( Vec3.LEFT, q );
+        axis.up  = Vec3.transform_quat( Vec3.UP, q );
+
+        return axis;
+    }
+
+    align_alt_axis( n, axis ){
+        let p   = this.pose,
+            pt  = new Transform(),
+            ct  = new Transform(),
+            dir = new Vec3(),
+            b   = p.get_bone( n ),
+            q   = new Quat();
+    
+        p.get_parent_world( b.idx, pt, ct );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // SWING - FORWARD DIR
+        dir.from_quat( ct.rot, axis.fwd );
+        q .from_unit_vecs( dir, Vec3.FORWARD )
+          .dot_negate( ct.rot )
+        
+        ct.rot.pmul( q );
+
+        //App.Debug.ln( ct.pos, Vec3.add( ct.pos, dir ), "green" );
+        //App.Debug.ln( ct.pos, Vec3.add( ct.pos, Vec3.FORWARD ), "green", null, true );
+        //App.Debug.ln( ct.pos, Vec3.transform_quat( axis.fwd, q ).scale(0.5).add( ct.pos ), "yellow", null, false );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // TWIST - UP DIR
+        dir.from_quat( ct.rot, axis.up );
+        q .from_unit_vecs( dir, Vec3.UP )
+          .dot_negate( ct.rot )
+          .mul( ct.rot );
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Save
+        q.pmul_invert( pt.rot );
+        p.set_local_rot( b.idx, q );
+    }
+
+    debug_node_tree( n ){
+        n = n || this.pose.arm.nodes[ 0 ];
+
+        let e    = App.ecs.entities.instances[ n._entity_id ],
+            spot = "--",
+            c;
+
+        console.log( "%s [ %s ] %s",spot.repeat( n.level ), n.level, e.name );
+        for( c of n.children ) this.debug_node_tree( c );
+    }
+
+    serialize_bones( nAry ){
+        let p   = this.pose,
+            str = "",
+            b, n;
+
+        let o = { idx:0, rot:[0,0,0,0], pos:[0,0,0] };
+        for( n of nAry ){
+            console.log( "Process -", n );
+            b = p.get_bone( n );
+
+            o.idx = b.idx;
+            b.local.pos.copy_to( o.pos );
+            b.local.rot.copy_to( o.rot );
+
+            str += JSON.stringify( o ) + ",\n";
+        }
+
+        console.log( str );
+    }
+}
+
+class BoneInfo{
+    static re_left  = new RegExp( "\.l|left", "i" );
+    static re_right = new RegExp( "\.r|right", "i" );
+
+    constructor( name, lr, re, multi=false ){
+        this.name   = name;
+        this.regex  = new RegExp( re, "i" ) ;
+        this.l      = (lr & 1)? true : false;
+        this.r      = (lr & 2)? true : false;
+        this.multi  = multi;
+    }
+    
+    test( bname ){ 
+        let re;
+
+        if( !this.regex.test( bname ) ) return null;
+        
+        if( this.l && BoneInfo.re_left.test( bname ) ) return this.name + "_l";
+        if( this.r && BoneInfo.re_right.test( bname ) ) return this.name + "_r";
+
+        return this.name;
+    }
+}
+
+class BoneFinder{
+    static in_armature( arm, get_idx=true ){
+        let bi, b, i, n, save, rtn = {};
+        for( bi of this.bones ){
+            for( i=0; i < arm.bones.length; i++ ){
+                b = arm.bones[ i ];
+                if( (n = bi.test( b.name )) ){
+                    save = ( get_idx )? i : b.name;
+                    
+                    if( !rtn[n] )       rtn[ n ] = ( bi.multi )? [save] : save;
+                    else if( bi.multi ) rtn[ n ].push( save );
+                }
+            }
+        }
+        return rtn;
+    }
+
+    static bones = [
+        new BoneInfo( "thigh", 3, "thigh|upLeg" ),
+        new BoneInfo( "shin", 3, "shin|leg"),
+        new BoneInfo( "foot", 3, "foot" ),
+        new BoneInfo( "forearm", 3, "forearm" ),
+        new BoneInfo( "upperarm", 3, "(upper.*arm|arm)" ),
+        new BoneInfo( "hand", 3, "hand" ),
+        new BoneInfo( "head", 0, "head" ),
+        new BoneInfo( "neck", 0, "neck" ),
+        new BoneInfo( "hip", 0, "hips*" ),
+        new BoneInfo( "spine", 0, "spine.*\d?", true ),
+    ];
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

@@ -1,7 +1,7 @@
 <!DOCTYPE html><script type="module">
 import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
 import Armature from "../../fungi.armature/Armature.js";
-import BoneView from "../../fungi.armature/BoneView.js";
+import BoneView, { LoadShader, BoneViewSys } from "../../fungi.armature/BoneView.js";
 
 //#####################################################
 App
@@ -20,6 +20,9 @@ function on_render( dt, ss ){
 }
 
 function init(){
+	LoadShader();
+	App.ecs.systems.reg( BoneViewSys, 810 );
+	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// STARTING ENTITY ( Node + Draw )
 	let e = App.mesh_entity( "test" );

@@ -1,6 +1,8 @@
 import Chain, { ChainEnds }	from "./Chain.js";
 import Point	from "./Point.js";
 import Vec3		from "../fungi/maths/Vec3.js";
+import BoneMap	from "../fungi.armature/BoneMap.js";
+import App from "../fungi/App.js";
 
 //=========================================================================
 
@@ -31,6 +33,63 @@ class Rig{
 		//-----------------------------------------
 		// If TPose was self created, it does not have its world space Computed.
 		if( !tpose ) this.tpose.update_world();
+
+		return this;
+	}
+
+	auto_rig(){
+		let bMap = BoneMap.of_armature( this.arm, false );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// POINTS
+		let i, pAry = [ "hip", "head", "neck", "foot_l", "foot_r" ];
+		for( i of pAry ){
+			if( bMap[i] ) this.add_point( i, bMap[i] );
+			else		  console.log( `-- AutoRig : ${i} is Missing` );
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ARMS
+		if( bMap.upperarm_l && bMap.forearm_l && bMap.hand_l ){
+			this.add_chain( "arm_l", [ bMap.upperarm_l, bMap.forearm_l ], bMap.hand_l );
+		}else console.log( `-- AutoRig : Left Arm is Missing` );
+
+		if( bMap.upperarm_r && bMap.forearm_r && bMap.hand_r ){
+			this.add_chain( "arm_r", [ bMap.upperarm_r, bMap.forearm_r ], bMap.hand_r );
+		}else console.log( `-- AutoRig : Right Arm is Missing` );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// LEGS
+		if( bMap.thigh_l && bMap.shin_l && bMap.foot_l ){
+			this.add_chain( "leg_l", [ bMap.thigh_l, bMap.shin_l ], bMap.foot_l );
+		}else console.log( `-- AutoRig : Left Leg is Missing` );
+
+		if( bMap.thigh_r && bMap.shin_r && bMap.foot_r ){
+			this.add_chain( "leg_r", [ bMap.thigh_r, bMap.shin_r ], bMap.foot_r );
+		}else console.log( `-- AutoRig : Right Leg is Missing` );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// SPINE
+		if( bMap.spine && bMap.spine.length >= 2 ){
+			this.add_chain_ends( "spine", bMap.spine );
+			this.add_point( "chest", bMap.spine[ bMap.spine.length-1 ] );
+		}else console.log( `-- AutoRig : Spine is Missing` );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Setup ALT-Directions
+		this.get( "leg_l" ).set_directions( Vec3.DOWN, Vec3.FORWARD, this.tpose );
+		this.get( "leg_r" ).set_directions( Vec3.DOWN, Vec3.FORWARD, this.tpose );
+		this.get( "arm_r" ).set_directions( Vec3.RIGHT, Vec3.BACK, this.tpose );
+		this.get( "arm_l" ).set_directions( Vec3.LEFT, Vec3.BACK, this.tpose );
+
+		this.get( "spine" ).set_directions( Vec3.UP, Vec3.FORWARD, this.tpose, true );
+
+		this.get( "hip" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.get( "foot_l" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.get( "foot_r" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
+
+		this.get( "neck" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
+		this.get( "head" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
 
 		return this;
 	}

@@ -27,8 +27,12 @@ window.addEventListener( "keypress", (e)=>{
     if( e.keyCode == 32 ){
         //$spring.set_target( 3 * (( (++$cnt & 1) == 1 )?1:-1) );
 
-        let s = ( (++$cnt & 1) == 1 )? 1 :-1 ;
-        $spring.set_target( [ 2*s, 1*-s, 0 ] );
+        //let s = ( (++$cnt & 1) == 1 )? 1 :-1 ;
+        //$spring.set_target( [ 2*s, 1*-s, 0 ] );
+        
+        
+        $spring.set_target( [ 2.39*Math.random(), 4.44*Math.random(), 3.12*Math.random(), 5.36*Math.random() ], true );
+        console.log( $spring.tar );
     }
 });
 
@@ -38,7 +42,8 @@ function on_render( dt ){
         //$cube.local.pos.x = $spring.val;
         //$cube.updated = true;
 
-        $cube.set_pos( $spring.val );
+        //$cube.set_pos( $spring.val );
+        $cube.set_rot( $spring.val );
     }
 }
 
@@ -49,7 +54,8 @@ async function init(){
     $cube.set_scl( 0.5 ).set_pos( 0, 0.3, 0 );
 
     //$spring = new IESpring_f().set_osc_ps( 1.0 );
-    $spring = new IESpring_Vec3().set_osc_ps( 1.0 );
+    //$spring = new IESpring_Vec3().set_osc_ps( 1.0 );
+    $spring = new IESpring_Quat().set_osc_ps( 1.0 );
 
     //$spring.set_damp( 1 ); // Critical Damp
     $spring.set_damp( 0.4 );
@@ -185,7 +191,7 @@ class IESpring_Quat extends IESpring_Base {
     // #endregion ///////////////////////////////////////////////////////////////////
 
     // #region SETTERS / GETTERS
-    set_target( v ){ this.tar.copy( v ); return this; }
+    set_target( v, do_norm=false ){ this.tar.copy( v ); if( do_norm ){ this.tar.norm(); } return this; }
     // #endregion ///////////////////////////////////////////////////////////////////
 
     update( dt ){
@@ -216,10 +222,29 @@ class IESpring_Quat extends IESpring_Base {
         this.val[2] = ( friction * this.val[2] + dt * this.vel[2] + dt2_osc * this.tar[2] ) * det_inv;
         this.val[3] = ( friction * this.val[3] + dt * this.vel[3] + dt2_osc * this.tar[3] ) * det_inv;
 
+        this.val.norm();
         return true;
     }
 }
 
+/*
+bong applies the same spring setup for all the bones in the chain,
+but lerps between the pose position and the spring position at different levels of the chain.
+So the root bone can lerp 1.0 toward pose, then tail then only lerps 0.3
+
+    "Percentage(0.0 = 0 %; 1.0 = 100 %) of maximum bone bend angle cap." 
+  + "Bend angle cap limits how much each bone can bend relative to the root (in degrees). " 
+  + "1.0 means 100% maximum bend angle cap. 0.0 means 0% maximum bend angle cap.\n\n" 
+  + "Each curve type provides a type of mapping for each bone's percentage down the chain (0.0 at root & 1.0 at maximum chain length) to the bone's pose stiffness:\n\n" 
+  + " - Constant One: 1.0 all the way.\n" 
+  + " - Constant Half: 0.5 all the way.\n" 
+  + " - Constant Zero: 0.0 all the way.\n" 
+  + " - Root One Tail Half: 1.0 at 0% chain length and 0.5 at 100% chain length.\n" 
+  + " - Root One Tail Zero: 1.0 at 0% chain length and 0.0 at 100% chain length.\n" 
+  + " - Root Half Tail One: 0.5 at 0% chain length and 1.0 at 100% chain length.\n" 
+  + " - Root Zero Tail One: 0.0 at 0% chain length and 1.0 at 100% chain length.\n" 
+  + " - Custom: Custom curve."
+*/
 
 /*
 

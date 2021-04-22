@@ -124,7 +124,7 @@ class Node{
 			// Parents Exist, loop till reaching the root
 			let n = this;
 			while( n.parent != null ){
-				n = n.parent;
+				n = n.parent; 
 				tf.add_rev( n.local );
 			}
 		}
@@ -139,6 +139,15 @@ class Node{
 		console.log( "%s [ %s ] %s",spot.repeat( n.level ), n.level, e.name );
 	
 		for( c of n.children ) this.debug_node_tree( c );
+	}
+
+	static debug_node_tree_rev( n ){
+		let c, spot	= "--";
+		let e		= App.ecs.entities.instances[ n._entity_id ];
+
+		console.log( "%s [ %s ] %s",spot.repeat( n.level ), n.level, e.name );
+
+		if( n.parent ) this.debug_node_tree_rev( n.parent );
 	}
 	// #endregion /////////////////////////////////////////////////////////////////////////// 
 }

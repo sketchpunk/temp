@@ -58,10 +58,11 @@ class GltfUtil{
 	}
 
 	static get_skin_entity( e_name, json, bin, mat, m_name=null, arm_name=null ){
-		let e			= this.get_entity( e_name, json, bin, mat, m_name );
+		let e			= this.get_entity( e_name, json, bin, mat, m_name, true );
 		let arm			= App.ecs.add_com( e.id, "Armature" );
 		let node_info	= this.load_bones_into( arm, json, bin, arm_name );
 
+		e.arm = arm;
 		return e;
 	}
 
@@ -169,12 +170,14 @@ class GltfUtil{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Save pose local space transform
-		let i, b, bones = json.poses[ p_idx ].joints;
+		let i, idx, b, bones = json.poses[ p_idx ].joints;
 
 		for( i=0; i < bones.length; i++ ){
-			b = bones[ i ];
-			if( b.rot ) pose.set_local_rot( i, b.rot );
-			if( b.pos ) pose.set_local_pos( i, b.pos );
+			b	= bones[ i ];
+			idx = ( b.idx != undefined )? b.idx : i;
+
+			if( b.rot ) pose.set_local_rot( idx, b.rot );
+			if( b.pos ) pose.set_local_pos( idx, b.pos );
 		}
 
 		if( do_world_calc ) pose.update_world();

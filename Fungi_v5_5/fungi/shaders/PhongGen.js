@@ -23,6 +23,8 @@ let sh = PhongGen.build({
 
 // #region OPTION CONFIGS
 
+//const bit = [1,2,4,8,16,32,64,128,256,512,1024,2048,4096];
+
 class COption{
     constructor( name, code, fn ){
         this.name = name;
@@ -123,18 +125,18 @@ let Options = [
             out_color.rgb *= occlusion * occlusion;\n`;
     }),
 
-    new COption( "gamma", 1028, (c,o)=>{
+    new COption( "gamma", 1024, (c,o)=>{
         o.uniforms.push({name:"gamma", type:"float", value:c.gamma});
         o.placeHolder.uniforms   += "uniform float gamma;\n";
         o.placeHolder.frag_final += `out_color.rgb = pow( out_color.rgb, vec3( gamma ) );\n`;
     }),
 
-    new COption( "skinning", 2056, (c,o)=>{ 
+    new COption( "skinning", 2048, (c,o)=>{ 
         o.placeHolder.vert_def += "#define SKINNING\n";
         o.ubos.push( "Armature" ); 
     }),
 
-    new COption( "matcap_tex", 4112, (c,o)=>{ 
+    new COption( "matcap_tex", 4096, (c,o)=>{ 
         o.uniforms.push({name:"matcap_tex", type:"sampler2D", value:c.matcap_tex});
         o.placeHolder.uniforms   += "uniform sampler2D matcap_tex;\n";
         o.placeHolder.frag_light = 
@@ -199,7 +201,7 @@ uniform Armature{
     mat4x4[90] bones;
 } arm;
 
-vec4 mtx_bone_transform( vec3 pos, vec4 b_idx, vec4 b_wgt ){
+mat4x4 mtx_bone_transform( vec4 b_idx, vec4 b_wgt  ){
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // NORMALIZE BONE WEIGHT VECTOR 
     int a = int( b_idx.x ),
@@ -207,17 +209,14 @@ vec4 mtx_bone_transform( vec3 pos, vec4 b_idx, vec4 b_wgt ){
         c = int( b_idx.z ),
         d = int( b_idx.w );
 
-    b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w); // 1 Div, 4 Mul, instead of 4 Div.
+    b_wgt *= 1.0 / (b_wgt.x + b_wgt.y + b_wgt.z + b_wgt.w);
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // WEIGHT
-    mat4x4 wgt_mtx	=	arm.bones[ a ] * b_wgt.x +  
-                        arm.bones[ b ] * b_wgt.y +
-                        arm.bones[ c ] * b_wgt.z +
-                        arm.bones[ d ] * b_wgt.w;
-
-    vec4 rtn = wgt_mtx * vec4( pos, 1.0 );
-    return rtn;
+    return arm.bones[ a ] * b_wgt.x +  
+           arm.bones[ b ] * b_wgt.y +
+           arm.bones[ c ] * b_wgt.z +
+           arm.bones[ d ] * b_wgt.w;
 }
 #endif
 
@@ -237,14 +236,18 @@ out vec3 frag_pos;
 void main( void ){
     #ifndef SKINNING
     vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+    frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
     #else
-    vec4 wpos	= model.view_matrix * mtx_bone_transform( a_pos, a_skin_idx, a_skin_wgt );
+    mat4x4 wgt_mtx = mtx_bone_transform( a_skin_idx, a_skin_wgt );      // Get Bone Transform
+    mat4x4 vw_mtx  = model.view_matrix * wgt_mtx;                       // Mix Model with Bone
+    vec4 wpos      = vw_mtx * vec4( a_pos, 1.0 );                       // Get World Space Vertex Position
+    frag_norm      = mat3( transpose( inverse( vw_mtx ) ) ) * a_norm;   // Use Mixed Matrix to transform Normals
     #endif
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     frag_uv     = a_uv;
     frag_pos	= wpos.xyz;
-    frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+    //frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     gl_Position = global.proj_view * wpos;
@@ -293,7 +296,6 @@ void main( void ){
     #placeholder frag_norm
 
     #placeholder frag_light
-    out_color.rgb *= get_light_color();
 
     #placeholder frag_metal
     #placeholder frag_env
