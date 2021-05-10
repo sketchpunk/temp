@@ -29,14 +29,14 @@ const VERT_SRC = `#version 300 es
 
 const FRAG_SRC = `#version 300 es
 	precision mediump float;
-	uniform vec3 color;
+	uniform vec4 color;
 	out vec4 out_color;
-	void main(void){ out_color = vec4( color, 1.0 ); }`;
+	void main(void){ out_color = color; }`;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 let sh	= App.shader.new( "BaseColor", VERT_SRC, FRAG_SRC, [
-	{ name:"color", type:"rgb", value:"green" }
+	{ name:"color", type:"rgba", value:"green" }
 	], App.ubo.get_array( "Global","Model" )
 );
 

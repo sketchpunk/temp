@@ -281,6 +281,7 @@ class Ray{
 
 		in_bound( bounds, out=null ){
 			let tMin, tMax, min, max, minAxis = 0;//, maxAxis = 0;
+			let maxAxis = 0;
 
 			//X Axis ---------------------------
 			tMin = (bounds[		this.aabb[0]].x - this.origin.x) * this.vec_len_inv.x;
@@ -292,7 +293,7 @@ class Ray{
 
 			if(max < tMin || min > tMax) return false;	// if it criss crosses, its a miss
 			if(min > tMin){ tMin = min; minAxis = 1; }	// Get the greatest min
-			if(max < tMax){ tMax = max; }				// Get the smallest max
+			if(max < tMax){ tMax = max; maxAxis = 1; }	// Get the smallest max
 
 			//Z Axis ---------------------------
 			min = (bounds[		this.aabb[2]].z - this.origin.z) * this.vec_len_inv.z;
@@ -300,7 +301,7 @@ class Ray{
 
 			if(max < tMin || min > tMax) return false;	// if criss crosses, its a miss
 			if(min > tMin){ tMin = min; minAxis = 2; }	// Get the greatest min
-			if(max < tMax){ tMax = max; }				// Get the smallest max
+			if(max < tMax){ tMax = max; maxAxis = 2; }	// Get the smallest max
 
 			//Finish ------------------------------
 			//var ipos = dir.clone().scale(tMin).add(ray.start); //with the shortist distance from start of ray, calc intersection
@@ -309,6 +310,8 @@ class Ray{
 				out.max		= tMax;
 				out.nAxis	= minAxis; // 0 : X, 1 : Y, 2 : Z
 				out.nDir	= ( this.aabb[ minAxis ] == 1 )? 1 : -1;
+				out.maxAxis = maxAxis;
+				out.maxDir	= ( this.aabb[ maxAxis ] == 1 )? -1 : 1;
 			}
 			return true;
 		}

@@ -1,4 +1,4 @@
-import { Vec3, Quat } from "../fungi/App.js";
+import { Vec3, Quat } from "../../fungi/App.js";
 
 class Chain{
 	// #region MAIN

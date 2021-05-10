@@ -1,5 +1,5 @@
-import App							from "../fungi/App.js";
-import { Vec3, Quat, Transform }	from "../fungi/maths/Maths.js";
+import App							from "../../fungi/App.js";
+import { Vec3, Quat, Transform }	from "../../fungi/maths/Maths.js";
 
 //#################################################################
 class BoneSpring{

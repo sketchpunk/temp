@@ -100,6 +100,13 @@ class Vec3 extends Float32Array{
 			return this;
 		}
 
+		// Which axis has the smallest value
+		get_min_axis(){
+			if( this[0] < this[1] & this[0] < this[2] ) return 0;
+			if( this[1] < this[2] ) return 1;
+			return 2;
+		}
+
 	////////////////////////////////////////////////////////////////////
 	// FROM SETTERS
 	////////////////////////////////////////////////////////////////////

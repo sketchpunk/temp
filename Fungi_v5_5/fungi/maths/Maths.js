@@ -50,6 +50,8 @@ class Maths{
 			return ( v < 0 )? b+v : v;
 		}
 
+		static dec2bin(dec){ return ( dec >>> 0 ).toString( 2 ); }// Remove Negitive Bit, then output binary
+		  
 
 	////////////////////////////////////////////////////////////////////
 	// TRIG

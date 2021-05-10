@@ -1,0 +1,200 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }		from "../../fungi/App.js";
+import FacedCube            from "../../fungi/geo/FacedCube.js";
+
+//#####################################################
+App
+	.init( false )
+	.set_camera( 0, 30, 5, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+
+//#####################################################
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER", null, { cullFace:false, blend:true } );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let mesh            = App.mesh.new( "Quadless" );
+    mesh.vao            = App.vao.blank();
+    mesh.element_cnt    = 6;
+    var e = App.mesh_entity( "Quadless", mesh, mat );
+    e.draw.priority     = 900;
+    
+    var e = FacedCube( "fcube" );
+    App.ecs.get_com( e, "Node").set_pos( 0, 0.5, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//init_ui();
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+    ], App.ubo.get_array( "Global", "Model" ) )
+        .set_blend( true ).set_cullface( false );
+}
+
+// http://asliceofrendering.com/scene%20helper/2020/01/05/InfiniteGrid/
+
+const VERT_SRC = `#version 300 es
+
+const vec3 QUAD[ 6 ] = vec3[] (
+    vec3( 1,  1, 0 ), vec3(-1, -1, 0 ), vec3(-1,  1, 0 ),
+    vec3(-1, -1, 0 ), vec3( 1,  1, 0 ), vec3( 1, -1, 0 )
+);
+
+const vec2 QUAD_UV[ 6 ] = vec2[] (
+    vec2(1,0), vec2(0,1), vec2(0,0),
+    vec2(0,1), vec2(1,0), vec2(1,1)
+);
+
+//-------------------------
+
+uniform Global{ 
+	mediump mat4  proj_view; 
+	mediump mat4  camera_matrix;
+	mediump vec3  camera_pos;
+	mediump float delta_time;
+	mediump vec2  screen_size;
+	mediump float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec2 frag_uv;
+
+out vec3 frag_near;
+out vec3 frag_far;
+
+//-------------------------
+
+//vec3 UnprojectPoint(float x, float y, float z, mat4 view, mat4 projection) {
+    //mat4 viewInv = inverse(view);
+    //mat4 projInv = inverse(projection);
+    //vec4 unprojectedPoint =  viewInv * projInv * vec4(x, y, z, 1.0);
+    //return unprojectedPoint.xyz / unprojectedPoint.w;
+//}
+
+
+void main( void ){
+    vec3 vpos   = QUAD[ gl_VertexID ];
+    mat4 inv    = inverse( global.proj_view );
+
+    vec4 near   = inv * vec4( vpos.xy, 0.0, 1.0 );
+    frag_near   = near.xyz / near.w;
+
+    vec4 far    = inv * vec4( vpos.xy, 1.0, 1.0 );
+    frag_far    = far.xyz / far.w;
+
+    gl_Position = vec4( vpos, 1.0 ); //using directly the clipped space coord
+
+    //vec4 pos    = inverse( global.proj_view ) * vec4( QUAD[ gl_VertexID ], 1.0 );
+    //vec3 lpos   = pos.xyz / pos.w;
+
+    //vec4 world_pos  = model.view_matrix * vec4( QUAD[ gl_VertexID ], 1.0 );
+    //frag_uv		    = QUAD_UV[ gl_VertexID ];
+	//frag_wpos	    = world_pos.xyz;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//gl_Position	    = global.proj_view * world_pos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+uniform Global{ 
+	mediump mat4  proj_view; 
+	mediump mat4  camera_matrix;
+	mediump vec3  camera_pos;
+	mediump float delta_time;
+	mediump vec2  screen_size;
+	mediump float clock;
+} global;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec2 frag_uv;
+
+in vec3 frag_near;
+in vec3 frag_far;
+
+//-------------------------
+
+void main(void){
+    float t       = -frag_near.y / ( frag_far.y - frag_near.y );
+    vec3 pos      = frag_near * (1.0-t) + frag_far * t;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec4 clip_pos = global.proj_view * vec4( pos, 1.0 );
+    float depth   = clip_pos.z / clip_pos.w;
+    depth         = ( depth + 1.0) / 2.0; // remap 0,1 to -1,1
+    gl_FragDepth  = depth; //gl_DepthRange.diff * depth + gl_DepthRange.near;
+
+    if( t <= 0.0 )  discard; // Show floor, not the ceiling
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    float spacing   = 5.0;
+    vec2 coord      = pos.xz * spacing;
+    vec2 coord_fw   = fwidth( coord );
+    vec2 grid       = abs( fract(coord - 0.5) - 0.5 ) / coord_fw;
+    float line      = min( grid.x, grid.y );
+    //float minz      = min( coord_fw.y, 1.0 );
+    //float minx      = min( coord_fw.x, 1.0 );
+    vec2 minn        = min( coord_fw, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec4 color = vec4( vec3( 0.28 ), 1.0 - min( line, 1.0 ) );
+    
+    if( pos.x > -0.1 * minn.x && pos.x < 0.1 * minn.x ) color.g = 0.6; // z axis
+    if( pos.z > -0.1 * minn.y && pos.z < 0.1 * minn.y ) color.r = 0.9; // x axis
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // LinearDepth Fade distance
+    /*
+    float near = 0.01;
+    float far  = 1000.0;
+    float linearDepth = (2.0*near*far) / (far+near-depth*(far-near)); // get linear value between near+far
+    linearDepth /= far; // normalize
+
+    color.a *= max( 0.0, ( 0.5 - linearDepth ) );
+    color.a *= smoothstep( 0.02, 0.0, abs( linearDepth )  );
+    */
+    
+    /*
+    FOG CALC
+    float near = 0.01;
+    float far  = 8.0;
+    float dist = length( pos );
+    color.a *= clamp((far - dist) / (far - near), 0.0, 1.0);
+    */
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    out_color = color;
+}`;
+
+</script>
+<html><head><style>
+	html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+	.lnk{ position:absolute; top:5px; left:5px; color:yellow; text-decoration:none; font-family:monospace; }
+</style></head><body>
+	<canvas id="pg_canvas"></canvas>
+</body></html>

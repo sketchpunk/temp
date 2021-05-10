@@ -1,62 +1,56 @@
 <!DOCTYPE html><script type="module">
 	import App, { Vec3, Quat, Mat4, Transform, Node } from "../fungi/App.js";
-
-	import Rig				from "../fungi.ik/Rig.js";
-	import CharRig			from "../fungi.test/TinaRig.js";
-	import ChainSpring, {ChainSpringSys} from "../fungi.ik/ChainSpring.js";
+	import CharRig from "../fungi.test/TinaRig.js";
 
 	//#####################################################
 	App
 		.init( true )
 		.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+		.load_pkg( { name:"fungi.ik", spring:true } )
 		//.use_events()
 		.use_debug()
-		.set_camera( 0, 20, 3, 0, 0.9, 0 )
+		.set_camera( 0, 20, 3, 0, 1.1, 0 )
 		.task( init )
 		.then();
 	
 	//#####################################################
 	let gAnim, gIKPose, gRig;
+	let gMoving = true;
+
+	window.addEventListener( "keypress", (e)=>{ 
+		if( e.keyCode == 32 ) gMoving = !gMoving; 
+	});
+
 
 	function on_render( dt, ss ){
-		gRig.node.set_pos(  Math.abs( Math.sin(ss) ) * 0.5, 0.0, 0 );
+		//gRig.node.set_pos(  Math.abs( Math.sin(ss) ) * 0.5, 0.0, 0 );
+		if( gMoving ) gRig.node.set_pos(  0.0, Math.abs( Math.sin(ss) ) * 0.5, 0 );
 	}
 	
-	async function init(){
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Setup
-		App.ecs.components.reg( Rig ).reg( ChainSpring );
-		App.ecs.systems.reg( ChainSpringSys, 700 );
+	//#####################################################
 
+	async function init(){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Load Character
 		gRig = new CharRig();
-		await gRig.load( "../files/models/tina/", false, true );
-		gRig.node.set_pos( [1.0,0.5,0] );
+		await gRig.load( "../files/models/tina/", false, false );
+		//gRig.node.set_pos( [1.0,0.5,0] );
 
-		let spr = App.ecs.add_com( gRig.entity.id, "ChainSpring" );
-
-		spr.add( "hair_l", [ "hair.L.002", "hair.L.004", "hair.L.003", "hair.L.005" ], 7.0, 0.8 );
-		spr.add( "hair_r", [ "hair.R.002", "hair.R.004", "hair.R.003", "hair.R.005" ], 7.0, 0.8 );
-		//spr.set( 0, 5.0, 0.5 );
-
-		//App.ecs.run();
-
-		/*
-		console.log( gRig.node.world.pos );
-		App.Debug.pnt( gRig.node.world.pos, "cyan", 0.05 );
-		let t = new Transform();
-		for( let n of gRig.arm.nodes ){
-			t.from_add( gRig.node.world, n.world );
-			App.Debug.pnt( t.pos, "yellow", 0.05 );
-		}
-		*/
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		// Load Animation
+		// Apply Spring
+		let spr = App.ecs.add_com( gRig.entity.id, "BoneSpring" );
+
+		spr.add_rot( "hair_l", [ "hair.L.002", "hair.L.004", "hair.L.003", "hair.L.005" ], 1.0, 0.5 );
+		spr.add_rot( "hair_r", [ "hair.R.002", "hair.R.004", "hair.R.003", "hair.R.005" ], 1.0, 0.5 );
+		//spr.add_rot( "breast_l", [ "breast.L" ], 2.2, 1.0 );
+		//spr.add_rot( "breast_r", [ "breast.R" ], 2.2, 1.0 );
+		spr.add_pos( "breast_l", [ "breast.L" ], 2.2, 0.25 );
+		spr.add_pos( "breast_r", [ "breast.R" ], 2.2, 0.25 );
+
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		//on_render( 0.1 );
+		//on_render( 0.1, 0.1 );
 		App.render_by( 1, on_render );
 		return true;
 	}

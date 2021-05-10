@@ -1,0 +1,132 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat } from "../../fungi/App.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+import { VRot90 }			from "../../fungi/maths/Vec3.js"
+
+import TileDictionary       from "./TileDictionary.js"
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "LowPoly.js" )
+	.set_camera( 0, 20, 5, 0, 1.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+	//console.log( Maths.dec2bin( v ), Maths.dec2bin( right_4bit_rot( 3, v ) ) );
+	//console.log( Maths.dec2bin( v ), Maths.dec2bin( left_4bit_rot( 3, v ) ) );
+
+	
+	let pAry = [
+        fetch( "./wfc_mm_tiles.gltf" ).then( r=>r.json() ),
+        fetch( "./wfc_mm_tiles.bin" ).then( r=>r.arrayBuffer() ),
+	];
+
+	let [ json, bin ] = await Promise.all( pAry );
+	
+	/*
+	let mat = App.shader.new_material( "LowPoly", null, {cullFace:false} );
+	let ii=0;
+	for( let i=15; i < 20; i++ ){
+		//static get_entity( e_name, json, bin, mat, m_name=null, load_skin=false )
+		let e = GltfUtil.get_entity( "x", json, bin, mat, json.meshes[ i ].name );
+		console.log( e.node.local.pos );
+		e.node.set_pos( ii++*2.4, 0, 0 );
+	}
+	*/
+
+	/*
+	//console.log( json.meshes );
+	let str = "";
+	for( let i of json.meshes ) str+= i.name + "\n";
+	console.log( str );
+	*/
+
+	let tile_dic = new TileDictionary();
+	tile_dic.load_json( TILES, json, bin );
+
+    for( let i=0; i < 4; i++ ){
+        let e = tile_dic.new_tile_entity( i, "test"+1, [i*3,0,0] );
+        tile_dic.debug_entity( e );
+    }
+
+	return true;
+}
+
+//#####################################################
+
+
+
+
+const TILES = [
+	{ "name":"PillarTowerCorner", "bits":108, "rot":7, "connectors":[] },
+];
+
+
+
+/*
+1-1
+2-2
+3-4
+4-8
+5-16
+6-32
+7-64
+8-128
+
+0 = None
+1 = 90
+2 = 180
+4 = 270
+7 = All
+*/
+
+/*
+WallTop
+CornerTop
+Wall
+Corner
+Roof
+InnerCorner
+InnerCornerTop
+RoofWall
+RoofCorner
+RoofInnerCorner
+TowerCorner
+TowerWall
+WingInnerCorner
+WingTerrasse
+DoubleCornerTop
+DoubleCorner
+TowerDoubleCorner
+WingDoubleCorner
+RoofDoubleCorner
+CornerBottom
+WallBottom
+InnerCornerBottom
+DoubleCornerBottom
+CeilInnerCorner
+CeilCorner
+CeilWall
+PillarWall
+FullAir_Pillar
+FullAir_PillarBottom
+WallTop_Pillar
+CornerTop_Pillar
+InnerCornerTop_Pillar
+DoubleCornerTop_Pillar
+Roof_Pillar
+PillarCorner
+PillarTowerCorner
+CornerTop_Slopy
+WallTop_Slopy
+*/
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

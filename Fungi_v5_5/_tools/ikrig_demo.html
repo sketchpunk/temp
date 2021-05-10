@@ -12,7 +12,8 @@
 		.init( true )
 		.use_lighting( true )
 		.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
-		.load_pkg( { name:"fungi.ik", spring:true } )
+        .load_pkg( { name:"fungi.ik", spring:true } )
+        .load_pkg( { name:"fungi.protoform2" } )
 		.use_events()
 		.use_debug()
 		.set_camera( 0, 20, 3, 0, 0.9, 0 )
@@ -20,7 +21,7 @@
 		.then();
 	
 	//#####################################################
-	let gAnim, gIKPose, gRig;
+	let gAnim, gIKPose, gRig, gProto;
 
 	function on_render( dt, ss ){
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -30,7 +31,10 @@
 	
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
-		gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
+        gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
+        
+        gIKPose.apply_rig( gProto.rig );
+        gProto.rig.apply_pose();
 	}
 	
 	async function init(){
@@ -42,7 +46,9 @@
 		// Load Character
 		gRig = new CharRig();
 		await gRig.load( "../files/models/tina/", true, false, true );
-		gRig.node.set_pos( [1.0,0,0] );
+        gRig.node.set_pos( [1.0,0,0] );
+        
+        proto_mut();
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Load Animation
@@ -57,7 +63,29 @@
 		App.render_by( 1, on_render );
 		return true;
 	}
-	
+    
+
+    import LimbSolver		from "../fungi.ik/solvers/LimbSolver.js";
+    import ArcSolver		from "../fungi.ik/solvers/ArcSolver.js";
+    import ArcSinSolver		from "../fungi.ik/solvers/ArcSinSolver.js";
+    import ZSolver			from "../fungi.ik/solvers/ZSolver.js";
+    import ProtoMute		from "../fungi.protoform2/rigs/ProtoMute.js";
+    function proto_mut(){
+        gProto = new ProtoMute( "Mute", true )
+            .sphere_chain( "arm.l" )
+            .capsule_chain( "arm.r" )
+            .cap_chain( "leg.l" )
+            .capsule_chain2( "leg.r" )
+            .build();
+        
+        gProto.rig.set_solver( "arm_l", ArcSolver );
+        gProto.rig.set_solver( "leg_l", ArcSinSolver );
+        gProto.rig.set_solver( "leg_r", ZSolver );
+        gProto.rig.set_chain_max( "leg_r", 0.8 );
+
+        gProto.node.set_pos( -1.2, 0, 0 );
+    }
+
 	//#####################################################
 	</script>
 	<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>

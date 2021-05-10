@@ -17,3 +17,16 @@ function simple_rng(){
 		}
 	};
 }
+
+
+class RandomLCG{
+	init = 0;
+	seed = 0;
+	constructor( seed ){ this.reseed( seed ); }
+	reseed( seed ){ this.init = this.seed = seed * 48271 % 2147483647; }
+	reset(){ this.seed = this.init; }
+	next(){
+		this.seed = this.seed * 48271 % 2147483647;
+		return this.seed / 2147483648;
+	}
+}

@@ -1,0 +1,540 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths }      from "../../fungi/App.js";
+import VolumeCube   from "../../fungi.sdf/VolumeCube.js";
+import SDFShaderGen from "../../fungi.sdf/SDFShaderGen.js";
+
+import Target			from "../../fungi.ik/Target.js";
+import LimbSolver		from "../../fungi.ik/solvers/LimbSolver.js";
+import ZSolver          from "../../fungi.ik/solvers/ZSolver.js";
+import SpringSolver     from "../../fungi.ik/solvers/SpringSolver.js";
+import ArcSinSolver		from "../../fungi.ik/solvers/ArcSinSolver.js";
+import PistonSolver		from "../../fungi.ik/solvers/PistonSolver.js";
+import TrapezoidSolver  from "../../fungi.ik/solvers/TrapezoidSolver.js";
+import ArcSolver        from "../../fungi.ik/solvers/ArcSolver.js";
+
+//#####################################################
+App
+    .init( true )
+    //.load_shaders( "LowPoly.js" )
+    .use_debug()
+	.set_camera( 90, 10, 8, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let $chain, $vol, $motion;
+let gCycle;
+let gTarget;
+
+let gLegs = new Array();
+
+function on_render( dt, ss ){
+    gCycle.update( dt );
+
+    for( let i of gLegs ){
+        i.apply_ik( gTarget );//.debug();
+    }
+}
+
+function leg_motion(){
+    let q   = new Quat(),
+        fwd = new Vec3(),
+        up  = new Vec3(),
+        scl = 9,
+        t   = 1;
+
+    let scl_min = 0.75,
+        scl_max = 1.5,
+        scl_off = 1.95,
+        rot_min = 160,
+        rot_max = 45;
+    
+    return (c)=>{
+        t   = c.as_sin01();
+        scl = Maths.lerp( scl_min, scl_max, c.as_sin01( scl_off ) );
+
+        q.from_axis_angle( Vec3.LEFT, Maths.to_rad( rot_min*(1-t) + rot_max*t ) );
+        fwd.from_quat( q, Vec3.FORWARD );
+        up.from_quat( q, Vec3.DOWN );
+
+        gTarget.from_pos_dir( [0,1.5,0], fwd, up, scl );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		let p = gTarget.start_pos,
+			a = gTarget.axis;
+        
+        App.Debug.reset()
+            .ln( p, gTarget.end_pos, "green" )
+			.ln( p, fwd.from_scale( a.x , 0.5 ).add( p ), "red" )
+			.ln( p, fwd.from_scale( a.y , 0.5 ).add( p ), "blue" )
+			.pnt( p, "green", 0.05, 1 )
+			.pnt( gTarget.end_pos, "red", 0.05, 1 );
+    };
+}
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+    App.Debug.set_depth_test( true ).set_priority( 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    SDFShaderGen.build({ 
+        name        : "SDFBones",
+        blend       : true,
+        uniforms    : [
+            { name:"base_color",    type:"rgba",    value:"#ff7f7fff" },
+            { name:"bones",         type:"mat2x4",  value:null },
+            { name:"bone_cnt",      type:"int",     value:0 }
+        ],
+        sdf_options : {
+            map_func : MAP_FUNC,
+            header   : SDF_HEADER,
+            lighting : "phong",
+            shapes   : [ "spline_cone" ],
+        },
+    });
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gTarget          = new Target(); //gTarget.from_pos( [0,0,0], [0,0.5,0.0], [0,0,1] );
+    gCycle           = new Cycle( 3 );
+    gCycle.on_update = leg_motion();
+
+    gLegs.push(
+        new DemoLeg( [0.75,0.75], [0,1.5,-1.0], LimbSolver ).set_color( "#78a4d8ff" ),
+        new DemoLeg( [0.40,0.70,0.40], [0,1.5,-2.0], ZSolver ).set_color( "#f6b01cff" ),//.set_len( 1.0 ),
+        new DemoLeg( [ 0.26, 0.26, 0.26, 0.26, 0.26, 0.26 ], [0,1.5,-2.7], SpringSolver ).set_color( "#bac932ff" ),
+        new DemoLeg( [ 0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19 ], [0,1.5,-3.7], ArcSinSolver ).set_color( "#ff70c0ff" ).invert_pole(),
+        new DemoLeg( [ 0.5, 0.5, 0.5 ], [0,1.5,-4.7], PistonSolver ).set_color( "##38c3e0ff" ).invert_pole(),
+
+        new DemoLeg( [ 0.25, 0.25, 0.25, 0.25, 0.25, 0.25 ], [0,1.5, 1.4], ArcSolver ).set_color( "#ff0000ff" ),
+        new DemoLeg( [ 0.40,0.75,0.40], [0,1.5, 2.0], TrapezoidSolver ).set_color( "#eed203ff" ).invert_pole(),
+    );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.render_by( 1, on_render );
+    //on_render( 0.1, 0.01 );
+	return true;
+}
+
+//#####################################################
+
+class Cycle{
+	constructor( sec=1 ){
+		this.value			= 0;	// Current Cycle Value
+		this.cycle_inc		= 0;	// How much to move per millisecond
+		this.speed_scale    = 1.0;	// Scale the rate of the cycle
+        this.set_by_seconds( sec ); 
+        this.on_update      = null;
+	}
+
+	set_by_seconds( s ){ this.cycle_inc = Maths.PI_2 / ( s * 1000 ); return this;}
+
+	backwards(){ if( this.speed_scale > 0 ) this.speed_scale *= -1; return this;}
+	forwards(){  if( this.speed_scale < 0 ) this.speed_scale *= -1; return this;}
+
+	get( offset=0 ){ return (this.value + offset) % Maths.PI_2; }
+    as_sin( offset=0 ){ return Math.sin( this.value + offset ); }
+    as_sin01( offset=0 ){ return Math.sin( this.value + offset ) * 0.5 + 0.5; }
+    as_sin_abs( offset=0 ){ return Math.abs( Math.sin( this.value + offset ) ); }
+    as_cycle01( offset=0 ){ return (this.value + offset) * Maths.PI_2_INV; }
+    as_cycle010( offset=0 ){ 
+        var n = (this.value + offset) * Maths.PI_2_INV * 2;
+        return ( n > 1 )? 1 - (n - 1) : n;
+    }
+
+	update( dt ){
+        this.value = ( this.value + ( dt * 1000 * this.speed_scale) * this.cycle_inc ) % Maths.PI_2;
+        if( this.on_update ) this.on_update( this );
+		return this;
+	}
+}
+
+//#####################################################
+
+import Vec3			from "../../fungi/maths/Vec3.js";
+import Quat			from "../../fungi/maths/Quat.js";
+import Transform 	from "../../fungi/maths/Transform.js";
+
+class Bone{
+    // #region MAIN
+    local = new Transform(); // Local 
+    world = new Transform();
+    len   = 0.2;
+    idx   = null;
+    p_idx = null;
+
+    constructor( l ){ if( l ) this.len = l; }
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    // #region POSITION
+	set_pos( x, y, z ){
+		if( arguments.length == 1 ) this.local.pos.copy( x );
+		else						this.local.pos.set( x, y, z );
+		return this;
+    }
+    // #endregion /////////////////////////////////////////////////////////////////////
+    
+    // #region ROTATION
+    set_rot( q ){ this.local.rot.copy( q ); return this; }
+    set_rot_axis( axis, ang ){ this.local.rot.from_axis_angle( axis, ang ); this.updated = true; return this; }
+	set_rot_look( dir, up=null ){ this.local.rot.from_look( dir, up || Vec3.UP ); this.updated = true; return this; }
+	set_rot( q ){ this.local.rot.copy( q ); this.updated = true; return this; }
+    rot_by( deg, axis="y" ){ this.local.rot.rot_deg( deg, axis ); this.updated = true; return this; }
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    clone(){
+        let b = new Bone();
+        b.local.copy( this.local );
+        b.world.copy( this.world );
+        b.len   = this.len;
+        b.idx   = this.idx;
+        b.p_idx = this.p_idx;
+        return b;
+    }
+}
+
+class BoneChain{
+    // #region MAIN
+    bones        = new Array();
+    buffer       = null;
+    count        = 0;
+    len	         = 0;
+    effector_dir = [0,1,0]; // Need for Solver, Which direction does the bone point toward
+    
+    constructor(){}
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    // #region METHODS
+    add_batch( ary ){
+        for( let i of ary ) this.add( i );
+        return this;
+    }
+
+    first(){ return this.bones[0].idx; }
+
+    add( len=0.2, pos=null ){
+        let b = new Bone( len );
+
+        b.idx = this.bones.length;
+        if( b.idx > 0 ) b.p_idx = b.idx - 1;
+
+        // If no position, get previous bone's length
+        // and use that to create a local offset positon
+        // for the child bone.
+        if( pos == null && this.bones.length != 0 ){
+            let p = this.bones[ this.bones.length-1 ];
+            b.set_pos( 0, p.len, 0 );
+        }
+
+        this.bones.push( b );
+        this.count = this.bones.length;
+        this.len   += len;
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////////////////////////
+
+    // #region UPDATES
+    update_world( offset=null ){
+        let b;
+        for( let i=0; i < this.bones.length; i++ ){
+            b = this.bones[ i ];
+            if( b.p_idx != null )	b.world.from_add( this.bones[ b.p_idx ].world, b.local ); // Parent.World + Child.Local
+            else if( offset )		b.world.from_add( offset, b.local );
+            else                    b.world.copy( b.local );
+        }
+        return this;
+    }
+
+    update_buffer(){
+        let i, ii, b, buf = this.buffer;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Create or recreate buffer if not the currect size
+        if( !buf || buf.length != this.count * 8 ){
+            console.log('new buffer');
+            this.buffer = buf = new Float32Array( this.count * 8 );
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Save Data to Buffer 
+        // stride[8] = rot[4] + pos[3] + len[1]
+        for( i=0; i < this.count; i++ ){
+            b   = this.bones[ i ];
+            ii  = i * 8;
+
+            b.world.rot.to_buf( buf, ii );      // Rotation
+            b.world.pos.to_buf( buf, ii+4 );    // Position
+            buf[ ii + 7 ] = b.len;              // Bone Length
+        }
+        return this;
+    }
+    // #endregion /////////////////////////////////////////////////////////////////////
+}
+
+class PoseChain{
+	// #region MAIN
+	constructor( chain, name="UntitledPose" ){
+		this.name			= name;
+		this.bones			= new Array( chain.bones.length );	// Recreation of Bone Hierarchy
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create Bone Transform Hierarchy to do transformations
+		// without changing the actual armature.
+		for( let i=0; i < chain.bones.length; i++ ){
+			this.bones[ i ] = chain.bones[ i ].clone();
+		}
+	}
+	// #endregion /////////////////////////////////////////////////////////
+
+    // #region METHODS
+	// Copies modified Local Transforms of the Pose to the Bone Entity Node Component.
+	apply( chain ){
+        let b;
+        for( b of this.bones ){
+            chain.bones[ b.idx ].local.copy( b.local );
+        }
+
+        /*
+		let i,
+			cnt = 0,
+			pb, // Pose Bone
+			n;	// Bone Entity Node
+
+		for( i=0; i < this.bones.length; i++ ){
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Check if bone has been modified in the pose
+			pb = this.bones[ i ];
+			if( pb.chg_state == 0 ) continue;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Copy changes to Bone Entity
+			n = this.arm.nodes[ i ];
+
+			if( pb.chg_state & Pose.ROT ) n.local.rot.copy( pb.local.rot );
+			if( pb.chg_state & Pose.POS ) n.local.pos.copy( pb.local.pos );
+			if( pb.chg_state & Pose.SCL ) n.local.scl.copy( pb.local.scl );
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Update States
+			n.updated		= true;
+			pb.chg_state	= 0;
+			cnt++;
+		}
+
+        if( cnt != 0 ) this.arm.updated = true;
+        */
+		return this;
+	}
+	// #endregion /////////////////////////////////////////////////////////
+
+	// #region SETTING / GETTING
+	set_local_pos( idx, v ){
+		let b = this.bones[ idx ];
+		b.local.pos.copy( v );
+		return this;
+	}
+
+	set_local_rot( idx, q ){
+		let b = this.bones[ idx ];
+		b.local.rot.copy( q );
+		return this;
+	}
+
+	get_local_rot( idx, q=null ){
+		let b = this.bones[ idx ];
+		q = q || new Quat();
+		q.copy( b.local.rot );
+		return q;
+	}
+	// #endregion /////////////////////////////////////////////////////////
+
+	// #region COMPUTE
+	get_parent_world( b_idx, pt=null, ct=null, t_offset=null ){
+		let cbone = this.bones[ b_idx ];
+		pt = pt || new Transform();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Child is a Root Bone, just reset since there is no parent.
+		if( cbone.p_idx == null ){ 
+			pt.clear();
+		}else{
+			// Parents Exist, loop till reaching the root
+			let b = this.bones[ cbone.p_idx ];
+			pt.copy( b.local );
+
+			while( b.p_idx != null ){
+				b = this.bones[ b.p_idx ];
+				pt.add_rev( b.local );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if( t_offset ) pt.add_rev( t_offset );		// Add Additional Starting Offset
+		if( ct ) ct.from_add( pt, cbone.local );	// Requesting Child WS Info Too
+
+		return pt;
+	}
+
+	get_parent_rot( b_idx, q=null ){
+		let cbone = this.bones[ b_idx ];
+		q = q || new Quat();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Child is a Root Bone, just reset since there is no parent.
+		if( cbone.p_idx == null ) q.reset();
+		else{
+			// Parents Exist, loop till reaching the root
+			let b = this.bones[ cbone.p_idx ];
+			q.copy( b.local.rot );
+
+			while( b.p_idx != null ){
+				b = this.bones[ b.p_idx ];
+				q.pmul( b.local.rot );
+			}
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//q.pmul( this.root_offset.rot ); // Add Starting Offset
+		return q;
+	}
+
+	// Updates world space of all the bones
+	update_world( t_offset=null ){
+		for( let b of this.bones ){
+            if( b.p_idx != null )	b.world.from_add( this.bones[ b.p_idx ].world, b.local ); // Parent.World + Child.Local
+            else if( t_offset )		b.world.from_add( t_offset, b.local );
+            else                    b.world.copy( b.local );
+		}
+		return this;
+	}
+	// #endregion /////////////////////////////////////////////////////////
+}
+
+//#####################################################
+
+class DemoLeg{
+    constructor( bAry, pos, solver ){
+        this.offset = new Transform();
+        this.offset.pos.copy( pos );
+        this.inv_pole = false;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Create Bones
+        this.chain = new BoneChain();
+        for( let i=0; i < bAry.length; i++ ) this.chain.add( bAry[i] );
+        this.chain
+            .update_world()     // For TPose to copy its World Transform
+            .update_buffer();   // Create Buffer now to bind to material
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.solver = solver;
+        this.target = new Target();
+        this.tpose  = new PoseChain( this.chain );
+        this.pose   = new PoseChain( this.chain );
+        this.pose.update_world( this.offset );
+
+        //this.debug();
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.mat    = App.shader.new_material( "SDFBones" );
+        this.mat.set( "bones", this.chain.buffer );      // Pass Reference of buffer to material
+        this.mat.set( "bone_cnt", bAry.length );
+
+        this.entity = VolumeCube( "vb", this.mat, true );
+        this.entity.node.set_scl( 1.0, 2.0, 1.9 ); // Resize Render Area
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.pt = new Transform();
+        this.v  = new Vec3();
+        this.vv = new Vec3();
+    }
+
+    set_color( c ){ this.mat.set( "base_color", c ); return this; }
+    set_len( v ){ this.chain.len = v; return this; }
+    invert_pole(){ this.inv_pole = true; return this; }
+
+    apply_ik( tar, do_upt_world=true ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Get the WS Position of the Root Bone
+        this.pose.get_parent_world( this.chain.bones[0].idx, this.pt, null, this.offset );
+
+        // Setup IK Target for this leg
+        //this.target.from_pos_dir( this.pt.pos, tar.axis.z, tar.axis.y, tar.len * this.chain.len );
+        this.v.from_scale( tar.axis.z, tar.len ).add( this.pt.pos );
+
+        if( !this.inv_pole ) this.target.from_pos( this.pt.pos, this.v, tar.axis.y );
+        else                 this.target.from_pos( this.pt.pos, this.v, this.vv.from_invert(tar.axis.y) );
+
+        // Use solver and save results to pose 
+        this.solver.apply_chain( this.target, this.chain, this.tpose, this.pose, this.pt );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.pose.apply( this.chain );          // Apply Pose to Chain Transforms
+        this.chain.update_world( this.offset ); // Update World Space for Buffer Updating
+        this.chain.update_buffer();             // Update float Buffer to push to shader.
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Move Entity to match first bone, to keep the rendering area
+        this.v.from_quat( this.chain.bones[0].world.rot, [0,-0.1,0] ); // a lil offset to not clip top of chain.
+        this.entity.node.set_pos( this.v.add( this.chain.bones[0].world.pos ) ); 
+        this.entity.node.set_rot( this.chain.bones[0].world.rot );
+        //VolumeCube.debug_tran( this.entity.node.local );
+        return this;
+    }
+
+    debug(){
+        let v = new Vec3();
+        for( let i of this.chain.bones ){
+            v.from_quat( i.world.rot, Vec3.UP ).scale( i.len ).add( i.world.pos );
+            App.Debug
+                .pnt( i.world.pos, "green", 0.05 )
+                .ln( i.world.pos, v, "green" );
+        }
+
+        return this;
+    }
+}
+
+//#####################################################
+
+const MAP_FUNC = `float map_func( vec3 p ){
+    const float R0 = 0.04,
+                R1 = 0.01,
+                R2 = 0.04;
+
+    Bone b      = get_bone( 0 );
+    vec3 bpos   = quat_mul_vec3( quat_conjugate(b.rot), p - b.pos );
+    float d     = sdf_roundcone3( bpos, R0, R1, R2, b.len );
+
+    float dd;
+    for( int i=1; i < bone_cnt; i++ ){
+        b    = get_bone( i );
+        bpos = quat_mul_vec3( quat_conjugate(b.rot), p - b.pos );
+        dd   = sdf_roundcone3( bpos, R0, R1, R2, b.len );
+        //d    = min( d, dd ); 
+        d    = sdf_smin( d, dd, 0.03 ); 
+    }
+
+    return d;
+}`;
+
+const SDF_HEADER = `
+#define BONE_MAX 12
+uniform mat2x4 bones[ BONE_MAX ];
+uniform int    bone_cnt; 
+
+struct Bone{ vec4 rot; vec3 pos; float len; };
+
+Bone get_bone( int i ){
+    return Bone(
+        bones[ i ][ 0 ],
+        bones[ i ][ 1 ].xyz,
+        bones[ i ][ 1 ].w
+    );
+}`;
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

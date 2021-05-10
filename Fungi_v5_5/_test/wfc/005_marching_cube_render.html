@@ -1,0 +1,570 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat } from "../../fungi/App.js";
+import Ray			 from "../../fungi.ray/Ray.js";
+import Quad          from "../../fungi/geo/Quad.js";
+
+import MarchingCubes     from "./lib/MarchingCubes.js";
+import MarchingCubesGrid from "./lib/MarchingCubesGrid.js";
+import BMesh             from "./lib/BMesh.js";
+import DynamicMesh       from "./lib/DynamicMesh.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+    .load_shaders( "BaseColor.js", "KennyUnlit.js" )
+	.set_camera( 0, 20, 20, 3, 3, 3 )
+	.task( init )
+	.then();
+
+//#####################################################
+let mcg, ray = new Ray();
+let selector;
+
+/*
+function onKeypress( e ){
+    switch( e.keyCode ){
+        case 49: selector.view_up(); break; // 1
+        case 50: selector.view_side(); break; //2
+        case 51: selector.view_front(); break; //2
+        case 52: selector.hide(); break; //2
+        case 53: selector.show(); break; //2
+    }
+}
+*/
+
+async function init(){
+    //App.gl.canvas.addEventListener( "mouseup", onRightClick );
+    App.gl.canvas.addEventListener( "mouseup", onClick );
+    App.gl.canvas.addEventListener( "mousemove", onMouseMove );
+    //window.addEventListener( "keydown", onKeypress );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    mcg = new MarchingCubesGrid();
+    //mcg.enable_cell( 1, 0, 1 );
+    //mcg.enable_cell( 1, 1, 1 );
+    mcg.enable_cell( 2, 2, 2 );
+    mcg.debug();
+
+    MCG_BMesh( mcg );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let mat  = App.shader.new_material( "BaseColor", { color:"#00ff0055"}, { blend:true, cullFace:false } );
+    let e    = Quad( "Selector", mat );
+    selector = new QuadSelector( e );
+    
+    return true;
+}
+
+function render_scene(){
+    App.Debug.reset();
+    mcg.debug( false );
+    App.render();
+}
+
+function onRightClick( e ){
+	if( e.button != 2 ) return;
+	e.preventDefault(); e.stopPropagation();
+    App.Debug.reset();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Display Ray
+    let pos = App.input.toCoord( e );
+    ray.set_screen_mouse( pos[0], pos[1], true );
+    App.Debug.ln( ray.origin, ray.end, "cyan" );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Display Voxel Chunk
+    //let bound = mcg.get_bounds();
+    //App.Debug.box( bound[0], bound[1], "red" );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let result = ray_voxel_grid( ray, mcg, ray_mcgrid_hittest ); //ray_mcgrid_debug
+    if( result ){
+        console.log( "Voxel Ray", result );
+        let coord = new Vec3();
+
+        // If we hit a voxel, use the normal position to get the
+        // next voxel in that direction's coordinates.
+        if( result.is_hit ) coord.from_add( result.coord, result.norm );
+        else                coord.copy( result.coord );
+
+        // Check if there is a voxel at that coordnates.
+        // for voxels at the boundaries, then there may not be a next voxel.
+        if( !mcg.is_coord_valid( coord ) ) return;
+        mcg.enable_cell( coord );
+
+        //console.log( result.coord, result.norm, Vec3.add( result.coord, result.norm ) );
+
+        // if going the negative direction, Use the select Voxel's Coordinates.
+        // else use the normal dir to get the position of the next voxel position.
+        let p = mcg.get_cell_pos( ((result.dir < 0)? result.coord : coord) );
+        switch( result.axis ){
+            case 0: selector.view_side().set_pos( p.add([0,1,1]) ); break;
+            case 1: selector.view_up().set_pos( p.add([1,0,1]) ); break;
+            case 2: selector.view_front().set_pos( p.add([1,1,0]) ); break;
+        }
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    mcg.debug( true );
+    App.render();
+}
+
+function onMouseMove( e ){
+   if( e.buttons != 0 ) return;
+   voxel_test( e.x, e.y, false );
+}
+
+function onClick( e ){
+    console.log( e );
+    if( e.button != 2 ) return;
+    
+    
+    voxel_test( e.x, e.y, true );
+}
+
+function voxel_test( x, y, is_click ){
+    ray.set_screen_mouse( x, y, true );
+    let result = ray_voxel_grid( ray, mcg, ray_mcgrid_hittest );
+    if( !result ){
+        selector.hide();
+        render_scene();
+        return;
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let coord = new Vec3();
+    if( result.is_hit ) coord.from_add( result.coord, result.norm );
+    else                coord.copy( result.coord );
+
+    if( !mcg.is_coord_valid( coord ) ){
+        selector.hide();
+        render_scene();
+        return;
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if( !is_click ){
+        let p = mcg.get_cell_pos( ((result.dir < 0)? result.coord : coord) );
+
+        // If hitting the end boundary and its pointing negative, need to shift
+        // the axis position by one voxel cell to put the quad on the boundary
+        // wall of the chunk
+        let a = ( !result.is_hit && result.dir < 0 )? 2 : 0;
+
+        switch( result.axis ){
+            case 0: selector.view_side().set_pos( p.add([a,1,1]) ); break;
+            case 1: selector.view_up().set_pos( p.add([1,a,1]) ); break;
+            case 2: selector.view_front().set_pos( p.add([1,1,a]) ); break;
+        }
+
+        selector.show();
+    }else{
+        mcg.enable_cell( coord );
+        selector.hide();
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    render_scene();
+}
+
+// https://www.youtube.com/watch?v=NbSee-XM7WA
+// https://www.youtube.com/watch?v=eOCQfxRQ2pY
+
+// Hit Handler - Only Visualizes all the voxels hit by the ray
+class ray_mcgrid_debug{
+    static cell_bound = [ new Vec3(), new Vec3() ];
+    static pos        = new Vec3();
+    static norm       = new Vec3();
+
+    static visual_debug( grid, coord, hAxis, ray, step_dir, is_end=false ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Draw Cube Cell
+        // Final no hit, will have a bad coord
+        if( coord.x >= 0 && coord.y >= 0 && coord.z >= 0 ){
+            grid.get_cell_bound( coord.x, coord.y, coord.z, this.cell_bound );
+        }
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Normal Direction of Face hit
+        this.norm.reset();
+        this.norm[ hAxis ] = -step_dir[ hAxis ];
+
+        let n_coord = coord[ hAxis ]; 
+        if( !is_end ) n_coord -= step_dir[ hAxis ]; // If not the end, take a step back to get the previous coord.
+        
+        // Get the position of the axis bounding edge
+        let bound_pos  = (( step_dir[ hAxis ] > 0)? n_coord+1 : n_coord ) * grid.cell_size; // Position of boundary intersection
+        let t          = ( bound_pos - ray.origin[hAxis] ) / ray.vec_len[hAxis];   // Use Axis position to get T of the ray
+        
+        ray.get_pos( t, this.pos ); // get the full position on the ray of the boundary intersection
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        App.Debug
+            .box( this.cell_bound[0], this.cell_bound[1], "red" )	// Display Voxel
+            .pnt( this.pos, "green", 0.3 )					        // Display Intersection Point for Voxel
+            .ln( this.pos, this.norm.add( this.pos ), "green" );    // Diplay Normal Direction
+    }
+
+    static on_hit_test( grid, coord, hAxis, ray, step_dir ){
+        this.visual_debug( grid, coord, hAxis, ray, step_dir, false );
+        return false;
+    }
+
+    static on_complete( grid, coord, hAxis, ray, step_dir ){
+        this.visual_debug( grid, coord, hAxis, ray, step_dir, true );
+    }
+}
+
+// Hit Handler - Runs the Hit test on the Voxel Grid
+class ray_mcgrid_hittest{
+    static on_hit_test( grid, coord, hAxis, ray, step_dir ){
+        return grid.is_cell_enabled( coord );
+    }
+}
+
+function ray_voxel_grid( ray, grid, handler=null, tries=30 ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Before we traverse the grid for which voxels the ray intersects
+    // we need to know if the ray is within the grid boundary. Plus
+    // we need the entry point of the ray to determine which voxel
+    // to start with, plus the exit point as a possible selected voxel if
+    // none is hit.
+	let init_hit = {};
+	if( !ray.in_bound( grid.get_bounds(), init_hit ) ) return null;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // The hit position of the ray when it hit the grid boundary.
+    // Need to move point to local space for math to work.
+	let in_pos   = ray.get_pos( Math.max( init_hit.min, 0) ).near_zero(), //.sub( grid_world_pos ),	
+        step_dir = new Vec3(-1,-1,-1),        // Direction to Traverse Down the Ray but in Voxel Coordinates ( -1 or 1 )
+        exit     = new Vec3( -1, -1, -1 ),    // Voxel Coordinate that marks the exit out of the voxel grid per axis. By default set as all negative
+        
+        // Use the inital position to compute which outer voxel was hit first.
+        // clamp( floor( posX / cellSize ), 0, xCellCnt-1 )
+        coord    = new Vec3( in_pos ).div_scale( grid.cell_size )  
+            .floor().clamp( [0,0,0], [ grid.cell_cnt.x-1, grid.cell_cnt.y-1,grid.cell_cnt.z-1 ] ),
+        
+        // Next Boundary when going in the negative direction by default
+        bound    = new Vec3().from_scale( coord, grid.cell_size ); 
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Which Direction are we moving down the Ray. By default movement is stepping 
+    // in the negative DIR but if the ray is positive, then we need to update things
+    for( let i=0; i < 3; i++ ){
+        if( ray.dir[i] >= 0 ){                                  // If Direction is going in the positive direction
+            step_dir[i]	= ( ray.dir[i] == 0 )? 0 : 1;           // Moving in a positive direction OR no movement at all.  
+            bound[i]	= ( coord[i] + 1 ) * grid.cell_size;    // In Positive, Next cell is at this Local Space Position
+            if( ray.dir[i] > 0 ) exit[i] = grid.cell_cnt[i];    // Which voxel coord on this axis will be considered an exist out of chunk.
+        }
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let	hAxis 		= init_hit.nAxis,	    // Inital Axis Hit from outer boundary
+        is_hit		= false,				// Using Check Data, did we hit a voxel that exists.
+        axis_coord;
+
+    // Get Ray Voxel T steps to reach the next voxel of each axis ( dir_x / rayDirX * VoxelSize )
+    let t_inc = new Vec3().from_div( step_dir, ray.dir ).scale( grid.cell_size );  
+    
+    // Current T value for each axis on the ray for the starting voxel.
+    let t_ray = new Vec3().from_sub( bound, in_pos ).div( ray.dir );          
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    while( tries > 0 ){
+        //-------------------------
+        // Hit test is external, can also inject visual debugging at this point.
+        if( handler && handler.on_hit_test ){
+            is_hit = handler.on_hit_test( grid, coord, hAxis, ray, step_dir );
+            if( is_hit ) break;
+        }
+
+        //-------------------------
+        // Traverse down the ray one Dimension at a time by which axis is closest to a boundary
+        // Whichever axis T value is smallest, becomes the direction of the closest voxel.
+        hAxis      = t_ray.get_min_axis();               // Which axis has the smallest value
+        axis_coord = coord[ hAxis ] + step_dir[ hAxis ]; // Move voxel on increment on N axis at N step
+        if( axis_coord == exit[ hAxis ] ) break; // Reached Exist Voxel Coordinate
+
+        //-------------------------
+        // Move things to test the next possible voxel on the path of the ray.
+        coord[ hAxis ]  = axis_coord;   // Move to next voxel on the hit axis
+        t_ray[ hAxis ] += t_inc[ hAxis ];   // Move T to the starting place of the next voxel.
+        tries--;              
+                
+    }
+
+    if( handler && handler.on_complete ){
+        handler.on_complete( grid, coord, hAxis, ray, step_dir );
+    }
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let norm = new Vec3();
+    norm[ hAxis ] = -step_dir[ hAxis ]; // 0:x, 1:y, 2:z
+
+    //console.log( "FINAL COORD", coord );
+    //console.log( "final norm", norm );
+    return { norm, coord, is_hit, axis:hAxis, dir:-step_dir[ hAxis ] };
+}
+
+
+
+//#####################################################
+
+function MCG_BMesh( mcg ){
+    let c, corners = new Array( 8 );
+    let bmesh = new BMesh();
+
+    let cnt = 0;
+    for( c of mcg.cells ){
+        // Cell Corner Value - Add up the bit value of each active corner
+        // Get Position of Each Corner of the Cell.
+        //console.log( c );
+
+        let bit = 0;
+        for( let i=0; i < 8; i++ ){
+            let p = mcg.points[ c.corners[ i ] ];
+            corners[ i ] = p.pos;
+            if( p.enabled ) bit += MarchingCubes.corner_bit[ i ];
+        }
+
+        if( bit != 0 && bit != 255 ){ // Empty Cells
+            let tri_ary = MarchingCubes.build_cell( bit, corners );
+            
+            //console.log( bit, tri_ary );
+            for( let i=0; i < tri_ary.length; i+=3 ){
+                let tri = new Array( 3 )
+                tri[ 0 ] = bmesh.add_vert( tri_ary[ i ] );
+                tri[ 1 ] = bmesh.add_vert( tri_ary[ i+1 ] );
+                tri[ 2 ] = bmesh.add_vert( tri_ary[ i+2 ] );
+                //console.log( tri );
+                bmesh.add_face( tri );
+                //break;
+            }
+            
+        }
+
+        //if( cnt == 9 ) break;
+        cnt++
+    }
+
+
+    //console.log( bmesh );
+
+    let vertices = bmesh.build_vertices();
+    let indices  = bmesh.build_indices();
+
+    //vertices = new Float32Array( [2, 0, 1, 1, 2, 2, 1, 0, 2, 2, 2, 1] );
+    //indices = new Uint16Array( [0, 1, 2,  2, 1, 0 ] );
+
+    //console.log( vertices, vertices.length/3, vertices.length * 4 );
+    //console.log( indices, indices.length/3 );
+
+    let dmesh = new DynamicMesh( "DMesh" ).init_data( indices, vertices );
+    //console.log( "d", dmesh.mesh );
+
+    //dmesh.mesh = App.mesh.from_data( "x", vertices, 3, indices );
+
+    //console.log( "s", dmesh.mesh );
+    let mat   = App.shader.new_material( "KennyUnlit", { color:"#ff7f7fff" }, { cullFace:false } );
+    let e     = App.mesh_entity( "DynMesh", dmesh.mesh, mat, 4 );
+    
+}
+
+//#####################################################
+
+class MCEditor{
+    constructor(){
+        let mat;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.grid   = new MarchingCubesGrid();                   // Dual Grid ( Cell + Corners )
+        this.bmesh  = new BMesh();                               // Create Mesh Procedurally
+        this.dmesh  = new DynamicMesh().init_empty( 30, 30, 3 ); // Mesh Renderer, supports dynamic updating
+        this.caster = new VoxelRayCaster( this.grid, this.on_ray.bind(this), 
+            {   // Handler Object, For regular hit testing is simple, Debug one is more complicated
+                on_hit_test : ( grid, coord, hAxis, ray, step_dir )=>{
+                    return this.grid.is_cell_enabled( coord );
+                }
+            }
+        );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Entity that will render the Dynamic Mesh
+        mat = App.shader.new_material( "KennyUnlit", { color:"#ff7f7fff" }, { cullFace:false } );
+        this.mc_entity = App.mesh_entity( "MC_Mesh", dmesh.mesh, mat, 4 );
+
+        // Entity that handles the highlight rendering
+        mat = App.shader.new_material( "BaseColor", { color:"#00ff0055"}, { blend:true, cullFace:false } );
+        this.highlight = new QuadSelector( Quad( "QHighlight", mat ) )
+    }
+
+    on_ray( result, coord, is_click ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if( !result ){
+            if( this.highlight.visible ){
+                this.highlight.selector.hide();
+                render_scene();
+            }
+            return;
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if( !is_click ){
+            let p = this.grid.get_cell_pos( ((result.dir < 0)? result.coord : coord) );
+
+            // If hitting the end boundary and its pointing negative, need to shift
+            // the axis position by one voxel cell to put the quad on the boundary
+            // wall of the chunk
+            let a = ( !result.is_hit && result.dir < 0 )? 2 : 0;
+
+            switch( result.axis ){
+                case 0: this.highlight.view_side().set_pos( p.add([a,1,1]) ); break;
+                case 1: this.highlight.view_up().set_pos( p.add([1,a,1]) ); break;
+                case 2: this.highlight.view_front().set_pos( p.add([1,1,a]) ); break;
+            }
+
+            this.highlight.show();
+        }else{
+            this.grid.enable_cell( coord );
+            this.highlight.hide();
+
+            /*
+            this.update_bmesh()
+                .update_dmesh()
+                .render_now();
+            */
+        }
+    }
+
+    update_bmesh(){
+        this.bmesh.reset();
+
+        let corners = new Array( 8 ); // Position of Cell Points
+        let tri     = new Array( 3 ); // Tri Vertex Points to gen face
+        let bm      = this.bmesh;
+        let grid    = this.grid;
+
+        let c, bit, p, tri_ary, i;
+
+        for( c of grid.cells ){
+            //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            // Cell Corner Value - Add up the bit value of each active corner
+            // Get Position of Each Corner of the Cell.
+            bit = 0;
+            for( i=0; i < 8; i++ ){
+                p            = this.grid.points[ c.corners[ i ] ];    // Corner Position
+                corners[ i ] = p.pos;                                 // Save Pos for Building Faces
+
+                if( p.enabled ) bit += MarchingCubes.corner_bit[ i ]; // If on, Add its Bit Value
+            }
+
+            // If no corner is on OR all are on, that makes 
+            // the cell empty, so skip to next cell
+            if( bit == 0 || bit == 255 ) continue;
+            
+            //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            // Pass the position of all the corners and the Bit ID
+            // Returns back the triangle list for rendering for this cell
+            tri_ary = MarchingCubes.build_cell( bit, corners );
+            for( i=0; i < tri_ary.length; i+=3 ){
+                tri[ 0 ] = bmesh.add_vert( tri_ary[ i ] );
+                tri[ 1 ] = bmesh.add_vert( tri_ary[ i+1 ] );
+                tri[ 2 ] = bmesh.add_vert( tri_ary[ i+2 ] );
+                bmesh.add_face( tri );
+            }
+        }
+
+        return this;
+    }
+
+    update_dmesh(){
+        let vertices = this.bmesh.build_vertices();
+        let indices  = this.bmesh.build_indices();
+        this.dmesh.update( indices, vertices );
+        return this;
+    }
+
+    render_now(){
+        App.Debug.reset();
+        this.grid.debug( false );
+        App.render();
+    }
+}
+
+class VoxelRayCaster{
+    constructor( grid, on_ray, grid_hittest ){
+        this.ray                = new Ray();
+        this.mouse_up_bind      = this.on_mouse_up.bind( this );
+        this.mouse_move_bind    = this.on_mouse_move.bind( this );
+        this.on_ray             = on_ray;
+        this.grid_hittest       = grid_hittest;
+        this.grid               = grid;
+
+        App.gl.canvas.addEventListener( "mouseup", this.mouse_up_bind );
+        App.gl.canvas.addEventListener( "mousemove", this.mouse_move_bind );
+    }
+
+    // #region EVENTS
+    // Only run if its the RIGHT button doing the clicking.
+    on_mouse_up( e ){ 
+        e.preventDefault(); e.stopPropagation();
+        if( e.button == 2 ) console.log();
+    }
+
+    // Only run if no mouse button action, pure hover movement
+    on_mouse_move( e ){ 
+        e.preventDefault(); e.stopPropagation();
+        if( e.buttons == 0 ) console.log();
+    }
+    // #endregion /////////////////////////////////////////////////////
+
+    ray_test( x, y, is_click ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Perform Ray Test
+        this.ray.set_screen_mouse( x, y, true );
+        let result = ray_voxel_grid( this.ray, this.grid, this.grid_hittest );
+        if( !result ){ this.on_ray( null ); return; }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // if its a hit, we want the next voxel over to enable
+        // If no hit, its a boundary test, just get the voxel
+        let coord = new Vec3();
+        if( result.is_hit ) coord.from_add( result.coord, result.norm );    // Neighbor Voxel
+        else                coord.copy( result.coord );                     // Boundary Voxel
+
+        // The Neighbor voxel can be outside the boundary
+        // In that case dont count it as a hit.
+        if( !this.grid.is_coord_valid( coord ) ){ this.on_ray( null ); return; }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.on_ray( result, coord, is_click );
+    }
+}
+
+class QuadSelector{
+    constructor( e ){
+        this.entity     = e;
+        this.rot_up     = Quat.axis_angle( Vec3.LEFT, -Maths.PI_H );
+        this.rot_side   = Quat.axis_angle( Vec3.UP, -Maths.PI_H );
+        this.visible    = false;
+
+        e.node.set_scl( 2 ); // Size of the cells are 2u
+        this.hide();
+    }
+
+    view_up(){ this.entity.node.set_rot( this.rot_up ); return this; }
+    view_side(){ this.entity.node.set_rot( this.rot_side ); return this; }
+    view_front(){ this.entity.node.set_rot( Quat.IDENTITY ); return this; }
+
+    show(){ App.ecs.set_entity_active( this.entity.id, true ); this.visible=true; return this; }
+    hide(){ App.ecs.set_entity_active( this.entity.id, false ); this.visible=false; return this; }
+
+    set_pos( v ){ this.entity.node.set_pos( v ); return this; }
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

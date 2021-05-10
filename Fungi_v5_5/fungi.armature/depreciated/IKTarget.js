@@ -1,6 +1,6 @@
-import Maths, { Quat, Vec3 }	from "../fungi/maths/Maths.js";
-import Transform				from "../fungi/maths/Transform.js";
-import Axis						from "../fungi/maths/Axis.js";
+import Maths, { Quat, Vec3 }	from "../../fungi/maths/Maths.js";
+import Transform				from "../../fungi/maths/Transform.js";
+import Axis						from "../../fungi/maths/Axis.js";
 
 class IKTarget{
 	constructor(){

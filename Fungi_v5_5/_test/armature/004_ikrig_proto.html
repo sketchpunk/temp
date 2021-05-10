@@ -3,8 +3,8 @@ import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
 import XhrQueue 			from "../../fungi/lib/XhrQueue.js";
 import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
 
-import IKRig		from "../../fungi.armature/IKRig.js";
-import IKTarget		from "../../fungi.armature/IKTarget.js";
+import IKRig		from "../../fungi.armature/depreciated/IKRig.js";
+import IKTarget		from "../../fungi.armature/depreciated/IKTarget.js";
 import { Animation, PoseAnimator } from "../../fungi.armature/Animation.js";
 
 import ProtoHuman	from "../../fungi.protoform/rigs/ProtoHuman.js";
@@ -13,7 +13,7 @@ import ProtoDino	from "../../fungi.protoform/rigs/ProtoDino.js";
 //#####################################################
 App
 	.init( true )
-	.load_pkg( { name:"fungi.armature", bone_view:true, spring:true, mat:true } )
+	.load_pkg( { name:"fungi.armature", bone_view:true, spring:false, mat:true } )
 	.load_pkg( { name:"fungi.protoform", mat:"Halftone" } )
 	.use_debug()
 	.set_camera( 40, 20, 6.0, 0, 0.7, 0 )
@@ -33,6 +33,10 @@ async function init(){
 		//.grp( "ma", "models/vegeta.gltf", "json", "models/vegeta.bin", "bin" )
 	;
 	
+	let o = await import( "../../fungi.armature/depreciated/BoneSpring.js" );
+	App.ecs.components.reg( o.default );
+	App.ecs.systems.reg( o.BoneSpringSys, 700 );
+
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	load_src( dl.src.json, dl.src.bin );
 	//load_mesh( dl.ma.json, dl.ma.bin );

@@ -1,0 +1,499 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat } from "../../fungi/App.js";
+
+import {Mesh} from "../../fungi/core/Mesh.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "LowPoly.js" )
+	.set_camera( 0, 20, 5, 0, 1.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+
+    /*
+    let dmesh = new DynamicMesh( "DMesh" ).init_empty( 3, 3, 3 );
+    let mat   = App.shader.new_material( "LowPoly", null, { cullFace:false } );
+    let e     = App.mesh_entity( "DynMesh", dmesh.mesh, mat, 4 );
+    
+    let idx_data  = new Uint16Array( [0,1,2] );
+    let vert_data = new Float32Array([
+        -1,0,0,
+        1,0,0,
+        0.5,1,0
+    ]);
+
+    dmesh.update( idx_data, vert_data );
+    */
+
+    /*
+    let bm = new BMesh();
+    let v0 = bm.add_vert( -1, 0, 0 );
+    let v1 = bm.add_vert( 1, 0, 0 );
+    let v2 = bm.add_vert( 0.5, 1, 0 );
+
+    bm.add_face( [v0,v1,v2] );
+    console.log( bm );
+    
+    //--------------------------------
+    // All Vertices
+    for( let v of bm.vertices ){
+        App.Debug.pnt( v.pos, "green", 0.08 );
+    }
+
+    //--------------------------------
+    // Testing Face Loop edges
+    let f = bm.faces[ 0 ];
+    for( let l of f.loop.iter() ){
+        App.Debug.ln( l.edge.vert1.pos, l.edge.vert2.pos, "green", "red" );
+    }
+    */
+
+    //--------------------------------
+    //
+
+    let cll = new CircularLinkedList();
+    cll.add( "a" ).add( "b" ).add( "c" );
+
+    for( let v of cll.iter_next() ){
+        console.log( v );
+    }
+    
+	return true;
+}
+
+//#####################################################
+
+/*
+    let dmesh = new DynamicMesh( "DMesh" ).init_empty( 3, 3, 3 );
+    let mat   = App.shader.new_material( "LowPoly", null, { cullFace:false } );
+    let e     = App.mesh_entity( "DynMesh", dmesh.mesh, mat, 4 );
+    
+    let idx_data  = new Uint16Array( [0,1,2] );
+    let vert_data = new Float32Array([
+        -1,0,0,
+        1,0,0,
+        0.5,1,0
+    ]);
+
+    dmesh.update( idx_data, vert_data );
+*/
+
+class DynamicMesh{
+    constructor( name ){
+        this.mesh = new Mesh( name );
+    }
+
+    init_empty( idx_cnt, vert_cnt, vert_comp_len=3 ){
+        let buf, config = [];
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // BUFFERS
+        buf = App.buffer.new_empty_array( vert_cnt * vert_comp_len * 4, false ); //byte_size, is_static=true, unbind=true 
+        config.push( { buffer: buf, attrib_loc: App.shader.POS_LOC } );
+        this.mesh.buffers.set( "vertices", buf );
+
+        if( idx_cnt != null ){
+            buf = App.buffer.new_empty_element( idx_cnt*2, false ); // Uint16
+            config.push( { buffer: buf } );
+            this.mesh.buffers.set( "indices", buf );
+        }
+        //{ buffer: norm_buf, attrib_loc: App.shader.NORM_LOC },
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.mesh.vao         = App.vao.new( config );
+	    this.mesh.element_cnt = 0;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        return this;
+    }
+
+    update( idx=null, vert=null ){
+        if( idx )   this.update_indices( idx );
+        if( vert )  this.update_vertices( vert );
+        return this;
+    }
+
+    update_vertices( data ){
+        let buf = this.mesh.buffers.get( "vertices" );
+        App.buffer.update_data( buf, data );
+        this.mesh.element_cnt = data.length / buf.component_len;
+        return this;
+    }
+
+    update_indices( data ){
+        let buf = this.mesh.buffers.get( "indices" );
+        App.buffer.update_data( buf, data );
+        this.mesh.element_cnt = data.length;
+        return this;
+    }
+}
+
+
+//#####################################################
+//https://github.com/eliemichel/BMeshUnity
+
+class Node{
+    constructor( v ){
+        this.value = v;
+        this.prev  = null;
+        this.next  = null;
+    }
+}
+class CircularLinkedList{
+    constructor(){
+        this.head = null;
+        this.tail = null;
+    }
+
+    add( v ){
+        let n = new Node( v );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Empty Linked List, Easy to setup
+        if( !this.head ){
+            this.head = n;
+            this.tail = n;
+            n.next    = n;
+            n.prev    = n;
+            return this;
+        }
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        n.prev          = this.tail;        // New Node Lives between the Tail
+        n.next          = this.tail.next;   // And Its Circular Next, Which should be Head
+        this.tail.next  = n;                // The Previous Tail's Next should be new Node
+        this.tail       = n;                // New Node becomes new tail
+        this.head.prev  = n;                // Head loops backward to tail
+
+        return this;
+    }
+
+    iter_next( n=null ){
+        let first   = n || this.head;
+        let node    = first;
+        let result  = { value:null, done:false };
+        let next    = ()=>{
+            if( !node ) result.done = true;
+            else{
+                result.value = node.value;
+                // If next Item in Linked List, but since its circular, need to 
+                // test if the next item is the first item.
+                node = ( node.next !== first )? node.next : null;
+            }
+            return result;
+        };
+
+        return { [Symbol.iterator](){ return { next }; } };
+    }
+}
+
+/*
+    Vertex
+        pos  = Vec3
+        Edge = CircularLinkedList
+
+    Edge
+        Vertex A // Edges are made up of 2 Verts
+        Vertex B
+        
+
+    Face
+        Loop    // Edges that make up a face.
+
+    Loop
+        Vertex  // Point that Starts the Edge
+        Edge    // The Edge of a Face
+        Face    // Just  Reference back to face
+*/
+
+class Vertex{
+    constructor(){
+        this.idx    = null;
+        this.pos    = new Vec3();
+        this.edge   = new CircularLinkedList();
+    }
+}
+
+class Edge{
+    constructor( va, vb ){
+        this.idx    = null;
+        this.loop   = null;
+        this.a      = va;
+        this.b      = va;
+
+        //this.vert1      = v1;
+        //this.next1      = null; // Link List of Every Edge that Vert 1 is part of
+        //this.prev1      = null;
+        
+        //this.vert2      = v2;
+        //this.next2      = null; // Link List of Every Edge that Vert 2 is part of
+        //this.prev2      = null;
+    }
+
+    //contains_vertex( v ){ return ( v === this.vert1 || v === this.vert2 ); }
+    //contains_vertex( v ){ return ( v === this.a || v === this.b ); }
+
+          /**
+         * If one gives a vertex of the edge to this function, it returns the
+         * next edge in the linked list of edges that use this vertex.
+         */
+    //next( v ){ return v === this.vert1 ? this.next1 : this.next2; }
+    //prev( v ){ return v === this.vert1 ? this.prev1 : this.prev2; }
+
+    //set_next( v, e ){
+    //    if( v === this.vert1 ) this.next1 = e;
+    //    else                   this.next2 = e;
+    //    return this;
+    //}
+
+    //set_prev( v, e ){
+    //    if( v === this.vert1 ) this.prev1 = e;
+    //    else                   this.prev2 = e;
+    //    return this;
+    //}
+
+    //center( v=null ){ return (v || new Vec3()).from_add( this.vert1.pos, this.vert2.pos ).scale( 0.5 ); }
+}
+
+class Loop{
+    constructor( v, e, f ){
+        this.idx         = 0;
+        this.vert        = v;
+        this.edge        = null;
+        this.face        = null;
+
+        // Circular Linked Lists
+        this.radial_prev = null;    
+        this.radial_next = null;
+        this.prev        = null;    // prev loop in face
+        this.next        = null;    // next loop in face
+
+        this.set_edge( e );
+        this.set_face( f );
+    }
+
+            /**
+         * Insert the loop in the linked list of the face.
+         * (Used in constructor)
+         */
+    set_face( f ){
+        if( f.loop == null ){
+            f.loop    = this;
+            this.next = this;
+            this.prev = this;
+        }else{
+            this.prev           = f.loop;
+            this.next           = f.loop.next;
+            f.loop.next.prev    = this;
+            f.loop.next         = this;
+            f.loop              = this;
+        }
+        this.face = f;
+    }
+
+       /**
+         * Insert the loop in the radial linked list.
+         * (Used in constructor)
+         */
+    set_edge( e ){
+        if( e.loop == null ){
+            e.loop           = this;
+            this.radial_next = this;
+            this.radial_prev = this;
+        }else{
+            this.radial_prev                = e.loop;
+            this.radial_next                = e.loop.radial_next;
+            e.loop.radial_next.radial_prev  = this;
+            e.loop.radial_next              = this;
+            e.loop                          = this;
+        }
+
+        this.edge = e;
+    }
+
+
+    iter(){
+        let head    = this;
+        let link    = this;
+        let result  = { value:null, done:false };
+
+        let next    = ()=>{
+            if( !link ) result.done = true;
+            else{
+                result.value = link;
+
+                // If next Item in Linked List, but since its
+                // circular, need to test if the next item is
+                // is the first item.
+                link = ( link.next !== head )? link.next : null;
+            }
+            return result;
+        };
+
+        return { [Symbol.iterator](){ return { next }; } };
+    }
+
+}
+
+class Face{
+    constructor(){
+        this.idx        = null;
+        this.vert_count = 0;
+        this.loop       = null; // navigate list using next
+    }
+    
+        /**
+         * Compute the barycenter of the face vertices
+         
+         public Vector3 Center()
+        {
+            Vector3 p = Vector3.zero;
+            float sum = 0;
+            foreach (var v in NeighborVertices())
+            {
+                p += v.point;
+                sum += 1;
+            }
+            return p / sum;
+        }
+    */
+}
+
+class BMesh{
+    constructor(){
+        this.vert_map   = {};
+        this.vertices   = new Array();
+        this.edges      = new Array();
+        this.loops      = new Array();
+        this.faces      = new Array();
+    }
+
+    add_vert( x, y, z ){
+        if( x instanceof Float32Array || Array.isArray( x ) ){ y = x[1]; z = x[2]; x = x[0]; }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Check if vertex position already exists
+        let idx,
+            key = Math.floor( x * 1000 ) + "_" +
+                  Math.floor( y * 1000 ) + "_" +
+                  Math.floor( z * 1000 );
+        if( (idx = this.vert_map[ key ]) != undefined ) return this.vertices[ idx ];
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // New Vertex
+        let v = new Vertex();
+        v.pos.set( x, y, z );               // Set Position
+        v.idx = this.vertices.length;       // Set Index in Array
+        this.vertices.push( v );            // Save to Array
+        this.vert_map[ key ] = v.idx;     // Key to Index Mapping
+        return v;
+    }
+
+    /**
+     * Add a new edge between two vertices. If there is already such edge,
+     * return it without adding a new one.
+     * If the vertices are not part of the mesh, the behavior is undefined.
+     */
+    add_edge( vert1, vert2 ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let edge = this.find_edge( vert1, vert2 );
+        if( edge ) return edge;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        edge     = new Edge( vert1, vert2 );
+        edge.idx = this.edges.length;
+        this.edges.push( edge );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Insert in vert1's edge list
+        if ( vert1.edge == null ){
+            vert1.edge = edge;
+            edge.next1 = edge; 
+            edge.prev1 = edge;
+        }else{
+            edge.next1 = vert1.edge.next( vert1 ); // Get next edge
+            edge.prev1 = vert1.edge;
+
+            edge.next1.set_prev( vert1, edge ); 
+            edge.prev1.set_next( vert1, edge );
+        }
+
+        if( vert2.edge == null ){
+            vert2.edge = edge;
+            edge.next2 = edge;
+            edge.prev2 = edge;
+        }else{
+            edge.next2 = vert2.edge.next(vert2);
+            edge.prev2 = vert2.edge;
+            edge.next2.set_prev( vert2, edge );
+            edge.prev2.set_next( vert2, edge );
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        return edge;
+    }
+
+    /**
+     * Add a new face that connects the array of vertices provided.
+     * The vertices must be part of the mesh, otherwise the behavior is
+     * undefined.
+     * NB: There is no AddLoop, because a loop is an element of a face
+    */
+    add_face( fVerts ){
+        if (fVerts.length == 0) return null;
+        
+        let fEdges = new Array( fVerts.Length );
+
+        let i, i_prev = fVerts.length - 1;
+        for( i=0; i < fVerts.length; i++ ){
+            fEdges[ i_prev ] = this.add_edge( fVerts[ i_prev ], fVerts[ i ] );
+            i_prev           = i;
+        }
+
+        let f = new Face();
+        f.idx = this.faces.length;
+        this.faces.push( f );
+        
+        let loop;
+        for( i=0; i < fVerts.length; i++ ){
+            loop     = new Loop( fVerts[i], fEdges[i], f );
+            loop.idx = this.loops.length;
+            this.loops.push( loop );
+        }
+
+        f.vert_count = fVerts.length;
+        return f;
+    }
+
+        /**
+     * Return an edge that links vert1 to vert2 in the mesh (an arbitrary one
+     * if there are several such edges, which is possible with this structure).
+     * Return null if there is no edge between vert1 and vert2 in the mesh.
+     */
+    find_edge( vert1, vert2 ){
+        if( vert1.edge == null || vert2.edge == null ) return null;
+
+        let e1 = vert1.edge;
+        let e2 = vert2.edge;
+        do{
+            if( e1.contains_vertex( vert2 ) ) return e1;
+            if( e2.contains_vertex( vert1 ) ) return e2;
+            e1 = e1.next( vert1 );
+            e2 = e2.next( vert2 );
+        }while( e1 != vert1.edge && e2 != vert2.edge );
+    
+        return null;
+    }
+
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

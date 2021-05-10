@@ -55,6 +55,10 @@ class VaoFactory{
 
 		return vao;
 	}
+
+	blank(){
+		return new Vao( this.gl.ctx.createVertexArray() );
+	}
 	// #endregion ////////////////////////////////////////////////////////////////////////////////////// 
 
 	// #region BINDING

@@ -81,7 +81,7 @@ class IESpring_Vec3 extends IESpring_Base {
     vel     = new Vec3(); // Velocity
     val     = new Vec3(); // Current Value
     tar     = new Vec3(); // Target Value
-    epsilon = 0.00001;
+    epsilon = 0.000001;
     // #endregion ///////////////////////////////////////////////////////////////////
 
     // #region SETTERS / GETTERS

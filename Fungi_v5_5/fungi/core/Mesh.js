@@ -254,3 +254,4 @@ class MeshFactory{
 }
 
 export default MeshFactory;
+export { Mesh };

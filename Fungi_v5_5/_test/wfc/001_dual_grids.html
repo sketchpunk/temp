@@ -1,0 +1,148 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat } from "../../fungi/App.js";
+//import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+//import { VRot90 }			from "../../fungi/maths/Vec3.js"
+//import TileDictionary       from "./TileDictionary.js"
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "LowPoly.js" )
+	.set_camera( 0, 20, 15, 0, 1.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let mcg = new MarchingCubeGrid();
+
+    mcg
+        .enable_cell( 1, 0, 0 )
+        .enable_cell( 2, 2, 2 )
+        .enable_cell( 0, 1, 1 )
+        .enable_cell( 2, 0, 2 )
+        .enable_cell( 2, 2, 0 );
+
+    mcg.debug();
+    return true;
+}
+
+//#####################################################
+
+class Point{
+    constructor( p ){
+        this.pos     = new Vec3( p );
+        this.enabled = false;
+    }
+}
+
+class Cell{
+    constructor(){
+        this.enabled = false;
+        this.corners = null;
+    }
+}
+
+class MarchingCubeGrid{
+    constructor(){
+        this.cell_cnt   = new Vec3( 3, 3, 3 );
+        this.cell_size  = new Vec3( 2, 2, 2 );
+        this.points     = null;
+        this.cells      = null;
+
+        this.x_pnt_cnt  = 0;
+        this.y_pnt_cnt  = 0;
+        this.z_pnt_cnt  = 0;
+        this.l_pnt_cnt  = 0;    // Level Point Count ( X*Z )
+
+        this.gen_grid();
+    }
+
+    gen_grid(){
+        let x,y,z,v = new Vec3();
+        let i = 0;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.x_pnt_cnt  = this.cell_cnt.x + 1;
+        this.y_pnt_cnt  = this.cell_cnt.y + 1;
+        this.z_pnt_cnt  = this.cell_cnt.z + 1;
+        this.l_pnt_cnt  = this.x_pnt_cnt * this.z_pnt_cnt;
+        this.points     = new Array( this.x_pnt_cnt * this.y_pnt_cnt * this.z_pnt_cnt );
+        this.cells      = new Array( this.cell_cnt.x * this.cell_cnt.y * this.cell_cnt.z );
+
+        for( y=0; y <= this.cell_cnt.y; y++ ){          v.y = y * this.cell_size.y;
+            for( z=0; z <= this.cell_cnt.z; z++ ){      v.z = z * this.cell_size.z;
+                for( x=0; x <= this.cell_cnt.x; x++ ){  v.x = x * this.cell_size.x;
+                    this.points[ i++ ] = new Point( v );
+                }
+            }
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let p1, p2, p3, p4, c;
+        for( y=0; y < this.cell_cnt.y; y++ ){      
+            for( z=0; z < this.cell_cnt.z; z++ ){  
+                for( x=0; x < this.cell_cnt.x; x++ ){
+                    //------------------------------
+                    // Compute Cell Index
+                    i  = x + z * this.cell_cnt.x + y * ( this.cell_cnt.x * this.cell_cnt.z );
+                    
+                    //------------------------------
+                    // Compute bottom 4 points, Top left Corner, then work Clock Wise around the square.
+                    p1 = x + z * this.x_pnt_cnt + y * this.l_pnt_cnt;   // Top Left
+                    p2 = p1 + 1;                                        // Top Right
+                    p4 = p1 + this.x_pnt_cnt;                           // Bottom Left
+                    p3 = p4 + 1;                                        // Bottom Right
+                    
+                    //------------------------------
+                    // Create Cell and Save the points as cornerss
+                    // Doing this to save time from computing the corners when 
+                    // dealing ith operations
+                    c         = new Cell();
+                    c.corners = [ p1, p2, p3, p4,
+                        p1 + this.l_pnt_cnt,
+                        p2 + this.l_pnt_cnt,
+                        p3 + this.l_pnt_cnt,
+                        p4 + this.l_pnt_cnt,
+                    ];
+                    this.cells[ i ] = c;
+                }
+            }
+        }
+    }
+
+    enable_cell( x, y, z ){
+        let i = x + z * this.cell_cnt.x + y * ( this.cell_cnt.x * this.cell_cnt.z );
+        if( i >= this.cells.length ) return this;
+
+        let c = this.cells[ i ];
+        c.enabled = true;
+        for( i of c.corners ) this.points[ i ].enabled = true;
+        
+        return this;
+    }
+
+    debug(){
+        let o, col;
+        for( o of this.points ){
+            col = ( o.enabled )? "green" : "gray";
+            App.Debug.pnt( o.pos, col, 0.2 );
+        }
+
+        let min, max;
+        for( o of this.cells ){
+            if( !o.enabled ) continue;
+            console.log( o );
+            min = this.points[ o.corners[ 0 ] ].pos;
+            max = this.points[ o.corners[ 6 ] ].pos;
+            App.Debug.box( min, max, "cyan", true );
+        }
+    }
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

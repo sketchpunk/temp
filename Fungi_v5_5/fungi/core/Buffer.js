@@ -85,13 +85,27 @@ class BufferFactory{
 	bin_array( data_view, byte_offset, byte_size, component_len, is_static=true, unbind=true ){
 		return this.from_bin( ARRAY, data_view, byte_offset, byte_size, component_len, is_static, unbind ); }
 
-	new_empty_array( byte_size, is_static=true, unbind=true ){
+	new_empty_array( byte_size, is_static=true, unbind=true, comp_len=3 ){
 		let buf = new Buffer( this.gl.ctx.createBuffer(), ARRAY, is_static );
 
 		this.gl.ctx.bindBuffer( buf.type, buf.id );
 		this.gl.ctx.bufferData( buf.type, byte_size, buf.usage );
 
-		buf.capacity = byte_size;
+		buf.capacity      = byte_size;
+		buf.component_len = comp_len;
+		buf.data_type	  = USHORT;
+		if( unbind ) this.gl.ctx.bindBuffer( buf.type, null );
+		return buf;
+	}
+
+	new_empty_element( byte_size, is_static=true, unbind=true ){
+		let buf = new Buffer( this.gl.ctx.createBuffer(), ELEMENT, is_static );
+
+		this.gl.ctx.bindBuffer( buf.type, buf.id );
+		this.gl.ctx.bufferData( buf.type, byte_size, buf.usage );
+
+		buf.capacity	  = byte_size;
+		buf.component_len = 1;
 		if( unbind ) this.gl.ctx.bindBuffer( buf.type, null );
 		return buf;
 	}
