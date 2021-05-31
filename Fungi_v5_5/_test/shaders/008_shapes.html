@@ -1,0 +1,211 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }		from "../../fungi/App.js";
+import XhrQueue				from "../../fungi/lib/XhrQueue.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 5, 1.5, 0, 0.6, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+
+	let mat = App.shader.new_material( "TESTER", {} );
+	let e	= Quad( "quad", mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+	/*	{ name:"base_tex",			type:"sampler2D", value:"null" },
+		{ name:"glitter_hmap_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_norm_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_mask_tex",	type:"sampler2D", value:"null" },
+		{ name:"scale", type:"vec2", value:new Float32Array([1,1]), }, */
+    ], App.ubo.get_array( "Global", "Model" ) )
+    .set_blend( true )
+	.set_alpha_coverage( true )
+	.set_cullface( false );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec3 frag_cam;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_uv		= a_uv;
+	frag_wpos	= world_pos.xyz;
+	frag_cam	= global.camera_pos;
+	frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position	= global.proj_view * world_pos;
+}`;
+
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec3 frag_cam;
+in vec2 frag_uv;
+
+//-------------------------
+
+float ring( vec2 coord, float outer, float inner ){ 
+    float radius	= dot( coord, coord );
+    float dxdy 		= fwidth( radius );
+    return	smoothstep( inner - dxdy, inner + dxdy, radius ) - 
+            smoothstep( outer - dxdy, outer + dxdy, radius );
+}
+
+// https://www.shadertoy.com/view/XtXyDn
+float arc( vec2 uv, float angle, float radius, float thick ){
+    float hAngle = angle * 0.5;
+
+    // vector from the circle origin to the middle of the arc
+    vec2 up = vec2( 0.0, 1.0 );
+    float c = cos( hAngle );
+    
+    // smoothing perpendicular to the arc
+    float d1 = abs( length( uv ) - radius ) - thick;
+    float w1 = 1.5 * fwidth( d1 ); // proportional to how much d1 change between pixels
+    float s1 = smoothstep( w1 * 0.5, -w1 * 0.5, d1 ); 
+
+    // smoothing along the arc
+    float d2 = dot( up, normalize( uv ) ) - c;
+    float w2 = 1.5 * fwidth( d2 ); // proportional to how much d2 changes between pixels
+    float s2 = smoothstep( w2 * 0.5, -w2 * 0.5, d2 ); 
+
+    // mix perpendicular and parallel smoothing
+    return s1 * ( 1.0 - s2 );
+}
+
+/*
+#define PI 3.14159265359
+#define TWO_PI 6.28318530718
+float tri( vec2 uv ){
+    float a = atan( uv.x, uv.y ) + PI,
+          r = TWO_PI / 3.0,
+          d = cos( floor( 0.5 + a / r) * r - a ) * length( uv );
+
+    return d;
+}
+*/
+
+// https://www.shadertoy.com/view/XsXSz4#
+float sdTri( vec2 p, vec2 p0, vec2 p1, vec2 p2 ){
+    vec2 e0 = p1-p0, e1 = p2-p1, e2 = p0-p2;
+    vec2 v0 = p -p0, v1 = p -p1, v2 = p -p2;
+    vec2 pq0 = v0 - e0*clamp( dot(v0,e0)/dot(e0,e0), 0.0, 1.0 );
+    vec2 pq1 = v1 - e1*clamp( dot(v1,e1)/dot(e1,e1), 0.0, 1.0 );
+    vec2 pq2 = v2 - e2*clamp( dot(v2,e2)/dot(e2,e2), 0.0, 1.0 );
+    float s = sign( e0.x*e2.y - e0.y*e2.x );
+    vec2 d = min(min(vec2(dot(pq0,pq0), s*(v0.x*e0.y-v0.y*e0.x)),
+                     vec2(dot(pq1,pq1), s*(v1.x*e1.y-v1.y*e1.x))),
+                     vec2(dot(pq2,pq2), s*(v2.x*e2.y-v2.y*e2.x)));
+    return -sqrt(d.x)*sign(d.y);
+}
+
+float aalias( float s, float len ){
+    float aa = fwidth( len );
+    return 1.0 - smoothstep( s-aa, s+aa, len );
+}
+
+vec2 up_coord( vec2 uv ){
+    vec2 rtn = uv * 2.0 - 1.0; // Remape to -1, 1
+    rtn.y = -rtn.y;            // Flip Y, so positive is up
+    return rtn;
+}
+
+// https://www.shadertoy.com/view/tlSGzG
+float sdArc2 (in vec2 p, in float a0, in float a1, in float r ){
+    float a = mod(atan(p.y, p.x), radians(360.));
+
+    float ap = a - a0;
+    if( ap < 0.0 ) ap += 6.28318530718;
+
+    float a1p = a1 - a0;
+    if( a1p < 0.0 ) a1p += 6.28318530718;
+
+    // is a outside [a0, a1]?
+    // https://math.stackexchange.com/questions/1044905/simple-angle-between-two-angles-of-circle
+    
+    if( ap >= a1p ){
+        // snap to the closest of the two endpoints
+        vec2 q0 = vec2(r * cos(a0), r * sin(a0));
+        vec2 q1 = vec2(r * cos(a1), r * sin(a1));
+        return min(length(p - q0), length(p - q1));
+    }
+
+    return abs( length(p) - r );
+}
+
+
+//-------------------------
+void main(void){
+    vec2 c_uv = up_coord( frag_uv ); //frag_uv * 2.0 - 1.0;
+    
+    float a   = ring( c_uv, 0.80, 0.72 );
+    
+    a = max( a, arc( c_uv, radians( 6.0 ), 0.4, 0.25 ) );
+    a = max( a, aalias( 0.0, sdTri( c_uv, vec2( 0.0, 1.0 ), vec2( -0.15, 0.87 ), vec2( 0.15, 0.87 ) ) ) );
+    a = max( a, aalias( 0.05, sdArc2( c_uv, radians(45.0), radians(135.0), 0.76 ) ) );
+
+	out_color = vec4( vec3(a), 1.0 );
+}`;
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import FacedCube from "../../fungi/geo/FacedCube.js";
+import UVSphere  from "../../fungi/geo/UVSphere.js";
+//#####################################################
+App
+	.init( true )
+	//.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( 0, 20, 6, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+
+
+//#####################################################
+
+function on_render( dt, ss ){
+    verlet.update().debug();
+}
+
+let verlet;
+
+async function init(){
+    verlet = new Verlet();
+    verlet.add( [ 0,1.0,0 ], [0.02,0.04,0.03] );
+
+    //on_render();
+    App.render_by( 1, on_render );
+    return true;
+}
+
+//#####################################################
+
+class Point{
+    pos         = new Vec3();
+    prev_pos    = new Vec3();
+}
+
+class Verlet{
+    points = new Array();
+
+    add( pos, vel=null ){
+        let p = new Point();
+        p.pos.copy( pos );
+        if( vel ) p.prev_pos.from_sub( pos, vel );
+
+        this.points.push( p );
+    }
+
+    update(){
+        let p, vel = new Vec3();
+        
+        let bounce = 0.9;
+        let gravity = new Vec3( 0, -0.0005, 0 );
+        let friction = new Vec3( 0.99, 0.99, 0.99 )
+
+        for( p of this.points ){
+            vel.from_sub( p.pos, p.prev_pos ).mul( friction );
+
+            p.prev_pos.copy( p.pos );
+            p.pos
+                .add( vel )
+                .add( gravity );
+
+            // Bounce
+            vel.scale( bounce );
+            if( p.pos.y > 2 ){       p.pos.y = 2;  p.prev_pos.y = p.pos.y + vel.y; }
+            else if( p.pos.y < 0 ){  p.pos.y = 0;  p.prev_pos.y = p.pos.y + vel.y; }
+
+            if( p.pos.z > 1 ){       p.pos.z = 1;  p.prev_pos.z = p.pos.z + vel.z; }
+            else if( p.pos.z < -1 ){ p.pos.z = -1; p.prev_pos.z = p.pos.z + vel.z; }
+
+            if( p.pos.x > 1 ){       p.pos.x = 1;  p.prev_pos.x = p.pos.x + vel.x; }
+            else if( p.pos.x < -1 ){ p.pos.x = -1; p.prev_pos.x = p.pos.x + vel.x; }
+        }
+
+        return this;
+    }
+
+    debug(){
+        App.Debug.reset();
+        let vel = new Vec3();
+        for( let p of verlet.points ){
+            vel.from_sub( p.pos, p.prev_pos ).norm().scale( 0.2 ).add( p.pos );
+            App.Debug.pnt( p.pos, "green", 0.1 );
+            App.Debug.ln( p.pos, vel, "green" );
+
+            
+        }
+
+        App.Debug.box( [-1,0,-1], [1,2,1], "gray" );
+    }
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

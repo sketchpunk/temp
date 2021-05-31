@@ -1,0 +1,431 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }		from "../../fungi/App.js";
+import XhrQueue				from "../../fungi/lib/XhrQueue.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
+
+import PropPanel	        from "../../sage.ui/PropPanelv2.js";
+
+//#####################################################
+App
+    .init()
+    .load_pkg( { name:"fungi.armature", bone_view:false, mat:true } )
+	.set_camera( 20, 5, 1, 0, 1.7, 0 )
+	.task( init )
+	.then();
+
+// https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+// https://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+
+//#####################################################
+
+let MAT;
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+    let e;
+    let [ json, bin ] = await XhrQueue.url( "../../files/models", "boxy.gltf", "boxy.bin" );
+    e = GltfUtil.get_skin_entity( "Test", json, bin, "LowPolySkin" );
+
+    //let tf = e.arm.get_node( "head" ).get_world_transform();
+    let h_face = ( 1.89252 - 1.70836 );
+
+	MAT = App.shader.new_material( "TESTER", {} );
+	e	= Quad( "quad", MAT );
+    e.node
+        .set_pos( [ 0.0, 1.80044, 0.1022 ])
+        .set_scl( h_face );
+
+    //App.render_by( 1, on_render );
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    load_ui();
+    
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"eye_idx",   type:"int", value:0 },
+        { name:"mouth_idx", type:"int", value:0 },
+    ], App.ubo.get_array( "Global", "Model" ) )
+    .set_blend( true )
+	.set_alpha_coverage( true )
+	.set_cullface( false );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec3 frag_cam;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_uv		= a_uv;
+	frag_wpos	= world_pos.xyz;
+	frag_cam	= global.camera_pos;
+	frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position	= global.proj_view * world_pos;
+}`;
+
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+uniform int eye_idx;
+uniform int mouth_idx;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec3 frag_cam;
+in vec2 frag_uv;
+
+//-------------------------
+// OPS
+
+float dot2( in vec2 v ) { return dot(v,v); }
+float ndot( in vec2 a, in vec2 b ) { return a.x*b.x - a.y*b.y; }
+
+float aalias( float s, float len ){
+    float aa = fwidth( len );
+    return 1.0 - smoothstep( s-aa, s+aa, len );
+}
+
+float salias( float s, float len ){
+    return 1.0 - smoothstep( s-0.01, s+0.01, len );
+}
+
+float sdf_union( float d1, float d2 ){ return min(d1,d2); }
+
+float sdf_sub( float d1, float d2 ) {return max(-d1,d2); }
+
+float sdf_inter( float d1, float d2 ){ return max(d1,d2); }
+
+vec2 up_coord( vec2 uv ){
+    vec2 rtn = uv * 2.0 - 1.0; // Remape to -1, 1
+    rtn.y = -rtn.y;            // Flip Y, so positive is up
+    return rtn;
+}
+
+//-------------------------
+// DRAWING
+
+float ring( vec2 coord, float outer, float inner ){ 
+    float radius	= dot( coord, coord );
+    float dxdy 		= fwidth( radius );
+    return	smoothstep( inner - dxdy, inner + dxdy, radius ) - 
+            smoothstep( outer - dxdy, outer + dxdy, radius );
+}
+
+float sdf_circle( vec2 p, float r ){
+    return length(p) - r;
+}
+
+float sdf_ellipse( vec2 p, vec2 ab ){
+    p = abs(p);
+    if( p.x > p.y ){ p = p.yx; ab=ab.yx; }
+    
+    float l = ab.y*ab.y - ab.x*ab.x;
+    float m = ab.x*p.x/l;      float m2 = m*m; 
+    float n = ab.y*p.y/l;      float n2 = n*n; 
+    float c = (m2+n2-1.0)/3.0; float c3 = c*c*c;
+    float q = c3 + m2*n2*2.0;
+    float d = c3 + m2*n2;
+    float g = m + m*n2;
+    float co;
+    if( d < 0.0 ){
+        float h = acos(q/c3)/3.0;
+        float s = cos(h);
+        float t = sin(h)*sqrt(3.0);
+        float rx = sqrt( -c*(s + t + 2.0) + m2 );
+        float ry = sqrt( -c*(s - t + 2.0) + m2 );
+        co = (ry+sign(l)*rx+abs(g)/(rx*ry)- m)/2.0;
+    }else{
+        float h = 2.0*m*n*sqrt( d );
+        float s = sign(q+h)*pow(abs(q+h), 1.0/3.0);
+        float u = sign(q-h)*pow(abs(q-h), 1.0/3.0);
+        float rx = -s - u - c*4.0 + 2.0*m2;
+        float ry = (s - u)*sqrt(3.0);
+        float rm = sqrt( rx*rx + ry*ry );
+        co = (ry/sqrt(rm-rx)+2.0*g/rm-m)/2.0;
+    }
+    vec2 r = ab * vec2(co, sqrt(1.0-co*co));
+    return length(r-p) * sign(p.y-r.y);
+}
+
+float sdf_box( vec2 p, vec2 b ){
+    vec2 d = abs(p)-b;
+    return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+}
+
+float sdf_oriented_box( vec2 p, vec2 a, vec2 b, float th ){
+    float l = length(b-a);
+    vec2  d = (b-a)/l;
+    vec2  q = (p-(a+b)*0.5);
+          q = mat2(d.x,-d.y,d.y,d.x)*q;
+          q = abs(q)-vec2(l,th)*0.5;
+    return length(max(q,0.0)) + min(max(q.x,q.y),0.0);    
+}
+
+float sdf_rounded_x( vec2 p, float w, float r ){
+    p = abs( p );
+    return length( p - min(p.x+p.y,w) * 0.5 ) - r;
+}
+
+float sdf_bobby_cross( vec2 pos, float he ){
+    pos = abs(pos);
+    pos = vec2(abs(pos.x-pos.y),1.0-pos.x-pos.y)/sqrt(2.0);
+
+    float p = (he-pos.y-0.25/he)/(6.0*he);
+    float q = pos.x/(he*he*16.0);
+    float h = q*q - p*p*p;
+    
+    float x;
+    if( h>0.0 ) { float r = sqrt(h); x = pow(q+r,1.0/3.0)-pow(abs(q-r),1.0/3.0)*sign(r-q); }
+    else        { float r = sqrt(p); x = 2.0*r*cos(acos(q/(p*r))/3.0); }
+    x = min(x,sqrt(2.0)/2.0);
+    
+    vec2 z = vec2(x,he*(1.0-2.0*x*x)) - pos;
+    return length(z) * sign(z.y);
+}
+
+float sdf_uneven_capsule( vec2 p, float r1, float r2, float h ){
+    p.x = abs(p.x);
+    float b = (r1-r2)/h;
+    float a = sqrt(1.0-b*b);
+    float k = dot(p,vec2(-b,a));
+    if( k < 0.0 ) return length(p) - r1;
+    if( k > a*h ) return length(p-vec2(0.0,h)) - r2;
+    return dot(p, vec2(a,b) ) - r1;
+}
+
+float sdf_heart( vec2 p ){
+    p.x = abs(p.x);
+    if( p.y+p.x>1.0 ) return sqrt(dot2(p-vec2(0.25,0.75))) - sqrt(2.0)/4.0;
+    return sqrt(min(dot2(p-vec2(0.00,1.00)),
+                    dot2(p-0.5*max(p.x+p.y,0.0)))) * sign(p.x-p.y);
+}
+
+// https://www.shadertoy.com/view/tlSGzG
+float sdf_arc (in vec2 p, in float a0, in float a1, in float r ){
+    float a = mod(atan(p.y, p.x), radians(360.));
+
+    float ap = a - a0;
+    if( ap < 0.0 ) ap += 6.28318530718;
+
+    float a1p = a1 - a0;
+    if( a1p < 0.0 ) a1p += 6.28318530718;
+
+    // is a outside [a0, a1]?
+    // https://math.stackexchange.com/questions/1044905/simple-angle-between-two-angles-of-circle
+    
+    if( ap >= a1p ){
+        // snap to the closest of the two endpoints
+        vec2 q0 = vec2(r * cos(a0), r * sin(a0));
+        vec2 q1 = vec2(r * cos(a1), r * sin(a1));
+        return min(length(p - q0), length(p - q1));
+    }
+
+    return abs( length(p) - r );
+}
+
+float eyes_open( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.1 );
+    float eye   = sdf_ellipse( p, vec2( 0.12, 0.2 ) );
+    return salias( 0.0, eye );
+}
+
+float eyes_half( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.1 );
+    float eye   = sdf_ellipse( p, vec2( 0.12, 0.2 ) );
+    float box   = sdf_box( p - vec2( 0.0, 0.11 ), vec2( 0.2, 0.1 ) ); 
+    return salias( 0.0, sdf_sub( box, eye ) );
+}
+
+float eyes_x( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.1 );
+    float eye   = sdf_rounded_x( p, 0.25, 0.06 );
+    return salias( 0.0, eye );
+}
+
+float eyes_star( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.1 );
+    float eye   = sdf_bobby_cross( p, 0.58 );
+    return salias( 0.0, eye );
+}
+
+float eyes_heart( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.0 );
+    float eye   = sdf_heart( p / 0.35 );
+    return salias( 0.0, eye );
+}
+
+float eyes_angry( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.1 );
+    float eye   = sdf_ellipse( p, vec2( 0.12, 0.2 ) );
+    float box   = sdf_oriented_box( p - vec2(0.0,0.15), vec2(-0.2,-0.15), vec2(0.2,0.15), 0.2 ); 
+    //return salias( 0.0, sdf_union( eye, box ) );
+    return salias( 0.0, sdf_sub( box, eye ) );
+}
+
+float eyes_sad( vec2 uv ){
+    vec2 p      = vec2( abs(uv.x), uv.y ) - vec2( 0.3, 0.1 );
+    float eye   = sdf_ellipse( p, vec2( 0.12, 0.2 ) );
+    float box   = sdf_oriented_box( p - vec2(0.0,0.15), vec2(-0.2,0.15), vec2(0.2,-0.15), 0.2 ); 
+    //return salias( 0.0, sdf_union( eye, box ) );
+    return salias( 0.0, sdf_sub( box, eye ) );
+}
+
+float mouth_smile( vec2 uv ){
+    float f = salias( 0.05, sdf_arc( uv, radians(220.0), radians(320.0), 0.55 ) );
+    return f;
+}
+
+float mouth_hey( vec2 uv ){
+    float f = salias( 0.05, sdf_arc( uv, radians(280.0), radians(320.0), 0.6 ) );
+    return f;
+}
+
+float mouth_frown( vec2 uv ){
+    uv.y += 0.9;
+    float f = salias( 0.05, sdf_arc( uv, radians(50.0), radians(130.0), 0.6 ) );
+    return f;
+}
+
+float mouth_wide( vec2 uv ){
+    uv.y += 0.45;
+    float f = salias( 0.15, sdf_box( uv, vec2(0.35,0.07) ) );
+    return f;
+}
+
+float mouth_flat( vec2 uv ){
+    uv.y += 0.45;
+    float f = salias( 0.05, sdf_box( uv, vec2(0.4,0.005) ) );
+    return f;
+}
+
+float mouth_laugh( vec2 uv ){
+    uv.y += 0.1;
+    float c = sdf_circle( uv, 0.6 );
+    float b = sdf_box( uv - vec2( 0.0, 0.2 ), vec2( 0.7, 0.4 ) ); 
+
+    return salias( 0.0, sdf_sub( b, c ) );
+}
+
+float mouth_oh( vec2 uv ){
+    uv.y += 0.5;
+    float f = sdf_uneven_capsule( uv, 0.16, 0.07, 0.2 );
+    return salias( 0.0, f );
+}
+
+
+//-------------------------
+void main(void){
+    vec2 c_uv = up_coord( frag_uv ); //frag_uv * 2.0 - 1.0;
+    float a   = ring( c_uv, 0.80, 0.7 );
+   
+    if( eye_idx == 0 )      a = max( a, eyes_open( c_uv ) );
+    else if( eye_idx == 1 ) a = max( a, eyes_half( c_uv ) );
+    else if( eye_idx == 2 ) a = max( a, eyes_x( c_uv ) );
+    else if( eye_idx == 3 ) a = max( a, eyes_star( c_uv ) );
+    else if( eye_idx == 4 ) a = max( a, eyes_heart( c_uv ) );
+    else if( eye_idx == 5 ) a = max( a, eyes_angry( c_uv ) );
+    else if( eye_idx == 6 ) a = max( a, eyes_sad( c_uv ) );
+    
+    if( mouth_idx == 0 )      a = max( a, mouth_smile( c_uv ) );
+    else if( mouth_idx == 1 ) a = max( a, mouth_flat( c_uv ) );
+    else if( mouth_idx == 2 ) a = max( a, mouth_frown( c_uv ) );
+    else if( mouth_idx == 3 ) a = max( a, mouth_hey( c_uv ) );
+    else if( mouth_idx == 4 ) a = max( a, mouth_wide( c_uv ) );
+    else if( mouth_idx == 5 ) a = max( a, mouth_laugh( c_uv ) );
+    else if( mouth_idx == 6 ) a = max( a, mouth_oh( c_uv ) );
+    
+	out_color = vec4( vec3(a), a );
+}`;
+
+
+function load_ui(){
+    document.getElementById( "eyesel" ).addEventListener( "change", (e)=>{
+        MAT.set( "eye_idx", e.srcElement.value );
+        App.render();
+    });
+
+    document.getElementById( "mouthsel" ).addEventListener( "change", (e)=>{
+        MAT.set( "mouth_idx", e.srcElement.value );
+        App.render();
+    });
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="250px">
+        <prop-panel label="" foot="Options">
+            <prop-row label="Eyes">
+                <select id="eyesel">
+                    <option value="0">Open</option>
+                    <option value="1">Half</option>
+                    <option value="2">X</option>
+                    <option value="3">Star</option>
+                    <option value="4">Heart</option>
+                    <option value="5">Angry</option>
+                    <option value="6">Sad</option>
+                </select>
+            </prop-row>
+            <prop-row label="Mouth">
+                <select id="mouthsel">
+                    <option value="0">Smile</option>
+                    <option value="1">Flat</option>
+                    <option value="2">Frown</option>
+                    <option value="3">Hey</option>
+                    <option value="4">Wide</option>
+                    <option value="5">Laugh</option>
+                    <option value="6">Oh</option>
+                </select>
+            </prop-row>
+        </prop-panel>
+    </prop-panel-btncont>
+</body></html>

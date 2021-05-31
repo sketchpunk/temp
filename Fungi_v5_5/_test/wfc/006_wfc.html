@@ -1,0 +1,316 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat } from "../../fungi/App.js";
+
+import MarchingCubesGrid 	from "./lib/MarchingCubesGrid.js";
+import TileDictionary       from "./lib/TileDictionary.js"
+import Tiles 				from "./lib/Tiles.js";
+
+import Bitset               from "../../fungi/lib/Bitset.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "KennyUnlit.js" )
+	.set_camera( 0, 20, 15, 0, 1.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let grender;
+let wfc;
+
+async function init(){
+
+    grender = new GridTileRenderer();
+    await grender.load_tiles( Tiles );
+
+    grender.grid.point_state( true, [2,0,2] );
+    grender.draw_debug_grid( false );
+
+    wfc = new Wfc();
+
+    let ary = grender.grid.get_point_cells( [2,0,2] );
+    if( ary ){
+        for( let i of ary ){ wfc.enqueue( i.coord ); }
+    }
+
+    wfc.do_process();
+    
+
+
+
+    //console.log( grender.grid.get_point_cells( 2, 0, 2 ) );
+
+
+    // Find Cell with the lowest entropy, this
+    // Collapse the Cell
+    // Propegate neighbor cells
+    
+    //grender.reset_grid();
+
+    //grender.draw_unique_tiles();
+
+    /*
+    let grid = grender.grid;
+    let td   = grender.tile_dic;
+    let c, bit, pos, list;
+
+    for( let i=0; i < grid.cells.length; i++ ){
+        c   = grid.cells[ i ];
+        bit = grid.get_cell_value( c );
+        if( bit == 0 || bit == 255 ) continue;
+
+        //console.log( "Bit Val", bit );
+
+        list = td.get_bit_tiles( bit );
+        if( !list ){ console.log( "No Tile at bit", bit ); continue; }
+
+        //console.log( "Tile", list[0] );
+
+        pos = grid.get_cell_pos( c.coord ).add( [1, 0, 1] );
+        let idx = list[0]; //list[ list.length-1 ];
+        let e = td.new_tile_entity( idx, "111", pos );
+        //console.log( pos. e );
+    }
+    */
+
+	return true;
+}
+
+//#####################################################
+
+class WfcCell{
+    constructor(){
+        this.entity         = null;
+		this.tiles			= new Bitset();
+		//this.count			= count;
+		this.entropy		= 0;	// Total Entropy of Existing Tiles
+		this.weight 		= 0;	// Total Weight of Existing Tiles.
+		//this.tile_index		= null;		
+		//this.is_collapsed	= false;
+    }
+
+    reset( e, w, bitset ){
+        this.entropy        = e;
+        this.weight         = w;
+        //this.is_collapsed	= false;
+        this.tiles.copy( bs );   
+    }
+}
+
+class GridTileRenderer{
+    constructor(){
+        this.tile_bitset = new Bitset();
+        this.tile_dic    = new TileDictionary();
+        this.grid        = new MarchingCubesGrid( [4,2,4], 2 );
+        this.grid.use_center_offset();
+        
+        // Add custom data to grid cell objects
+        this.grid.cells.forEach( (elm, i, ary)=>{ elm.data = new WfcCell(); } );
+    }
+
+    // #region MISC
+    async load_tiles( t ){
+        let [ json, bin ] = await t.download();
+        this.tile_dic.load_json( t.data, json, bin );
+        this.tile_bitset.on_range( 0, this.tile_dic.total_count()-1 );
+    }
+
+    reset_grid(){
+        let c;
+        for( c of this.grid.cells ){
+            c.data.reset( 
+                this.tile_dic.entropy,
+                this.tile_dic.weight,
+                this.tile_bitset,
+            );
+        }
+    }
+    // #endregion ///////////////////////////////////////////////////
+
+    // #region DEBUG
+    draw_debug_grid( inc_cell=false ){ this.grid.debug( inc_cell ); return this; }
+    draw_unique_tiles(){
+        let t, x, z, cnt = 0,
+            td      = this.tile_dic,
+            div     = 8,
+            c_size  = this.grid.cell_size + 1,
+            x_off   = div * c_size * -0.5;
+    
+        for( let i=0; i < td.tiles.length; i++ ){
+            t = td.tiles[ i ];
+            if( t.clone_of != null ) continue; // ignore cloned tiles
+
+            z = Math.floor( cnt / div );
+            x = cnt % div;
+
+            td.new_tile_entity( i, "test"+1, [ x*c_size+x_off, 0, z*c_size ] );
+            cnt++;
+        }
+        return this;
+    }
+    // #endregion ///////////////////////////////////////////////////
+}
+
+class Wfc{
+    constructor(){
+        this.queue = new Array();
+    }
+
+    enqueue( v ){ this.queue.push( v ); return this; }
+    dequeue(){
+        if( this.queue.length == 0 ) return null;
+        return this.queue.shift();
+    }
+
+    
+    /*
+    user selects a point
+    every cell connected to point gets put on process stack.
+    loop
+        get cell
+
+        loop neighbor cells
+            get cell( dir 
+            if cell has no possible tiles, Return Error
+
+            create a Bit mask of all the tiles possible neighbor's in this direction
+            apply bask to neighbor's possible tiles
+            cell_b.apply_bitmask( mask, this.tile_set );
+
+            if( mask applied ) add cell to queue.
+
+    How does this work?
+    For each cell thats being checked you check its neighbors and limit its possible
+    tiles by whats currently availble at the current tile.
+    */
+
+    do_process(){
+        let coord;
+        while( (coord = wfc.dequeue()) ){
+            console.log( coord );
+        }
+    }
+
+    // Find Which cell has the easiest chance to collapse.
+    find_entropy_cell( cells, tiles ){
+		let i, g, entropy_rnd, 
+			min = Infinity,
+			idx = null;
+
+		for( i=0; i < this.grid.len; i++ ){
+			g = this.grid.cells[ i ];		// Get Grid Item
+			//console.log( "CHECK", g );
+
+			if( g.is_collapsed ) continue;	// Skip any cells that have been collapsed.
+
+			// With many cells having the same low entropy value, use a bit
+			// of randomness to help pick which one to use.
+			entropy_rnd = g.entropy - ( this.rng.next() * 0.001 );
+
+			// Found Cell with the least probability, meaning
+			// the cell that will most likely collapse the easiest.
+			if( entropy_rnd < min ){
+				min = entropy_rnd;
+				idx = i;
+			}
+		}
+		return idx;
+	}
+
+	propagate( start_idx ){
+		let cell_idx_a, cell_idx_b, cell_a, cell_b, dir_i, bit_mask, modified, tile_idx,
+			passes	= 0,
+			stack	= [ start_idx ];
+		let bit, mask = new Bitset();
+
+		while( ((cell_idx_a = stack.pop()) != undefined) && passes < this.propagate_limit ){
+			passes++;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			cell_a = this.grid.cells[ cell_idx_a ];
+			
+			if( cell_a.count == 0 ){ console.log("ERROR - MAIN TILES EMPTY"); return; }
+
+			let tile_ary = cell_a.tiles.get_bit_array();
+			
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Look at the cell's neighbors : Top, Right, Bottom, Left
+			for( dir_i=0; dir_i < 4; dir_i++ ){
+				//-----------------------------------------------------------
+				// Check if there is a cell in this direction
+				cell_idx_b = this.grid.get_neightbor_idx( cell_idx_a, dir_i );
+				if( cell_idx_b == null ){ 
+					continue; 
+                } 
+                
+				//-----------------------------------------------------------
+				// Get the Neighbor Cell
+				cell_b = this.grid.cells[ cell_idx_b ];
+				if( cell_b.count == 0 ){ console.log("---- ERROR - DIRECTION TILE EMPTY"); return; }				
+
+				//-----------------------------------------------------------
+				// Create a Bit mask of all the tiles possible neighbor's in this direction
+				mask.reset();
+				for( tile_idx of tile_ary ){
+					mask.or( this.neighor_set[ tile_idx ][ dir_i ].bit_mask );
+				}
+
+				//-----------------------------------------------------------
+                modified	= cell_b.apply_bitmask( mask, this.tile_set );
+    
+				// If tiles where removed, then we need to filter out
+				// its neighbor's available tiles.
+				if( modified ){
+					stack.push( cell_idx_b );
+				}
+			}
+		}
+    }
+
+
+    collapse( ts, rng ){
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Create a list of available Tile Weights.
+		let tile_idx,
+			weight_ary	= new Array( this.tiles.count ),
+			i			= 0;
+
+		// Use the Bitset Iterator to get all the Bit Indexes that are ON.
+		for( tile_idx of this.tiles ){
+			weight_ary[ i ] = {
+				idx		: tile_idx,
+				weight	: ts.items[ tile_idx ].weight
+			};
+			i++;
+		}
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Since Random Weight is less then Total, this makes sure
+		// that at some point it'll be in the negative as it keeps subtracting
+		// weight before we run out of weights for the process.
+		// Since the random number gives an unpredicted reduction and tiles
+		// are not in order by their weight, its a nice way to randomly
+		// pick something, Larger weighted tiles will have a greater chance of
+		// winning out which is what we'd like to happen.
+		let w, weight_rnd = this.weight * rng.next(); // this weight is Current weight of cell
+
+		for( w of weight_ary ){
+			if( ( weight_rnd -= w.weight ) < 0 ){
+				//console.log("Save tile", w.idx );
+				this.tiles.reset().on( w.idx ); // Leave only 1 bit open, which would allow
+				this.update();					// Update to set this cell as collapsed.
+				return true;
+			}
+		}
+
+		return false;
+	}
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

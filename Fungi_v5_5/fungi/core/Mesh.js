@@ -70,6 +70,7 @@ class MeshFactory{
 		return this;
 	}
 
+	// #region Build By Config
 	from_data( name, vert, vert_comp_len=3, idx=null, norm=null, uv=null, color=null, is_rgba=false, b_idx=null, b_wgt=null, bone_limit=4 ){
 		let mesh	= new Mesh( name ),
 			buf 	= this.buffer.new_array( vert, vert_comp_len, true, true ),
@@ -251,6 +252,7 @@ class MeshFactory{
 
 		return mesh;
 	}
+	// #endregion //////////////////////////////////////////////////
 }
 
 export default MeshFactory;

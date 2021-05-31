@@ -1,0 +1,358 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour, Vec3 } from "../../fungi/App.js";
+import XhrQueue				 from "../../fungi/lib/XhrQueue.js";
+import Quad 				 from "../../fungi/geo/Quad.js";
+
+//#####################################################
+App
+    .init()
+    .load_shaders( "BaseColor.js" )
+    .use_debug()
+	.set_camera( 0, 5, 2.5, 0, 0.6, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let MAT;
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+    init_shader();
+    MAT = App.shader.new_material( "TESTER" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+    let ary = [
+        new Vec3( 0.0, 0.0, 0.0 ),
+        new Vec3( 0.0, 1.0, 0.0 ),
+        new Vec3( 0.5, 2.0, 0.0 ),
+    ];
+
+    new LineMesh().set_vec_array( ary );
+	//let mat = App.shader.new_material( "TESTER", {} );
+	//let e	= Quad( "quad", mat );
+    //e.node.set_pos( 0, 0.6, 0 );
+
+    App.on_render = ()=>{
+        MAT.set( "proj_matrix", App.cam_com.proj );
+        //console.log( App.cam_com.proj );
+    }
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+class LineMesh{
+    constructor(){
+    }
+
+    set_vec_array( ary ){
+        /*
+        let v, c;
+        let pos_ary     = new Array();
+        let counter_ary = new Array();
+        for( let i=0; i < ary.length; i++ ){
+            v = ary[ i ];
+            c = i / ary.length;
+
+            pos_ary.push( v[0], v[1], v[2], v[0], v[1], v[2] );
+            counter_ary.push( c, c );
+
+            App.Debug.pnt( v, "green", 0.1 );
+            console.log( i, c );
+        }
+        */
+
+        //process( pos, cntr );
+        this.process( ary );
+    }
+
+    process( ary ){
+        let cnt    = ary.length;
+        let imax   = cnt - 1;
+        let distance = 0;
+
+        let vert   = new Array();
+        let prev   = new Array();
+        let next   = new Array();
+        let side   = new Array();
+        let width  = new Array();
+        let uv     = new Array();
+        let indice = new Array();
+        let dist   = new Array();
+        let counter = new Array();
+        let v, vv, i, t, idx;
+
+        for( i=0; i < cnt; i++ ){
+            v   = ary[ i ];
+            t   = i / imax;
+            idx = i * 2;
+            
+            App.Debug.pnt( v, "cyan", 0.03 );
+            
+            vert.push( v[0], v[1], v[2], v[0], v[1], v[2] ); // Repeat Vert
+            side.push( 1, -1 );   // Top - Bottom
+            width.push( 1, 1 );   // How Far to move from center
+            uv.push( t, 0, t, 1 ) // To
+            indice.push( idx, idx+1 ); // Triangle Strip is a better mode for this. Makes Indicies easier
+
+            counter.push( i / cnt, i / cnt );
+
+            if( i != 0 ) distance += Vec3.len( v, ary[i-1] );
+            dist.push( distance, distance );
+            
+            // Previous Position
+            if( i != 0 ){
+                vv = ary[ i-1 ];
+                prev.push( vv[0], vv[1], vv[2], vv[0], vv[1], vv[2] );
+            }else if( i == 0 ){
+                vv = ary[ imax ];
+                // Closed Loop Testing, Else previous is itself.
+                if( Vec3.equal( v, vv ) ) prev.push( vv[0], vv[1], vv[2], vv[0], vv[1], vv[2] );
+                else                      prev.push( v[0], v[1], v[2], v[0], v[1], v[2] );
+            }
+
+            // Next Position
+            if( i != imax ){
+                vv = ary[ i+1 ];
+                next.push( vv[0], vv[1], vv[2], vv[0], vv[1], vv[2] );
+            }else if( i == imax ){
+                vv = ary[ 0 ];
+                // Closed Loop Testing, Else next is itself.
+                if( Vec3.equal( v, vv ) ) next.push( vv[0], vv[1], vv[2], vv[0], vv[1], vv[2] );
+                else                      next.push( v[0], v[1], v[2], v[0], v[1], v[2] );
+            }            
+        }
+
+        console.log( "Vert Count", vert.length / 3, ary.length );
+        console.log( "Side Count", side.length );
+        console.log( "Width Count", width.length );
+        console.log( "UV Count", uv.length / 2 );
+        console.log( "Distance cnt", dist.length );
+        console.log( "Indices cnt", indice.length );
+        console.log( indice );
+
+        
+        let mesh = App.mesh.new( "LineMesh" );
+        let buf, config = [];
+
+        buf = App.buffer.new_array( new Float32Array(vert), 3 ),
+        config.push( { buffer: buf, attrib_loc: 0 } );
+        mesh.buffers.set( "vertices", buf );
+
+        buf = App.buffer.new_array( new Float32Array(uv), 2 ),
+        config.push( { buffer: buf, attrib_loc: 1 } );
+        mesh.buffers.set( "uv", buf );
+
+        buf = App.buffer.new_array( new Float32Array(prev), 3 ),
+        config.push( { buffer: buf, attrib_loc: 2 } );
+        mesh.buffers.set( "prev", buf );
+        
+        buf = App.buffer.new_array( new Float32Array(next), 3 ),
+        config.push( { buffer: buf, attrib_loc: 3 } );
+        mesh.buffers.set( "next", buf );
+
+        buf = App.buffer.new_array( new Float32Array(side), 1 ),
+        config.push( { buffer: buf, attrib_loc: 4 } );
+        mesh.buffers.set( "side", buf );
+
+        buf = App.buffer.new_array( new Float32Array(width), 1 ),
+        config.push( { buffer: buf, attrib_loc: 5 } );
+        mesh.buffers.set( "width", buf );
+
+        buf = App.buffer.new_array( new Float32Array(counter), 1 ),
+        config.push( { buffer: buf, attrib_loc: 6 } );
+        mesh.buffers.set( "counter", buf );
+
+        buf = App.buffer.new_array( new Float32Array(dist), 1 ),
+        config.push( { buffer: buf, attrib_loc: 7 } );
+        mesh.buffers.set( "dist", buf );
+
+        mesh.vao			= App.vao.new( config );
+        mesh.element_cnt	= vert.length/3;
+
+        let e = App.mesh_entity( "line", mesh, MAT, App.mesh.TRI_STRIP );
+    
+    }
+
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"proj_matrix",			type:"mat4", value:null },
+	/*	{ name:"glitter_hmap_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_norm_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_mask_tex",	type:"sampler2D", value:"null" },
+		{ name:"scale", type:"vec2", value:new Float32Array([1,1]), }, */
+    ], App.ubo.get_array( "Global", "Model" ) )
+    .set_blend( true )
+	.set_alpha_coverage( true )
+	.set_cullface( false );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3  a_pos;
+layout( location=1 ) in vec2  a_uv;
+layout( location=2 ) in vec3  a_prev;
+layout( location=3 ) in vec3  a_next;
+layout( location=4 ) in float a_side;
+layout( location=5 ) in float a_width;
+layout( location=6 ) in float a_counter;
+layout( location=7 ) in float a_dist;
+
+//-------------------------
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+uniform mat4 proj_matrix;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec3 frag_cam;
+out vec2 frag_uv;
+out float counters;
+out float dist;
+
+//-------------------------
+
+vec2 fix( vec4 i, float aspect ){
+    vec2 res = i.xy / i.w;
+    res.x *= aspect;
+    return res;
+}
+
+void main( void ){
+    gl_PointSize = 10.0;
+    counters = a_counter;
+    dist     = a_dist;
+
+    float ratio = global.screen_size.x / global.screen_size.y;
+
+    mat4 m = global.proj_view * model.view_matrix;
+    vec4 pos  = m * vec4( a_pos, 1.0 );
+    vec4 prev = m * vec4( a_prev, 1.0 );
+    vec4 next = m * vec4( a_next, 1.0 );
+
+    vec2 cpos  = fix( pos, ratio );
+    vec2 pprev = fix( prev, ratio );
+    vec2 pnext = fix( next, ratio );
+
+    float lineWidth = 0.2;
+    float w         = lineWidth; // * a_width;
+    
+    vec2 dir;
+    if( pnext == cpos )      dir = normalize( cpos - pprev );
+    else if( pprev == cpos ) dir = normalize( pnext - cpos );
+    else{
+        vec2 dir1 = normalize( cpos - pprev );
+        vec2 dir2 = normalize( pnext - cpos );
+        dir       = normalize( dir1 + dir2 );
+        
+        //vec2 perp  = vec2( -dir1.y, dir1.x );
+        //vec2 miter = vec2( -dir.y, dir.x );
+        //w          = clamp( w / dot( miter, perp ), 0.0, 4.0 * w );
+    }
+
+    vec4 normal = vec4( -dir.y, dir.x, 0.0, 1.0 );
+    normal.xy  *= 0.5 * w;   // Half Width
+    normal     *= proj_matrix;
+    
+    // If on, lineWidth needs to be in Pixel Size
+    // Else if off, Unit Size
+    float sizeAttenuation = 1.0;
+    if( sizeAttenuation == 0.0 ){
+        normal.xy *= pos.w;
+        normal.xy /= ( vec4( global.screen_size, 0.0, 1.0 ) * proj_matrix ).xy;
+    }
+
+    pos.xy      += normal.xy * a_side;
+    gl_Position  = pos;
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_uv		= a_uv;
+	//frag_wpos	= world_pos.xyz;
+	//frag_cam	= global.camera_pos;
+	//frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//gl_Position	= global.proj_view * world_pos;
+}`;
+
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+//in vec3 frag_wpos;
+//in vec3 frag_norm;
+//in vec3 frag_cam;
+in vec2 frag_uv;
+in float counters;
+in float dist;
+
+const float dashArray   = 0.1;
+const float dashOffset  = 0.0;
+const float dashRatio   = 0.8;
+/*
+'uniform sampler2D map;',
+'uniform sampler2D alphaMap;',
+'uniform float useMap;',
+'uniform float useAlphaMap;',
+'uniform float useDash;',
+'uniform float dashArray;',
+'uniform float dashOffset;',
+'uniform float dashRatio;',
+'uniform float visibility;',
+'uniform float alphaTest;',
+'uniform vec2 repeat;',
+*/
+
+//-------------------------
+void main(void){
+    //vec2 c_uv = up_coord( frag_uv ); //frag_uv * 2.0 - 1.0;
+
+    vec4 c = vec4( 1.0, 0.0, 0.0, 1.0 );
+    
+    //if( useMap == 1. ) c *= texture2D( map, vUV * repeat );
+    //if( useAlphaMap == 1. ) c.a *= texture2D( alphaMap, vUV * repeat ).a;
+    //if( c.a < alphaTest ) discard;
+    //if( useDash == 1. ) c.a *= ceil( mod( counters + dashOffset, dashArray ) - ( dashArray * dashRatio ) );
+    
+    //c.a *= ceil( mod( counters + dashOffset, dashArray ) - ( dashArray * dashRatio ) );
+    c.a = step( 0.5, fract( dist / 0.1 ) );
+
+    out_color = c;
+
+    //out_color.a *= step( vCounters, visibility);
+
+	//out_color = vec4( 1.0, 0.0, 0.0, 1.0 );
+}`;
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

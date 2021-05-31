@@ -1,0 +1,129 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform, Colour } from "./fungi/App.js";
+
+/*
+Notes:
+
+So our objective is to create a cube with rounded edges. So instead of trying to build
+our whole cube then trying to round its edges, we're going to create just a single side.
+Then we're going to curve its edges just right so that all we'll need to do is duplicate
+the plane and rotate it to fix the remaining 5 faces. Plus, we want to built our plane as
+a grid since it makes it much easier to create triangle indices and uv coords.
+
+So the first thing we are going to do is create a Grid where all its points are pushed
+into the 4 corners, which results in something that looks like 4 small grids disconnected
+from each other.
+
+To try to do things in a more mathy way, We create an array that creates a pattern like so
+0, -1, 2, -N, N, 2, 1, 0
+which is the total division of the edge ( edge + 1 ) * 2. Its only times 2 is because we 
+want to be able to loop both sides of the row in one interation in both the X and Z direction
+
+We use this as a way to factor how much distance to move away from the edge of the plane.
+The amount of distance we want to travel is the Radius of our rounded corners. So if we want
+our cube to be 2 units in length with a rounded edge of 0.5 units. That means our points will be
+located between 2 and 1.5. And our division is how many points we want to create between those
+two positions.
+*/
+
+
+//#####################################################
+App
+	.init( true )
+    .use_debug()
+	.set_camera( 0, 20, 5, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let geo = RoundedCube();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    let v;
+    for( v of vec3_iter( geo.verts ) ){
+        App.Debug.pnt( v, "green" );
+    }
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+
+function RoundedCube( sx=2, sy=2, sz=2, r=0.5, div=4 ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let geo = edge_grid( sx, sy, sz, r, div );
+
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return geo;
+}
+
+// Size X,Y,Z, Radius, Cell Count ( How many divisions our edges should have)
+function edge_grid( sx=2, sy=2, sz=2, r=0.5, cells=4 ){
+    let mx      = sx / 2,
+        my      = sy / 2,    
+        mz      = sz / 2,
+        steps   = ( cells + 1 ) * 2,
+        i, j, t, s;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create Step Pattern, 0, -1, -2, -n, n, 2, 1, 0
+    let step_ary = new Array( steps );
+    for( i=0; i <= cells; i++ ){
+        step_ary[ steps-i-1 ] = i;  // Positive Side
+        step_ary[ i ]         = -i; // Negative Side
+    }
+
+    console.log( step_ary );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let v     = new Vec3( 0, 0, 0 );
+    let verts = new Array();
+
+    // Rows
+    for( j=0; j < steps; j++ ){
+        t       = step_ary[ j ] / cells;      // Compute Lerp Time
+        s       = ( j <= cells )? -1 : 1;     // Flip Signs halfway
+        v[ 2 ]  = mz * s + r * -t;            // From out > in, subtract Radius from Max Size
+
+        // Columns
+        for( i=0; i < steps; i++ ){
+            t       = step_ary[ i ] / cells;  // Compute Lerp Time
+            s       = ( i <= cells )? -1 : 1; // Flip Signs halfway
+            v[ 0 ]  = mx * s + r * -t;        // From out > in, subtract Radius from Max Size
+            v.push_to( verts );               // Save to Array   
+        }
+    }
+
+    return { verts };
+}
+
+
+function vec3_iter( buf ){
+    let i       = 0;
+    let result  = { value:new Vec3(), done:false };
+    let next    = ()=>{
+        if( i > buf.length ) result.done = true;
+        else{
+            result.value[ 0 ] = buf[ i++ ];
+            result.value[ 1 ] = buf[ i++ ];
+            result.value[ 2 ] = buf[ i++ ];
+        }
+        return result;
+    };
+
+    return { 
+        [Symbol.iterator](){ 
+            return { next }; 
+        } 
+    };
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

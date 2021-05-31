@@ -1,0 +1,472 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }		from "../../fungi/App.js";
+import XhrQueue				from "../../fungi/lib/XhrQueue.js";
+import PropPanel	        from "../../sage.ui/PropPanelv2.js";
+
+//#####################################################
+App
+    .init()
+    .set_camera( 20, 5, 3, 0, 0.5, 0 )
+	.task( init )
+    .then();
+    
+//#####################################################
+
+let MAT_SS, MAT_WS;
+
+function ImgBlobPromise( blob ){
+    let img 		= new Image();
+    img.crossOrigin	= "anonymous";
+    img.src 		= window.URL.createObjectURL( blob );
+    return new Promise((resolve, reject)=>{ 
+        img.onload	= ()=>resolve( img );
+        img.onerror = reject;
+    });    
+}
+
+async function init(){
+    // LOAD FONT CONFIG AND IMAGE
+    let url  = "../../files/fonts/"
+    let pAry = [
+        fetch( url + "Roboto_df.txt" ).then( r=>r.text() ),
+        fetch( url + "Roboto_df.png" ).then( r=>r.blob() ).then( b=>ImgBlobPromise( b ) )
+    ];
+    let [ fnt, img ] = await Promise.all( pAry );
+
+    // CREATE FONT OBJECT
+    let font = new Font( fnt, img );
+
+    // CREAT MESH WRAPPER ( Maybe inheritance of mesh would better )
+    let sdf_ss  = new SDFText( font, 10 );
+    sdf_ss.add_text( "{Screen Space}" );
+    sdf_ss.update();
+
+    let sdf_ws  = new SDFText( font, 10 );
+    sdf_ws.add_text( "{World Space}" );
+    sdf_ws.update();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Load Mesh
+    let e;
+
+    // --------------------------
+    MAT_SS = App.shader.new_material( "TESTER", { 
+        fntAtlas  : font.texture, 
+        thickness : 0.55,
+        baseSize  : font.base, 
+        inScreen  : 1,
+    });
+    e   = App.mesh_entity( "SSText", sdf_ss.mesh, MAT_SS );
+    e.node.set_scl( 1.0 );
+    e.node.set_pos( 10, 30, 0 );
+
+    // --------------------------
+    MAT_WS = App.shader.new_material( "TESTER", { 
+        fntAtlas : font.texture, 
+        baseSize : font.base, 
+        inScreen : 0,
+        color    : "cyan",
+    });
+    e   = App.mesh_entity( "WSText", sdf_ws.mesh, MAT_WS );
+    e.node.set_pos( -1.5, 0.1, 0.0 );
+    e.node.set_scl( 0.4 );
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    load_ui();
+    
+	return true;
+}
+
+//#####################################################
+
+function line_reader( txt ){
+	let ppos = 0, npos;
+	return ()=>{
+		npos = txt.indexOf( "\n", ppos );
+		if( npos < 0 ) return null;
+
+		let line = txt.substring( ppos, npos );
+		ppos = npos+1;
+		return line;
+	}
+}
+
+// Data of Each Character in the Font Atlas
+class AtlasChar{
+    code    = 0;
+    x       = 0;
+	y       = 0;
+	w       = 0;
+	h       = 0;
+	advance = 0;
+	yoffset = 0;
+	xoffset = 0;
+    uv      = [ 0, 0, 0, 0 ]; // Min, Max
+}
+
+// Contain all Data in relation to Font
+class Font{
+    chars		    = new Map();
+    texture         = null;
+    name            = "";
+	base 	 	    = 0;        // Overall Size of the Character, Kinda like a Bounding Box
+	lineHeight	    = 0;
+	scaleWidth		= 0;        // Actually the Pixel Width of the Texture
+	scaleHeight		= 0;        // And Pixel Height
+	padding         = null;
+	paddingWidth	= 0;
+	paddingHeight	= 0;
+    size 		    = 0;
+    
+    constructor( config, img ){
+        this.parse_text( config );
+        this.texture = App.texture.new( "Font_" + this.name, img );
+    }
+
+    get_char( code ){ return this.chars.get( code ); }
+
+	compute(){
+		//char id=65   x=176     y=228     width=45     height=51     xoffset=-2     yoffset=20    xadvance=46     page=0  chnl=0 
+		//this.line_height_px = this.line_height - this.padding_h;
+		/*
+		uv.x = 176 / App.gl.width;
+		uv.y = 228 / App.gl.height;
+		*/
+		// protected static final double LINE_HEIGHT = 0.03f;
+		// int lineHeightPixels = getValueOfVariable("lineHeight") - paddingHeight;
+		// verticalPerPixelSize = TextMeshCreator.LINE_HEIGHT / (double) lineHeightPixels;
+		// horizontalPerPixelSize = verticalPerPixelSize / aspectRatio;
+		//double quadWidth = width * horizontalPerPixelSize;
+		//double quadHeight = height * verticalPerPixelSize;
+	}
+
+	parse_text( txt ){
+		let line, pos, word, o, ch,
+			info 	= [ "size", "padding", "face" ],
+			common	= [ "lineHeight", "base", "scaleW", "scaleH" ],
+			chars	= [ "id", "x", "y", "width", "height", "xoffset", "yoffset", "xadvance" ],
+			reader	= line_reader( txt );
+
+		let parse_line = ( line, keys )=>{
+			let k, pos, o = {};
+			for( k of keys ){
+				pos = line.indexOf( k+"=" );
+				if( pos != -1 ){
+					o[k] = line.substring( pos + k.length + 1, line.indexOf( " ", pos ) ).trim();
+				}
+			}
+			return o;
+		};
+		
+		while( (line = reader()) != null ){
+			pos  = line.indexOf( " " );
+			word = line.substring( 0, pos );
+
+			switch( word ){
+                //----------------------------------------------
+				case "info":
+                    o                   = parse_line( line, info );
+                    this.name           = o.face;
+                    this.size			= parseInt( o.size );
+                    this.padding		= o.padding.split( "," );
+					this.padding[ 0 ]	= parseInt( this.padding[ 0 ] );
+					this.padding[ 1 ]	= parseInt( this.padding[ 1 ] );
+					this.padding[ 2 ]	= parseInt( this.padding[ 2 ] );
+					this.padding[ 3 ]	= parseInt( this.padding[ 3 ] );
+					this.paddingWidth   = this.padding[ 3 ] + this.padding[ 1 ];
+                    this.paddingHeight  = this.padding[ 0 ] + this.padding[ 2 ];
+                    //console.log( "Info", o );
+                break;
+                
+                //----------------------------------------------
+				case "common":
+					o                = parse_line( line, common );
+                    this.base        = parseInt( o.base );
+                    this.lineHeight  = parseInt( o.lineHeight );
+					this.scaleWidth  = parseInt( o.scaleW );
+					this.scaleHeight = parseInt( o.scaleH );
+					//console.log( "Common", o );
+                break;
+
+                //----------------------------------------------
+				case "char":
+                    o	       = parse_line( line, chars );
+                    ch         = new AtlasChar();
+                    ch.x       = parseInt( o.x );
+					ch.y       = parseInt( o.y );
+					ch.w       = parseInt( o.width );
+					ch.h       = parseInt( o.height );
+					ch.advance = parseInt( o.xadvance );
+					ch.yoffset = parseInt( o.yoffset );
+                    ch.xoffset = parseInt( o.xoffset );
+                    ch.code    = parseInt( o.id );
+
+					ch.uv[ 0 ] = ch.x / this.scaleWidth;
+					ch.uv[ 1 ] = ch.y / this.scaleHeight;
+					ch.uv[ 2 ] = ch.x / this.scaleWidth  + ch.w / this.scaleWidth;
+					ch.uv[ 3 ] = ch.y / this.scaleHeight + ch.h / this.scaleHeight;
+
+                    //console.log( "Char", o );
+					this.chars.set( ch.code, ch );
+				break;
+			}
+		}
+	}
+}
+
+// Wraper of a Mesh object, makes it Dynamic
+class SDFText{
+    font   = null;
+    ipos   = new Array(); // Vec3
+    iuv    = new Array(); // Vec4
+    isize  = new Array(); // Vec2
+    mesh   = null;
+    count  = 0;
+
+	constructor( fnt, inital_cnt = 10 ){
+        this.font = fnt;
+        this.setup_buffers( inital_cnt );
+    }
+
+	setup_buffers( inital_cnt=10 ){
+        let idx  = new Uint16Array( [ 0,1,2, 2,3,0 ] );
+        let uv   = new Float32Array( [ 0,0,  0,1,  1,1,  1,0 ] );
+        let vert = new Float32Array( [
+            -0.5,  0.5, 0.0,
+            -0.5, -0.5, 0.0,
+             0.5, -0.5, 0.0,
+             0.5,  0.5, 0.0,
+        ]);
+
+        let buf_idx   = App.buffer.new_element( idx );
+        let buf_vert  = App.buffer.new_array( vert, 3 );
+        let buf_uv    = App.buffer.new_array( uv, 2 );
+        let buf_ipos  = App.buffer.new_empty_array( inital_cnt * 3 * 4, false, true, 3 );
+        let buf_iuv   = App.buffer.new_empty_array( inital_cnt * 4 * 4, false, true, 4 );
+        let buf_isize = App.buffer.new_empty_array( inital_cnt * 2 * 4, false, true, 2 );
+
+        let config    = [
+            { name: "indices",  buffer: buf_idx },
+            { name: "vertices", buffer: buf_vert,  attrib_loc:0, size:3, },
+            { name: "uv",       buffer: buf_uv,    attrib_loc:2, size:2, },
+            { name: "ipos",     buffer: buf_ipos,  attrib_loc:6, size:3, instanced:true },
+            { name: "iuv",      buffer: buf_iuv,   attrib_loc:7, size:4, instanced:true },
+            { name: "isize",    buffer: buf_isize, attrib_loc:8, size:2, instanced:true },
+        ];
+
+        this.mesh = App.mesh.from_buffer_config( config, "SDFText", idx.length, 0 );
+		return this;
+	}
+
+	add_text( txt ){
+		let char,
+            cursor = 0,
+            f      = this.font;
+
+		for( let i=0; i < txt.length; i++ ){
+            char = f.get_char( txt.charCodeAt( i ) );
+
+            //----------------------------------------
+            this.ipos.push(
+                cursor + char.xoffset + ( char.w - f.paddingWidth ) * 0.5,
+                f.base - char.h * 0.5 - char.yoffset,
+                0
+            );
+
+            this.iuv.push( char.uv[ 0 ], char.uv[ 1 ], char.uv[ 2 ], char.uv[ 3 ] )
+            this.isize.push( char.w, char.h );
+
+            //----------------------------------------
+            cursor += char.advance - f.paddingWidth;
+            this.count += 1;
+        }
+        
+        return this;
+	}
+
+	update(){
+        let m = this.mesh;
+        m.instance_cnt = this.count;
+
+        if( this.count > 0 ){
+            var buf;
+
+            buf = m.buffers.get( "ipos" );
+            App.buffer.update_data( buf, new Float32Array( this.ipos ) );
+            
+            buf = m.buffers.get( "iuv" );
+            App.buffer.update_data( buf, new Float32Array( this.iuv ) );
+
+            buf = m.buffers.get( "isize" );
+            App.buffer.update_data( buf, new Float32Array( this.isize ) );
+        }
+
+		return this;
+	}
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"fntAtlas",    type:"sampler2D", value:null },
+        { name:"color",       type:"rgb",       value:"green" },
+        { name:"thickness",   type:"float",     value:0.5 },
+        { name:"baseSize",    type:"float",     value:50 },
+        { name:"inScreen",    type:"float",     value:1 },
+        { name:"borderWidth", type:"float",     value:0.0 },
+        { name:"borderColor", type:"rgb",       value:"red" },
+    ], App.ubo.get_array( "Global", "Model" ) )
+    .set_blend( true )
+	.set_alpha_coverage( true )
+	.set_cullface( false );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;   // Quad Shape Position
+layout(location=2) in vec2 a_uv;    // Quad Shape UV
+layout(location=6) in vec3 i_pos;   // Position to Move Quad
+layout(location=7) in vec4 i_uv;    // XY = Min UV Pos, ZW = Max UV Pos
+layout(location=8) in vec2 i_size;  // Size of Quad
+
+//-------------------------
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model; 
+
+uniform float baseSize; // Base Size of char for WorldSpace Math
+uniform float inScreen; // Using Screen Space Math
+
+//-------------------------
+
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+    vec4 w_pos    = vec4( a_pos, 1.0 );
+    vec2 px_scale = 1.0 / global.screen_size;
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Set UV Atlas Range
+    vec2 uv_min = i_uv.xy;  // UVs are compressed into a Vec4...
+    vec2 uv_max = i_uv.zw;  // Break apart to make it easier to use.
+    frag_uv     = ( 1.0 - a_uv ) * uv_min + a_uv * uv_max; // Lerp Between Min and Max FontUV using QuadUV as T
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+    // Size & Position
+    if( inScreen != 0.0 ){ // SCREEN SPACE
+        // ----------------------------
+        // Pull Scale out of Model Matrix
+        vec2 scale = vec2(
+            model.view_matrix[ 0 ][ 0 ],
+            model.view_matrix[ 1 ][ 1 ]
+        );
+
+        // ----------------------------
+        // Pull Position out of Model Matrix
+        // Remap Coord Space so 0,0 is Top Left Corners
+        vec2 offset = model.view_matrix[ 3 ].xy;
+        offset.x    = offset.x / global.screen_size.x * 2.0 - 1.0;
+        offset.y    = ( 1.0 - offset.y / global.screen_size.y ) * 2.0 - 1.0;
+
+        // ----------------------------
+        w_pos.xy *= i_size   * px_scale * scale; // Scale the Size of Font Character
+        w_pos.xy += i_pos.xy * px_scale * scale; // Move it to Position
+        w_pos.xy += offset;
+    
+    // WORLD SPACE
+    }else{
+        w_pos.xy *= i_size   / baseSize;         // Scale the Size of Font Character
+        w_pos.xy += i_pos.xy / baseSize;         // Move it to Position
+        w_pos     = global.proj_view * model.view_matrix * w_pos;
+    };
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+    gl_Position	= w_pos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+uniform sampler2D fntAtlas;
+uniform vec3      color;
+uniform float     thickness;
+uniform float     borderWidth;
+uniform vec3      borderColor;
+
+//-------------------------
+
+in vec2 frag_uv;
+
+//-------------------------
+void main(void){
+	vec4 fnt = texture( fntAtlas, frag_uv ); // a = Distance
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    float edge     = fwidth( fnt.a ); 
+    float distance = 1.0 - fnt.a;
+    float alpha    = 1.0 - smoothstep( thickness-edge, thickness+edge, distance );
+    out_color      = vec4( color, alpha );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if( borderWidth > 0.0 ){
+        // NOTE: Custom Edge can create a glow effect over using fwidth
+
+        float b_alpha     = 1.0 - smoothstep( borderWidth-edge, borderWidth+edge, distance );
+        float blend_alpha = alpha + ( 1.0 - alpha ) * b_alpha;
+
+        out_color.rgb     = mix( borderColor, out_color.rgb, alpha / blend_alpha );
+        out_color.a       = blend_alpha;
+    }  
+}`;
+
+//#####################################################
+
+function load_ui(){
+    document.getElementById( "borderwidth" ).addEventListener( "input", (e)=>{
+        MAT_WS.set( "borderWidth", e.detail.value );
+        MAT_SS.set( "borderWidth", e.detail.value );
+        App.render();
+    });
+
+    document.getElementById( "thickness" ).addEventListener( "input", (e)=>{
+        MAT_WS.set( "thickness", e.detail.value );
+        MAT_SS.set( "thickness", e.detail.value );
+        App.render();
+    });
+}
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="300px">
+        <prop-panel label="" foot="Options">
+            <prop-row label="Thickness">
+                <slide-input id="thickness" min="0" max="1" value="0.5"></slide-input>
+            </prop-row>
+            <prop-row label="Border">
+                <slide-input id="borderwidth" min="0" max="1" value="0"></slide-input>
+            </prop-row>
+        </prop-panel>
+    </prop-panel-btncont>
+    
+</body></html>

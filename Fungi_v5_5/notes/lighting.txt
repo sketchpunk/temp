@@ -3,3 +3,15 @@ https://github.com/spite/spherical-environment-mapping
 
 
 https://github.com/spite/THREE.EquirectangularToCubemap turn sphere texture into a Cube Map
+
+
+https://github.com/glslify/glsl-diffuse-oren-nayar  Lighting Model that uses Roughness
+https://github.com/glslify/glsl-specular-cook-torrance Lighting Model with Roughness and Fresnel
+https://github.com/glslify/glsl-ggx  Another Cool Lighting Model
+https://github.com/glslify/glsl-specular-blinn-phong
+https://github.com/glslify/glsl-specular-phong
+https://github.com/glslify/glsl-specular-beckmann
+https://github.com/glslify/glsl-specular-gaussian
+https://github.com/glslify/glsl-diffuse-lambert
+
+https://github.com/glslify/glsl-aastep anti-alias

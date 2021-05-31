@@ -1,22 +1,32 @@
-import App, { Vec3 } from "../../../fungi/App.js";
+import App, { Vec3 }    from "../../../fungi/App.js";
+import MarchingCubes    from "./MarchingCubes.js";
 
 class Point{
-    constructor( p ){
+    constructor( p, idx ){
+        this.idx     = idx;
         this.pos     = new Vec3( p );
         this.enabled = false;
+        this.cells   = new Array();
     }
+
+    add_cell( i ){ this.cells.push( i ); }
 }
 
 class Cell{
-    constructor(){
-        this.enabled = false;
-        this.corners = null;
+    constructor( x,y,z, idx ){
+        this.idx     = idx;
+        this.enabled = false;   // Is sell active
+        this.corners = null;    // Array of Index to Points grid
+        this.data    = null;    // Random Data
+        this.coord   = [x,y,z];
     }
 }
 
 class MarchingCubesGrid{
+    // #region MAIN
     constructor( cellCnt=[3,3,3], cellSize=2 ){
         this.cell_cnt   = new Vec3( cellCnt );
+
         this.cell_size  = cellSize;
         this.points     = null;
         this.cells      = null;
@@ -29,14 +39,9 @@ class MarchingCubesGrid{
 
         this.gen_grid();
     }
+    // #endregion ///////////////////////////////////////////////
 
-    use_center_offset(){
-        this.offset_pos[ 0 ] = this.cell_cnt[ 0 ] * this.cell_size * -0.5;
-        this.offset_pos[ 2 ] = this.cell_cnt[ 2 ] * this.cell_size * -0.5;
-        this.offset_pos[ 1 ] = 0;
-        return this
-    }
-
+    // #region CORE
     gen_grid(){
         let x,y,z,v = new Vec3();
         let i = 0;
@@ -52,7 +57,8 @@ class MarchingCubesGrid{
         for( y=0; y <= this.cell_cnt.y; y++ ){          v.y = y * this.cell_size;
             for( z=0; z <= this.cell_cnt.z; z++ ){      v.z = z * this.cell_size;
                 for( x=0; x <= this.cell_cnt.x; x++ ){  v.x = x * this.cell_size;
-                    this.points[ i++ ] = new Point( v );
+                    this.points[ i ] = new Point( v, i );
+                    i++;
                 }
             }
         }
@@ -77,32 +83,33 @@ class MarchingCubesGrid{
                     // Create Cell and Save the points as cornerss
                     // Doing this to save time from computing the corners when 
                     // dealing ith operations
-                    c         = new Cell();
+                    c         = new Cell( x, y, z, i );
                     c.corners = [ p1, p2, p3, p4,
                         p1 + this.l_pnt_cnt,
                         p2 + this.l_pnt_cnt,
                         p3 + this.l_pnt_cnt,
                         p4 + this.l_pnt_cnt,
                     ];
+
+                    // Save Cell Reference to each point.
+                    c.corners.forEach( e=>this.points[ e ].add_cell( i ) );
                     this.cells[ i ] = c;
                 }
             }
         }
     }
-    
-    is_coord_valid( x,y,z ){
-        if( x instanceof Float32Array || Array.isArray( x ) ){ y = x[1]; z = x[2]; x = x[0]; }
-        return (this._coord_to_idx( x,y,z ) != null);
-    }
-    _coord_to_idx( x, y, z ){
-        if( x < 0 || y < 0 || z < 0 ||
-            x >= this.cell_cnt.x ||
-            y >= this.cell_cnt.y ||
-            z >= this.cell_cnt.z ) return null;
 
-        return x + z * this.cell_cnt.x + y * ( this.cell_cnt.x * this.cell_cnt.z );
+    // Setup offset so grid's center is at origin.
+    use_center_offset(){
+        this.offset_pos[ 0 ] = this.cell_cnt[ 0 ] * this.cell_size * -0.5;
+        this.offset_pos[ 2 ] = this.cell_cnt[ 2 ] * this.cell_size * -0.5;
+        this.offset_pos[ 1 ] = 0;
+        return this
     }
+    // #endregion ///////////////////////////////////////////////
 
+    // #region CELL METHODS
+    // Get Cell Object by Coordnates
     get_cell( x, y, z ){
         if( x instanceof Float32Array || Array.isArray( x ) ){ y = x[1]; z = x[2]; x = x[0]; }
 
@@ -112,15 +119,15 @@ class MarchingCubesGrid{
         return this.cells[ i ];
     }
 
+    // Get the position of the lower top-left corner
     get_cell_pos( x, y, z ){
-        if( x instanceof Float32Array || Array.isArray( x ) ){ y = x[1]; z = x[2]; x = x[0]; }
-
         let c = this.get_cell( x, y, z );
         if( !c ) return null;
 
         return new Vec3( x, y, z ).scale( this.cell_size ).add( this.offset_pos );
     }
 
+    // Enable Cell and all its Points
     enable_cell( x, y, z ){
         let c = this.get_cell( x, y, z );
         if( c == null ) return false;
@@ -132,17 +139,11 @@ class MarchingCubesGrid{
         return this;
     }
 
+    // Test if a cell is set to enabled
     is_cell_enabled( x, y, z ){
         let c = this.get_cell( x, y, z );
         if( c == null ) return false;
         return c.enabled;
-    }
-
-    get_bounds(){ 
-        return [ 
-            Vec3.add( this.points[0].pos, this.offset_pos ), 
-            Vec3.add( this.points[this.points.length-1].pos, this.offset_pos ), 
-        ]; 
     }
 
     get_cell_bound( x, y, z, out=null ){
@@ -163,6 +164,119 @@ class MarchingCubesGrid{
         ];
     }
 
+    // Get the bit value of all the corners
+    get_cell_value( c ){
+        let cp, bit = 0;
+        for( let i=0; i < 8; i++ ){
+            cp = this.points[ c.corners[ i ] ];                    // Corner Position    
+            if( cp.enabled ) bit += MarchingCubes.corner_bit[ i ]; // If on, Add its Bit Value
+        }
+        return bit;
+    }
+    // #endregion ///////////////////////////////////////////////
+    
+    // #region POINTS
+    get_point( x, y, z ){
+        if( x instanceof Float32Array || Array.isArray( x ) ){ y = x[1]; z = x[2]; x = x[0]; }
+
+        let i = this._coord_to_point_idx( x, y, z );
+        if( i == null || i >= this.points.length ) return null;
+
+        return this.points[ i ];
+    }
+    
+    get_point_cells( x, y, z ){
+        let p = this.get_point( x, y, z );
+        if( !p || p.cells.length == 0 ) return null;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let i,out = new Array();
+        for( i of p.cells ) out.push( this.cells[ i ] );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        return out;
+    }
+
+    point_state( b, x, y, z ){
+        let p = this.get_point( x, y, z );
+        if( !p ) return this;
+        p.enabled = b;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Set the connected cells as Enabled/Disabled.
+        let i, c;
+        for( i of p.cells ){
+            c = this.cells[ i ];
+            c.enabled = ( this.get_cell_value( c ) != 0 );
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        return this;
+    }
+    // #endregion ///////////////////////////////////////////////
+
+    // #region COORDNATES
+    is_coord_valid( x,y,z ){
+        if( x instanceof Float32Array || Array.isArray( x ) ){ y = x[1]; z = x[2]; x = x[0]; }
+        return (this._coord_to_idx( x,y,z ) != null);
+    }
+
+    _coord_to_idx( x, y, z ){
+        if( x < 0 || y < 0 || z < 0 ||
+            x >= this.cell_cnt.x ||
+            y >= this.cell_cnt.y ||
+            z >= this.cell_cnt.z ) return null;
+
+        return x + z * this.cell_cnt.x + y * ( this.cell_cnt.x * this.cell_cnt.z );
+    }
+
+    _coord_to_point_idx( x, y, z ){
+        if( x < 0 || y < 0 || z < 0 ||
+            x >= this.x_pnt_cnt ||
+            y >= this.y_pnt_cnt  ||
+            z >= this.z_pnt_cnt ) return null;
+
+        return x + z * this.x_pnt_cnt + y * this.l_pnt_cnt;
+    }
+
+    idx_to_cell_coord( idx, out=null ){
+        let xz  = ( this.cell_cnt.x * this.cell_cnt.z );
+        let y   = Math.floor( idx / xz );
+        let x   = idx - ( xz * y );
+        let z   = Math.floor( x / this.cell_cnt.z );
+        x       -= z * this.cell_cnt.x;
+
+        if( !out ) return[ x, y, z ];
+        out[ 0 ] = x;
+        out[ 1 ] = y;
+        out[ 1 ] = z;
+        return out;
+    }
+
+    idx_to_point_coord( idx, out=null ){
+        let y   = Math.floor( idx / this.l_pnt_cnt );
+        let x   = idx - ( this.l_pnt_cnt * y );
+        let z   = Math.floor( x / this.z_pnt_cnt );
+        x       -= z * this.x_pnt_cnt;
+
+        if( !out ) return[ x, y, z ];
+        out[ 0 ] = x;
+        out[ 1 ] = y;
+        out[ 1 ] = z;
+        return out;
+    }
+    // #endregion ///////////////////////////////////////////////
+    
+    // #region GETTERS / SETTERS
+    get_bounds(){ 
+        return [ 
+            Vec3.add( this.points[0].pos, this.offset_pos ), 
+            Vec3.add( this.points[this.points.length-1].pos, this.offset_pos ), 
+        ]; 
+    }
+    // #endregion ///////////////////////////////////////////////
+
+    // #region MISC
     debug( inc_cell=true ){
         let o, col, a = new Vec3();
         let opos = this.offset_pos;
@@ -183,6 +297,7 @@ class MarchingCubesGrid{
             }
         }
     }
+    // #endregion ///////////////////////////////////////////////
 }
 
 

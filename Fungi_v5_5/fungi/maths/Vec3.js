@@ -492,6 +492,8 @@ class Vec3 extends Float32Array{
 			return out;
 		}
 
+		static equal( a, b ){ return ( a[0] == b[0] && a[1] == b[1] && a[2] == b[2] ); }
+
 		//-------------------------------------------
 
 		static norm( v ){ return new Vec3().from_norm( v ); }
@@ -685,6 +687,12 @@ class VRot90{
 	static yn2( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = -x; o[1] = y; o[2] = -z; return o; }		// -xy-z rot y-180
 	// #endregion
 }
+
+/*
+0,1,2
+-2,1,0  yp -zyx
+1,2,0	zp y-xz   yzx
+*/
 
 //########################################################################
 export default Vec3;

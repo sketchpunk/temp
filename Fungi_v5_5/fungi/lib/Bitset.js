@@ -43,10 +43,12 @@ class Bitset{
 		}
 	
 		copy( bs ){
-			let a_len = this.bits.length,
-				b_len = this.bits.length,
+			let b_len   = bs.bits.length;
+            this._resize( b_len );
+
+			let a_len   = this.bits.length,
 				max_len = Math.max( a_len, b_len );
-	
+
 			for( let i=0; i < max_len; i++ ){
 				if( i < a_len && i < b_len )	this.bits[ i ] = bs.bits[ i ];
 				else if( i < a_len )			this.bits[ i ] = 0;
@@ -188,19 +190,43 @@ class Bitset{
 		}
 
 		on_range( ai, bi ){
-			// TODO, This only works for a single UINT Range Set, Fix to handle more then 32
-			let zi, uint = new Uint32Array( 3 );		// Uint shifting only works if using array.
+			this._resize_idx( bi );	// May need to resize bits
 
-			//ai = 0; bi = 19;
-			//console.log( "range", ai, bi );
-			
-			zi			= 32 - bi - 1; 					// Get Second Shifting
-			uint[ 0 ]	= ( UINT_MAX >>> ai) << ai;		// Clear out all bits before a
-			uint[ 1 ]	= ( UINT_MAX << zi) >>> zi;		// clear out all bits before b
-			uint[ 2 ]	= uint[ 0 ] & uint[ 1 ];		// Get only when both bits are 1
-			//console.log( UINT_MAX, "a", uint[ 0 ], "b", uint[ 1 ], "c", uint[ 2 ] );
+			let zi, uint = new Uint32Array( 3 ); // Uint shifting only works if using array.
 
-			this.bits[ 0 ] = uint[ 2 ];
+			let istart = ai >>> IDX_BIT;
+			let iend   = bi >>> IDX_BIT;
+			let apos   = ai;
+			let bpos   = Math.min( 32 * (istart+1) - 1, bi );
+
+			let i, lai, lbi, start_bit;
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			for( i=istart; i <= iend; i++ ){
+				start_bit = i*32;		    // Starting Bit Index for Chunk ( b = (i+1)*32-1 for endbit)
+				lai       = apos-start_bit;	// Local Indices in Chunk
+				lbi       = bpos-start_bit;
+                
+                //-------------------------------
+				zi        = 32 - lbi - 1;               // Get Second Shifting
+				uint[ 0 ] = ( UINT_MAX >>> lai) << lai;	// Clear out all bits before a
+				uint[ 1 ] = ( UINT_MAX << zi) >>> zi;   // clear out all bits before b
+                uint[ 2 ] = uint[ 0 ] & uint[ 1 ];      // Get only when both bits are 1
+                
+				this.bits[ i ] = uint[ 2 ];             // Set Ranged Bits
+                
+                //-------------------------------
+				// move to next set set of bit indexes
+				apos = bpos + 1;
+				bpos = Math.min( bi, apos + 31 );
+			}
+
+			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			// Clear out under and over bits
+			let arylen = this.bits.length;
+			for( i=istart-1; i >= 0; i-- )   this.bits[ i ] = 0;	// under
+			for( i=iend+1; i < arylen; i++ ) this.bits[ i ] = 0;	// over
+
 			return this;
 		}
 
@@ -227,7 +253,15 @@ class Bitset{
 				this.bits = ary;
 			}
 			return i;
-		}
+        }
+        
+        _resize( cnt ){
+            if( cnt >= this.bits.length ){
+                let j, ary = new Uint32Array( cnt );
+				for( j=0; j < cnt; j++ ) ary[ j ] = this.bits[ j ];
+				this.bits = ary;
+            }
+        }
 }
 
 export default Bitset;

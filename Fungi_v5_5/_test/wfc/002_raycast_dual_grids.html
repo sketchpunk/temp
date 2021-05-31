@@ -50,7 +50,7 @@ function onRightClick( e ){
     //App.Debug.box( bound[0], bound[1], "red" );
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    let result = ray_voxel_grid( ray, mcg, ray_mcgrid_hittest ); //ray_mcgrid_debug
+    let result = ray_voxel_grid( ray, mcg, ray_mcgrid_debug ); //ray_mcgrid_debug ray_mcgrid_hittest 
     if( result ){
         console.log( "Voxel Ray", result );
         if( result.is_hit ) mcg.enable_cell( Vec3.add( result.coord, result.norm ) );
@@ -219,7 +219,7 @@ class Cell{
 
 class MarchingCubeGrid{
     constructor(){
-        this.cell_cnt   = new Vec3( 3, 3, 3 );
+        this.cell_cnt   = new Vec3( 5, 3, 5 );
         this.cell_size  = 2;
         this.points     = null;
         this.cells      = null;

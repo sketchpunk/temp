@@ -93,7 +93,7 @@ class BufferFactory{
 
 		buf.capacity      = byte_size;
 		buf.component_len = comp_len;
-		buf.data_type	  = USHORT;
+		buf.data_type	  = FLOAT;
 		if( unbind ) this.gl.ctx.bindBuffer( buf.type, null );
 		return buf;
 	}
@@ -106,6 +106,7 @@ class BufferFactory{
 
 		buf.capacity	  = byte_size;
 		buf.component_len = 1;
+		buf.data_type	  = USHORT;
 		if( unbind ) this.gl.ctx.bindBuffer( buf.type, null );
 		return buf;
 	}

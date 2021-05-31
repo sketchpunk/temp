@@ -101,6 +101,89 @@ class Matrix4 extends Float32Array{
 			return this;
 		}
 
+
+		from_perspectiveOTHER( fovy, aspect, near, far ){
+			let scl = 1.0 / Math.tan(fovy * 0.5);
+			this[0] = scl;
+			this[1] = 0;
+			this[2] = 0;
+			this[3] = 0;
+
+			this[4] = 0;
+			this[5] = scl;
+			this[6] = 0;
+			this[7] = 0;
+			
+			this[8] = 0;
+			this[9] = 0;
+			this[10] = -far / (far - near);
+			this[11] = -1;
+			
+			this[12] = 0;
+			this[13] = 0;
+			this[14] = -far * near / (far - near);
+			this[15] = 0;
+
+			/*
+			https://www.scratchapixel.com/lessons/3d-basic-rendering/perspective-and-orthographic-projection-matrix/opengl-perspective-projection-matrix
+    float angleOfView = 90; 
+    float near = 0.1; 
+    float far = 100; 
+    float imageAspectRatio = imageWidth / (float)imageHeight; 
+    float b, t, l, r; 
+    gluPerspective(angleOfView, imageAspectRatio, near, far, b, t, l, r); 
+    glFrustum(b, t, l, r, near, far, Mproj); 
+
+	// compute screen coordinates first
+void gluPerspective( 
+    const float &angleOfView, 
+    const float &imageAspectRatio, 
+    const float &n, const float &f, 
+    float &b, float &t, float &l, float &r) 
+{ 
+    float scale = tan(angleOfView * 0.5 * M_PI / 180) * n; 
+    r = imageAspectRatio * scale, l = -r; 
+    t = scale, b = -t; 
+} 
+ 
+// set the OpenGL perspective projection matrix
+void glFrustum( 
+    const float &b, const float &t, const float &l, const float &r, 
+    const float &n, const float &f, 
+    Matrix44f &M) 
+{ 
+
+// set the OpenGL perspective projection matrix
+void glFrustum( 
+    const float &b, const float &t, const float &l, const float &r, 
+    const float &n, const float &f, 
+    Matrix44f &M) 
+{ 
+    // set OpenGL perspective projection matrix
+    M[0][0] = 2 * n / (r - l); 
+    M[0][1] = 0; 
+    M[0][2] = 0; 
+    M[0][3] = 0; 
+ 
+    M[1][0] = 0; 
+    M[1][1] = 2 * n / (t - b); 
+    M[1][2] = 0; 
+    M[1][3] = 0; 
+ 
+    M[2][0] = (r + l) / (r - l); 
+    M[2][1] = (t + b) / (t - b); 
+    M[2][2] = -(f + n) / (f - n); 
+    M[2][3] = -1; 
+ 
+    M[3][0] = 0; 
+    M[3][1] = 0; 
+    M[3][2] = -2 * f * n / (f - n); 
+    M[3][3] = 0; 
+			*/
+
+			return this;
+		}
+
 		from_perspective( fovy, aspect, near, far ){
 			let f = 1.0 / Math.tan(fovy / 2),
 				nf = 1 / (near - far);

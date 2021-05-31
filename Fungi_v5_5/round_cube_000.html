@@ -1,0 +1,236 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform, Colour } from "./fungi/App.js";
+import XhrQueue     from "./fungi/lib/XhrQueue.js";
+import Wireframe    from "./fungi/shaders/Wireframe.js";
+
+//#####################################################
+App
+	.init( true )
+    .load_shaders( "LowPoly.js" )
+    .load_shaders( "Phong.js" )
+    .load_shaders( "Texture.js" )
+	.use_debug()
+	.set_camera( 0, 20, 5, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+    let img  = await XhrQueue.add( "./files/textures/uv_test_01.jpg" ).then();
+    let tex0 = App.texture.new( "uv_test_01", img );
+    let geo, mesh, mat, e;
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    geo  = RoundedCube( 1.5, 1.5, 1.5, 0.3, 4 );
+    mesh = App.mesh.from_data( "g0", geo.verts, 3, geo.indices, geo.norm, geo.uv );
+    mat  = App.shader.new_material( "LowPoly" ).set_cullface( false );
+    e    = App.mesh_entity( "g0", mesh, mat );
+    e.node.set_pos( 0, 1.0, 0 );
+
+    Wireframe.append_tri( e.draw, geo.indices, geo.verts, { line_color:"#ffffffB0", face_color:"#00000000" } );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    geo  = RoundedCube( 1.5, 1.5, 1.5, 0.1, 2 );
+    mesh = App.mesh.from_data( "g1", geo.verts, 3, geo.indices, geo.norm, geo.uv );
+    mat  = App.shader.new_material( "Phong" ).set_cullface( false );
+    e    = App.mesh_entity( "g1", mesh, mat );
+    e.node.set_pos( -2.0, 1.0, 0 );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    geo  = RoundedCube( 1.5, 1.5, 1.5, 0.4, 5 );
+    mesh = App.mesh.from_data( "g2", geo.verts, 3, geo.indices, geo.norm, geo.uv );
+    mat  = App.shader.new_material( "Texture", { base_tex:tex0 } ).set_cullface( false );
+    e    = App.mesh_entity( "g2", mesh, mat );
+    e.node.set_pos( 2.0, 1.0, 0 );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    geo  = RoundedCube( 1.5, 1.5, 1.5, .75, 4 );
+    mesh = App.mesh.from_data( "g3", geo.verts, 3, geo.indices, geo.norm, geo.uv );
+    mat  = App.shader.new_material( "LowPoly" ).set_cullface( false );
+    e    = App.mesh_entity( "g3", mesh, mat );
+    e.node.set_pos( 4.0, 1.0, 0 );
+
+    Wireframe.append_tri( e.draw, geo.indices, geo.verts, { line_color:"#ffffffB0", face_color:"#00000000" } );
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+
+function RoundedCube( sx=2, sy=2, sz=2, r=0.5, div=4 ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let panel   = edge_grid( sx, sy, sz, r, div );  // Creates the Geo of just the Top Plane of the 
+    let geo     = {
+        verts   : new Array(),
+        indices : new Array(),
+        uv      : new Array(),
+        norm    : new Array(),
+    };
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // TODO, Knowing the Plane's Vert Count, It would be better to pre-allocate all the space
+    // in TypedArrays then fill in all the data. Using Javascript arrays makes things simple
+    // for programming but isn't as efficent.
+
+    // Rotate and Merge the Panel Data into one Geo to form a Rounded Quad
+    geo_rot_merge( geo, panel, (v,o)=>o.copy( v ) );   // Top - No Rotation, Kind of a Waste
+    geo_rot_merge( geo, panel, VRot90.xp );            // Front
+    geo_rot_merge( geo, panel, VRot90.xp_yp );         // Left
+    geo_rot_merge( geo, panel, VRot90.xp_yp_yp );      // Back
+    geo_rot_merge( geo, panel, VRot90.xp_yn );         // Right
+    geo_rot_merge( geo, panel, VRot90.xp_xp );         // Bottom
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return {
+        verts       : new Float32Array( geo.verts ),
+        norm        : new Float32Array( geo.norm ),
+        uv          : new Float32Array( geo.uv ),
+        indices     : new Uint16Array( geo.indices ),
+    };
+}
+
+// Generate a Plane where all its vertices are focus onto the corners
+// Then those corners are sphere-ified to create rounded corners on the plane
+function edge_grid( sx=2, sy=2, sz=2, r=0.5, div=4 ){
+    let mx  = sx / 2, 
+        my  = sy / 2,
+        mz  = sz / 2,
+        len = div * 2;
+
+    let verts   = new Array();
+    let uv      = new Array();
+    let norm    = new Array();
+    let v       = new Vec3();
+
+    let bit, j, i, t, s, x, y, z;
+    
+    y = my;
+
+    // Use corners kinda like Marching Squares
+    let corners = [
+        new Vec3( r-mx, my-r, r-mz ),
+        new Vec3( mx-r, my-r, r-mz ),
+        new Vec3( r-mx, my-r, mz-r ),
+        new Vec3( mx-r, my-r, mz-r ),
+    ];
+    
+    //App.Debug.pnt( corners[0], "green" );
+    //App.Debug.pnt( corners[1], "green" );
+    //App.Debug.pnt( corners[2], "green" );
+    //App.Debug.pnt( corners[3], "green" );
+
+    let row = ( z, zbit ) => {
+        let t, bit;
+        let uv_z = Maths.norm( -mz, mz, z ); // Map Z and Normalize the Value
+
+        for( i=0; i <= len; i++ ){
+            bit = ( i <= div )? 0 : 1;
+            t   = Maths.triangle_wave( i / div ); // 0 > 1 > 0
+            s   = ( i <= div )? -1 : 1;           // Sign
+            x   = ( mx * s ) + ( r * t * -s );    // Flip Signs based if i <= div
+
+            
+            v.set( x, y, z ).sub( corners[ bit | zbit ] ).norm();  // Normalize the Vertex from the corner origin point
+            norm.push( v[0], v[1], v[2] );                         // Save it
+            v.scale( r ).add( corners[ bit | zbit ] );             // Scale to Corner Radius and move back into position
+
+            verts.push( v[0], v[1], v[2] );                        // Save Vert
+            uv.push( Maths.norm( -mx, mx, x ), uv_z );
+            //App.Debug.pnt( v );
+
+            // Start the mirror side when done with the first side
+            if( t == 1 ){
+                v.set( mx-r, y, z ).sub( corners[ 1 | zbit ] ).norm();
+                norm.push( v[0], v[1], v[2] );
+                v.scale( r ).add( corners[ 1 | zbit ] );
+                
+                verts.push( v[0], v[1], v[2] );
+                uv.push( Maths.norm( -mx, mx, mx-r ), uv_z );
+                // App.Debug.pnt( v );
+            }
+        }
+    };
+
+    for( j=0; j <= len; j++ ){
+        // Compute Z Position
+        bit = ( j <= div )? 0 : 2;
+        t   = Maths.triangle_wave( j / div ); // 0 > 1 > 0
+        s   = ( j <= div )? -1 : 1;           // Sign
+        z   = ( mz * s ) + ( r * t * -s );    // Flip Signs based if i <= div
+
+        row( z, bit );                        // Draw Row
+        if( t == 1 ) row( mz-r, 2 );          // Start Mirror Side
+    }
+
+    return { verts, uv, norm, indices:grid_tri_idx( len+1, len+1 ) };
+}
+
+// Rotate Vertices/Normals, then Merge All the Vertex Attributes into One Geo
+function geo_rot_merge( geo, obj, fn_rot ){
+    let offset  = geo.verts.length / 3;
+    let len     = obj.verts.length;
+    let v       = new Vec3(), 
+        o       = new Vec3();
+
+    for( let i=0; i < obj.verts.length; i+=3 ){
+        // Rotate Vertices
+        v.from_buf( obj.verts, i );
+        fn_rot( v, o );
+        geo.verts.push( o[ 0 ], o[ 1 ], o[ 2 ] );
+
+        // Rotate Normal
+        v.from_buf( obj.norm, i );
+        fn_rot( v, o );
+        geo.norm.push( o[ 0 ], o[ 1 ], o[ 2 ] );
+    }
+
+    for( v of obj.uv )      geo.uv.push( v );
+    for( v of obj.indices ) geo.indices.push( offset + v );
+}
+
+// Handle Simple 90 Degree Rotations without the use of Quat,Trig,Matrices
+class VRot90{
+    // #region SINGLE AXIS ROTATION
+    static xp( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = x; o[1] = -z; o[2] = y; return o; }    // x-zy rot x+90
+    static xn( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = x; o[1] = z; o[2] = -y; return o; }    // xz-y rot x-90
+    
+    static yp( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = -z; o[1] = y; o[2] = x; return o; }    // -zyx rot y+90
+    static yn( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = z; o[1] = y; o[2] = -x; return o; }    // zy-x rot y-90
+
+    static zp( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = y; o[1] = -x; o[2] = z; return o; }    // y-xz rot z+90
+    static zn( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = -y; o[1] = x; o[2] = z; return o; }    // -yxz rot z-90
+    // #endregion
+
+    // #region COMBINATIONS
+    static xp_yn( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = -y; o[1] = -z; o[2] = x; return o; }     // -y-zx rot x+90, y-90
+    static xp_yp( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = y; o[1] = -z; o[2] = -x; return o; }     // y-z-x rot x+90, y+90
+    static xp_yp_yp( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = -x; o[1] = -z; o[2] = -y; return o; } // -x-z-y rot x+90, y+90, y+90
+    static xp_xp( v, o ){ let x = v[0], y = v[1], z = v[2]; o[0] = x; o[1] = -y; o[2] = -z; return o; }     // x-y-z rot x+90, x+90
+    // #endregion
+}
+
+// Generate Indices for a Grid Mesh
+function grid_tri_idx( x_cells, y_cells ){
+    let ary     = new Array(),
+        col_cnt = x_cells + 1,
+        x, y, a, b, c, d;
+
+    for( y=0; y < y_cells; y++ ){
+        for( x=0; x < x_cells; x++ ){
+            a   = y * col_cnt + x;
+            b   = a + col_cnt;
+            c   = b + 1
+            d   = a + 1;
+            ary.push( a, b, c, c, d, a );
+        }
+    }
+
+    return ary;
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

@@ -44,7 +44,6 @@ prop-panel-btncont{ position:absolute; bottom:10px; right:10px; }
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region prop-panel */
-prop-panel{}
 .prop-panel{}
 .prop-panel > header{}
 .prop-panel > main{ display:flex; flex-direction:column; }
@@ -69,10 +68,14 @@ prop-panel:part(header){ border:1px solid black; }*/
 .prop-group > main{ display:flex; flex-direction:column; overflow:hidden; max-height:1500px; transition: max-height 1.5s ease-in; }
 .prop-group.close > main { max-height:0px; transition-timing-function: cubic-bezier(.07,1.07,0,1.01);
     transition: all 0.9s, opacity 0.2s;  }
+/* #endregion //////////////////////////////////////////////////////// */
 
+/* #region range & slide */
+range-input { display:flex; flex-direction:row; user-select:none; }
+range-input > canvas{ flex:1 1 auto; height:20px; }
 
-
-
+slide-input { display:flex; flex-direction:row; user-select:none; }
+slide-input > canvas{ flex:1 1 auto; height:20px; }
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region THEME */
@@ -114,7 +117,7 @@ https://codepen.io/abergin/pen/kjwBz/
 
 /* SELECT */
 .prop-panel select{ border:none; border-radius:4px; background-color:var(--secondary-bg); padding:4px 6px; color: var(--secondary-txt); }
-.prop-panel select:focus{ outline:0; background-color:#c8cad0; }
+.prop-panel select:focus{ outline:0; background-color:#aaabb1; }
 
 /* RANGE */
 .prop-panel input[type=range] { margin:1px; box-sizing: border-box; -webkit-appearance: none; min-height:20px; border-radius:5px;}

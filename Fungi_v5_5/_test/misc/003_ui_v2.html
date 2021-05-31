@@ -1,30 +1,46 @@
 <!DOCTYPE html><script type="module">
 import PropPanel	from "../../sage.ui/PropPanelv2.js";
+
+
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
 </head><body style="background-color:#505050;">
 <svg><path style="fill:white;" d="M 5,7 h9 l -5,5 z"></path></svg>
 
+
     <prop-panel-btncont open="true" panelWidth="400px">
 
-        <prop-panel label="Property Panel" foot="Sketchpunk Labs">
-            <select>
+        <prop-panel label="" foot="Options">
+            <select label="Eyes">
                 <option value="">Option 0</option>
                 <option value="">Option 1</option>
                 <option value="">Option 2</option>
             </select>
+           
+            <range-input id="irange"></range-input>
+            <slide-input id="islide" min="0" max="1" value="0.5"></slide-input>
+
             <button>Test Button</button>
             <prop-row label="Testing"><button>yy</button></prop-row>
 
             <prop-group label="Group 0">
                 <button>Btn01</button>
                 <prop-row label="Testing"><button>Btn02</button></prop-row>
-                
+                <prop-row label="Eyes">
+                    <select label="Eyes">
+                        <option value="">Option 0</option>
+                        <option value="">Option 1</option>
+                        <option value="">Option 2</option>
+                    </select>
+                </prop-row>
             </prop-group>
         </prop-panel>
 
     </prop-panel-btncont>
 
+
+
+    <!--
     <div style="width:500px; padding:10px;">
 
     <prop-panel label="Property Panel" foot="Sketchpunk Labs">
@@ -43,6 +59,7 @@ import PropPanel	from "../../sage.ui/PropPanelv2.js";
     </prop-panel>
 
     </div>
+    -->
 
 <style>
 	 .container{ position:absolute; bottom:10px; right:10px; }
@@ -71,7 +88,6 @@ import PropPanel	from "../../sage.ui/PropPanelv2.js";
         transition: all 0.3s ease-in-out;
     }
 
-    
     .Proxy > button:focus{ outline:none; }
     .Proxy > button:hover{ 
         background-color: #00000000;
@@ -100,6 +116,21 @@ import PropPanel	from "../../sage.ui/PropPanelv2.js";
         transform: scale(0);
     }
 </style>
+
+<style>
+
+</style>
+
+<script>
+
+window.addEventListener( "load", ()=>{
+    //document.getElementById( "irange" ).addEventListener( "change", (e)=>{
+    //    console.log( e.detail );
+    //});
+});
+
+
+</script>
 
 <!--
 <div class="container">

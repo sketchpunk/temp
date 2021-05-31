@@ -1,4 +1,23 @@
 class MarchingCubes {
+    // 0:001 --- 1:002
+    //  |    Bot   |
+    // 3:008 --- 2:004
+    //
+    // 4:016 --- 5:032
+    //  |    Top   |
+    // 7:128 --- 6:064
+
+    // #region DATA
+    // Maping Each Face based on the corner bits
+    static bottom     = [0,1,2,3];
+    static top        = [4,5,6,7];
+    static left       = [0,3,7,4];
+    static right      = [1,2,6,5];
+    static front      = [3,2,6,7];
+    static back       = [1,0,5,4];
+    static face_names = [ "back", "left", "front", "right", "top", "bottom" ]
+    static faces      = [ this.back, this.left, this.front, this.right, this.top, this.bottom ];
+    
     // Bit values for each corner of a Marching Cube Cell.
     // Starting at the bottom-top-left corner, moving to the right.
     // Corner starts at origin and all corners move in a positive direction.
@@ -292,8 +311,9 @@ class MarchingCubes {
         [3, 0, 8],
         null,
     ]
+    // #endregion
 
-
+    // #region METHODS
     static build_cell( bit, corners ){
         let map = this.map[ bit ];
         if( !map ) return null;
@@ -316,6 +336,37 @@ class MarchingCubes {
         
         return rtn;
     }
+
+    static bit_faces( bit ){
+        let sides = [ 0,0,0,0,0,0 ];
+        let cb    = MarchingCubes.corner_bit;
+        let f, ii;
+        for( let i=0; i < 6; i++ ){
+            f   = MarchingCubes.faces[ i ];         // Corner Indices of Face
+            for( ii=0; ii < 4; ii++ ){              // Loop the 4 Points on the face
+                sides[ i ] += cb[ f[ii] ] & bit;   // Add up bit values
+            }
+        }
+
+        return sides;
+    }
+
+    static bit_string( bit ){
+        let cb = MarchingCubes.corner_bit;
+        let b  = "";
+        for( let i=0; i < 8; i++ ) b += ( bit & cb[i] )? "1":"0";
+        return b;
+    }
+
+    // Rotate Bits as two seperate chunks. 
+    // Bottom and Top Face Points, Rotatie on Y axis technically
+    static rot_4bit_left( shift, v ){ return ((v << shift) & 15) | (v & 15) >> (4-shift); }
+    static shift_bits( shift, b ){
+        let bot = this.rot_4bit_left( shift, b & 15 );
+        let top = this.rot_4bit_left( shift, (b >> 4) & 15 );
+        return bot | ( top << 4 );
+    }
+    // #endregion
 }
 
 export default MarchingCubes;
