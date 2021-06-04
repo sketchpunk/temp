@@ -2,31 +2,34 @@
 import App, { Maths, Vec3, Quat, Mat4, Transform } from "../fungi/App.js";
 import XhrQueue 			from "../fungi/lib/XhrQueue.js";
 import GltfUtil, { Gltf }	from "../fungi/lib/GltfUtil.js";
+import BoneMap              from "../fungi.armature/BoneMap.js";
 
 //#####################################################
 App
     .init( true )
     .use_debug()
     .load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
-    .set_camera( 0, 20, 3, 0, 0.7, 0 )
+    .set_camera( 0, 20, 5, 0, 0.7, 0 )
     .task( init )
 	.then();
 
 //#####################################################
 
 async function init(){
-    let mname = "tina";
+    let mname = "sck_casual"; //tina
 
     let [ json, bin ] = await XhrQueue.url( "../../files/models/"+mname+"/", mname+".gltf", mname+".bin" );
     let e  = GltfUtil.get_skin_view_entity( "Test", json, bin, "LowPolySkin" );
     
-    let bmap = BoneFinder.in_armature( e.arm, false );
+    let bmap = BoneMap.of_armature( e.arm, false );
+    //let bmap = BoneFinder.in_armature( e.arm, false );
     //console.log( bmap );
+    
     
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     let tp = new TPose( e.arm );
     tp.debug_node_tree();
-
+    
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     let fl_axis = tp.get_alt_axis( bmap.foot_l );
     let fr_axis = tp.get_alt_axis( bmap.foot_r );
@@ -41,16 +44,17 @@ async function init(){
     tp.align_alt_axis( bmap.foot_r, fr_axis );
 
     tp.apply();
+    /**/
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    /*
+    /**/
     tp.serialize_bones([
         bmap.thigh_l, bmap.shin_l, bmap.foot_l,
         bmap.thigh_r, bmap.shin_r, bmap.foot_r,
         bmap.upperarm_l, bmap.forearm_l, bmap.hand_l,
         bmap.upperarm_r, bmap.forearm_r, bmap.hand_r,
     ]);
-    */
+    
     return true;
 }
 

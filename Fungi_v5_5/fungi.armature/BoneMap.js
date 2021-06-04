@@ -1,6 +1,6 @@
 class BoneInfo{
-    static re_left  = new RegExp( "\\.l|left", "i" );
-    static re_right = new RegExp( "\\.r|right", "i" );
+    static re_left  = new RegExp( "\\.l|left|_l", "i" );
+    static re_right = new RegExp( "\\.r|right|_r", "i" );
 
     constructor( name, lr, find_re, ex_re=null, multi=false ){
         this.name       = name;
@@ -42,10 +42,10 @@ class BoneMap{
     }
 
     static bones = [
-        new BoneInfo( "thigh", 3, "thigh|upleg" ),
-        new BoneInfo( "shin", 3, "shin|leg", "up" ),
+        new BoneInfo( "thigh", 3, "thigh|up.*leg" ), //upleg | upperleg
+        new BoneInfo( "shin", 3, "shin|leg|calf", "up" ),
         new BoneInfo( "foot", 3, "foot" ),
-        new BoneInfo( "forearm", 3, "forearm" ),
+        new BoneInfo( "forearm", 3, "forearm|arm", "up" ),
         new BoneInfo( "upperarm", 3, "(upper.*arm|arm)", "fore" ),
         new BoneInfo( "hand", 3, "hand", "thumb|index|middle|ring|pinky" ),
         new BoneInfo( "head", 0, "head" ),

@@ -68,6 +68,9 @@ https://github.com/keenanwoodall/Deform/tree/develop  Even has elastic
 https://twitter.com/KangarooPhysics/status/1292183368650706945
 https://gist.github.com/Dan-Piker/f7d790b3967d41bff8b0291f4cf7bd9e
 
+Sphere 
+https://github.com/IRCSS/3D-Moebius-Transformations-Vertex-shader-in-Unity-3D
+
 
 //---------------------------------------
 // LINKAGES
