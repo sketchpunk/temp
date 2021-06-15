@@ -6,7 +6,8 @@ import MixamoAnimator	from "../fungi.test/MixamoAnimator.js";
 
 //import CharRig			from "../fungi.test/rigs/VegetaRig.js";
 //import CharRig			from "../fungi.test/rigs/TinaRig.js";
-import CharRig			from "../fungi.test/rigs/BoxyRig.js";
+//import CharRig			from "../fungi.test/rigs/BoxyRig.js";
+import CharRig			from "../fungi.test/rigs/SCKCasualRig.js";
 
 //#####################################################
 App
@@ -34,6 +35,8 @@ function on_render( dt, ss ){
 	gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
 }
 
+const LOAD_ANIMATION = true;
+
 async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Setup
@@ -42,33 +45,32 @@ async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Load Character
 	gRig = new CharRig();
-	await gRig.load( "../files/models/", { 
-		see_bones : false
+	await gRig.load( "../files/models/sck_casual/", { 
+		see_bones  : false,
+		use_tex    : true,
+		use_spring : false,
 	});
 
 	gRig.node.set_pos( [1.0,0,0] );
-	gRig.node.set_scl( 0.9 );
+	//gRig.node.set_scl( 0.9 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// Load Animation
-	gIKPose = new IKPose_Human();
-	gAnim 	= new MixamoAnimator();
+	if( LOAD_ANIMATION ){
+		//---------------------------
+		// Load Animation
+		gIKPose = new IKPose_Human();
+		gAnim 	= new MixamoAnimator();
 
-	//await gAnim.load( "../files/anim/Catwalk" );
-	await gAnim.load( "../files/anim/Walking" );
+		//await gAnim.load( "../files/anim/Catwalk" );
+		await gAnim.load( "../files/anim/Walking" );
 
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//on_render( 0.1 );
-	App.render_by( 1, on_render );
+		//---------------------------
+		//on_render( 0.1 );
+		App.render_by( 1, on_render );
+	}
+
 	return true;
 }
-
-/*
--- [ 1 ] upperleg.L
----- [ 2 ] shin.L
----------- [ 5 ] upperarm.L
-gltf_test.html:53 ------------ [ 6 ] arm.L
-*/
 
 //#####################################################
 </script>

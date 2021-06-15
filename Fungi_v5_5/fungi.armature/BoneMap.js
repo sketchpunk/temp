@@ -50,7 +50,7 @@ class BoneMap{
         new BoneInfo( "hand", 3, "hand", "thumb|index|middle|ring|pinky" ),
         new BoneInfo( "head", 0, "head" ),
         new BoneInfo( "neck", 0, "neck" ),
-        new BoneInfo( "hip", 0, "hips*" ),
+        new BoneInfo( "hip", 0, "hips*|pelvis" ),
         new BoneInfo( "spine", 0, "spine.*\d?", null, true ),
     ];
 }

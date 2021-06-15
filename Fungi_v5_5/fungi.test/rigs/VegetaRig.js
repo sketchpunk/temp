@@ -1,5 +1,5 @@
-import App from "../fungi/App.js";
-import GltfUtil, { Gltf }	from "../fungi/lib/GltfUtil.js";
+import App from "../../fungi/App.js";
+import GltfUtil, { Gltf }	from "../../fungi/lib/GltfUtil.js";
 
 const ENTITY_NAME = "Vegeta";
 

@@ -22,8 +22,9 @@ function FacedCube( name = "FaceCube" ){
 	}
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let draw = new Draw().add( MESH, MATERIAL, App.mesh.TRI );
-	return App.ecs.new_entity( name, "Node", draw );
+	//let draw = new Draw().add( MESH, MATERIAL, App.mesh.TRI );
+	//return App.ecs.new_entity( name, "Node", draw );
+	return App.mesh_entity( name, MESH, MATERIAL, App.mesh.TRI );
 }
 
 FacedCube.geo = function( ww=1, hh=1, dd=1 ){

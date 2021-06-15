@@ -1,0 +1,210 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }		from "../../fungi/App.js";
+import XhrQueue				from "../../fungi/lib/XhrQueue.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 5, 1.5, 0, 0.6, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+
+	let mat = App.shader.new_material( "TESTER", {} );
+	let e	= Quad( "quad", mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+	/*	{ name:"base_tex",			type:"sampler2D", value:"null" },
+		{ name:"glitter_hmap_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_norm_tex",	type:"sampler2D", value:"null" },
+		{ name:"glitter_mask_tex",	type:"sampler2D", value:"null" },
+		{ name:"scale", type:"vec2", value:new Float32Array([1,1]), }, */
+    ], App.ubo.get_array( "Global", "Model" ) )
+    .set_blend( true )
+	.set_alpha_coverage( true )
+	.set_cullface( false );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+	mat4 proj_view; 
+	mat4 camera_matrix;
+	vec3 camera_pos;
+	float delta_time;
+	vec2 screen_size;
+	float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec3 frag_cam;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_uv		= a_uv;
+	frag_wpos	= world_pos.xyz;
+	frag_cam	= global.camera_pos;
+	frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position	= global.proj_view * world_pos;
+}`;
+
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec3 frag_cam;
+in vec2 frag_uv;
+
+//-------------------------
+
+float ring( vec2 coord, float outer, float inner ){ 
+    float radius	= dot( coord, coord );
+    float dxdy 		= fwidth( radius );
+    return	smoothstep( inner - dxdy, inner + dxdy, radius ) - 
+            smoothstep( outer - dxdy, outer + dxdy, radius );
+}
+
+vec2 up_coord( vec2 uv ){
+    vec2 rtn = uv * 2.0 - 1.0; // Remape to -1, 1
+    rtn.y = -rtn.y;            // Flip Y, so positive is up
+    return rtn;
+}
+
+float aalias( float s, float len ){
+    float aa = fwidth( len );
+    return 1.0 - smoothstep( s-aa, s+aa, len );
+}
+
+float sdfSegment( vec2 p, vec2 a, vec2 b ){
+    vec2 pa = p-a, ba = b-a;
+    float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+    return length( pa - ba*h );
+}
+
+
+#define PI          3.14159265359
+#define PI2         6.28318530718
+#define PI2_INV     0.15915494309
+#define DEG2RAD     0.01745329251  // PI / 180
+
+//-------------------------
+// https://www.reddit.com/r/unrealengine/comments/8yysr7/using_shadernodes_how_would_one_create_a_material/
+void main(void){
+    vec2 c_uv = up_coord( frag_uv ); //frag_uv * 2.0 - 1.0;
+
+    /*
+    //float a   = ring( c_uv, 0.80, 0.72 );
+    //out_color = vec4( vec3(a), 1.0 );
+
+    float steps = 360.0 / 10.0;
+    float a     = atan( c_uv.y, c_uv.x ) / TWO_PI;
+    float angle = fract( fract(a) * steps );
+    angle      -= 0.5;                          // Rmap Grad from 0:1 to -5:5
+    angle       = abs( angle );                 // Remap to 0:5:0
+    angle       = step( 0.2, angle );           // Set Threshold
+    out_color   = vec4( vec3( angle ), 1.0 );
+    */
+
+    /*
+    angle;
+    inc = TWO_PI / ( 10.0 * PI / 180 )
+    a_steps = angle / inc; // how many steps has this angle taken?
+    a_step_grad = fract( a_steps ); // What is the gradient of the steps
+    
+    snap_angle = if ( a_step_grad >= 0.9 )? ceil( a_steps )
+    snap_angle = if ( a_step_grad <= 0.1 )? floor( a_steps )
+    snap_angle *= inc;
+
+    vec2 dir = normalize( vec2(
+        cos( snap_angle ),
+        sin( snap_angle )
+    ));
+
+    vec2 max_pos = dir * 0.5;
+    vec2 min_pos = dir * 0.2;
+    */
+    float inc        = 2.0 * DEG2RAD;
+    float steps      = PI2 / inc;                       // 36 steps 
+    float frag_angle = atan( c_uv.y, c_uv.x );          // Angle of Fragment from Center
+    float grad_angle = fract( frag_angle * PI2_INV );   // 0:360 mapped to 0:1
+
+    float a_step     = steps * grad_angle;              // Divide the Gradient by the number of steps, Gives whole+fract value
+    float grad_step  = fract( a_step );                 // For each angle step, get a 0:1 Mapping
+
+    float snap_step  = ( grad_step >= 0.5 )? ceil( a_step ) : floor( a_step ); //0.0;
+
+    //if( grad_step >= 0.55 ) snap_step = ceil( a_step );  // if Near the next step, Round up
+    //if( grad_step <= 0.45 ) snap_step = floor( a_step ); // If near the bottom, Round Down
+
+    float snap_angle = snap_step * inc;
+    vec2 dir = vec2(
+        cos( snap_angle ),
+        sin( snap_angle )
+    );
+
+    float len = 0.93;
+    if( mod( snap_step, 5.0 ) <= 0.9999 )  len = 0.87;
+    if( mod( snap_step, 45.0 ) <= 0.9999 ) len = 0.8;
+
+    
+    float d = sdfSegment( c_uv, dir * len, dir * 1.0 );
+    d = aalias( 0.004, d );
+    //d = 1.0 - step( 0.001, d );
+    d *= 1.0 - step( 0.98, length( c_uv ) );
+
+
+    d = max( d, ring( c_uv, 0.98, 0.92 ) );
+
+
+    out_color = vec4( vec3( d ), 1.0 );
+}`;
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

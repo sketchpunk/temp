@@ -62,6 +62,8 @@ export default {
 
 	get_pos				: function(){ ePnt.hitpoints.get_pos.apply( ePnt.hitpoints, arguments ); return this; },
 
+	get_points			: function(){ return ePnt.hitpoints.points; },
+
 	set_priority		: function( i ){ ePnt.draw.priority = i; return this; },
 	set_depth_test		: function( s ){ ePnt.draw.items[0].material.options.depthTest = s; return this; },
 };

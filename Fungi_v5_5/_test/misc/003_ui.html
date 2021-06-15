@@ -5,10 +5,15 @@ import PropPanel	from "../../sage.ui/PropPanel.js";
 </head><body style="background-color:black;">
 	<!--<canvas id="pg_canvas"></canvas>-->
 
-	<svg style="fill:white;">
+    <svg style="fill:white;position:absolute; left:50px; top:50px; overflow:visible;">
 		<path style="stroke: white;stroke-dasharray: 2px 2px;" d="M 0,4 L15.5,4"></path>
 		<path style="fill:white;" d="M 10.5,0 L14.5,4 L10.5,8 M 15.5,-1 L15.5,9"></path>
-	</svg>
+    </svg>
+    
+    <svg style="fill:white;">
+        <path style="stroke: white;stroke-dasharray: 2px 2px;" d="M 0,4 L366.5,4"></path>
+        <path class="tp-txtv_gh" d="M -361.5,0 L-365.5,4 L-361.5,8 M -366.5,-1 L-366.5,9"></path>
+    </svg>
 
 	<prop-panel id="PntProp" side="right" width="300px" class="Theme" open="true" top="10px">
 		

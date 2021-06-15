@@ -1,0 +1,3 @@
+video-buttons{ display:flex; flex-direction:row;  border:1px solid #606060; user-select: none; }
+video-buttons button{ flex:1 1 auto; display:flex; flex-direction:row; align-items: center; justify-content: center; padding:0px; }
+video-buttons svg{ flex:1 1 auto; height:25px; fill:#202020; }

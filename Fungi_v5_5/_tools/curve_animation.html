@@ -1,0 +1,102 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+import FacedCube     from "../../fungi/geo/FacedCube.js";
+
+import HermiteSpline from "../../fungi/maths/curves/HermiteSpline.js";
+import DragPoints    from "../../fungi.misc/DragPoints.js";
+
+import AnimatorStack from "../../fungi.misc/AnimatorStack.js";
+import SplineAnimator from "../../fungi.misc/SplineAnimator.js";
+
+import TimeScrubber  from "../sage.ui/TimeScrubber.js";
+import VideoButtons  from "../sage.ui/VideoButtons.js";
+
+//#####################################################
+App
+	.init()
+	.use_events()
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.then( init );
+
+//#####################################################
+const ANIM_TIME = 5;
+
+let gAnim, gSAnim, gCube;
+
+function on_render( dt, ss ){
+    gAnim.tick( dt ).run();
+}
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup
+	DragPoints.init().set_move_handler( on_pnt_move );
+	//App.Debug.set_pnt_size( 0.1 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let tension = 0, bias = 0;
+	let spline  = new HermiteSpline( true );
+	spline.add( [0, 0, 0], tension, bias );
+	spline.add( [1, 0.05, 0], tension, bias );
+	spline.add( [1, 0.5, 0], tension, bias );
+	spline.add( [0, 0.7, 0], tension, bias );
+	spline.add( [-1, 0.2, 0], tension, bias );
+    spline.add( [-1, 0.0, 0], tension, bias );
+    
+    gSAnim = new SplineAnimator( spline );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gCube = FacedCube();
+    gCube.node.set_scl( 0.2 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gAnim = new AnimatorStack( ANIM_TIME );
+    gAnim.push( (c)=>{
+        let pos = new Vec3();
+        let dir = new Vec3();
+        let t   = c.as_sigmoid01( 0.5 );
+        gSAnim.at( t );
+        gCube.node.set_pos( gSAnim.pos ).set_rot_look( gSAnim.dir, Vec3.UP );
+    });
+
+    let scrub = document.getElementById( "timeScrub" );
+    scrub.set_max_time( ANIM_TIME );
+    gAnim.push( (c)=>{ scrub.value = c.as_cycle01(); });
+
+    let vidBtn = document.getElementById( "vidBtns" );
+    vidBtn.addEventListener( "tap", (e)=>{ gAnim.enabled = ( e.detail.state == 1 ); });
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	const size = 0.1;
+	for( let p of gSAnim.spline.points ){
+		DragPoints.pnt( p.pos, null, "cyan", 1, size );
+    }
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    on_pnt_move();
+    App.render_by( 1, on_render );
+}
+
+function on_pnt_move( idx, pos ){
+	App.Debug.reset();
+
+	let i=0;
+	for( let p of DragPoints.get_points() ){
+		gSAnim.spline.update_pos( i++, p.pos );
+    }
+    
+    gSAnim.debug( App.Debug, true );
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <div style="position:fixed; bottom:15px; left:15px; height:30px; width:400px; display:flex; flex-direction:row; border:0px solid red;">
+        <video-buttons id="vidBtns" show="play_pause" state="play"></video-buttons>
+        <time-scrubber id="timeScrub" style="flex:1 1 auto;"></time-scrubber>
+    </div>
+</body></html>

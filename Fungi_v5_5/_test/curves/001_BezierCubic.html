@@ -1,0 +1,54 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+
+import BezierCubic 	from "../../fungi/maths/curves/BezierCubic.js";
+import DragPoints	from "../../fungi.misc/DragPoints.js";
+
+//#####################################################
+App
+	.init()
+	.use_events()
+	.use_debug()
+	.set_camera( 0, 20, 4, 0, 0.0, 0 )
+	.then( init );
+
+//#####################################################
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup
+	DragPoints.init().set_move_handler( on_pnt_move );
+	//App.Debug.set_pnt_size( 0.1 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	const size = 0.15;
+	DragPoints.pnt( [-1, 0, 0], null, "cyan", 1, size );
+    DragPoints.pnt( [ -0.6, 0.5, 0 ], null, "cyan", 1, size );
+    DragPoints.pnt( [ 0.6, 0.5, 0 ], null, "cyan", 1, size );
+	DragPoints.pnt( [ 1, 0, 0  ], null, "cyan", 1, size );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	on_pnt_move();
+}
+
+function on_pnt_move( idx, pos ){
+	App.Debug.reset();
+	let pnts = DragPoints.get_points();
+
+	BezierCubic.debug(
+		App.Debug,
+		pnts[0].pos,
+		pnts[1].pos,
+        pnts[2].pos,
+        pnts[3].pos,
+		10,
+		true,
+		true,
+	);
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

@@ -22,10 +22,10 @@ class IKPose_Human{
     // The scaled length to the end effector, plus the direction that
     // the KNEE or ELBOW is pointing. For IK Targeting, Dir is FORWARD and
     // joint dir is UP
-    leg_l = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3() };
-    leg_r = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3() };
-    arm_l = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3() };
-    arm_r = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3() };
+    leg_l = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3(), effe_pos:new Vec3() };
+    leg_r = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3(), effe_pos:new Vec3() };
+    arm_l = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3(), effe_pos:new Vec3() };
+    arm_r = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3(), effe_pos:new Vec3() };
     
     spine = [
         { effe_dir: new Vec3(), pole_dir: new Vec3() },
@@ -35,30 +35,93 @@ class IKPose_Human{
     head = { effe_dir: new Vec3(), pole_dir: new Vec3() };
     // #endregion ///////////////////////////////////////////////////////////////////////
 
+    // #region SETUP
+    from_rig_pose( rig, pose ){
+        let bi, bone, i;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HIP
+        bi    = rig.items.hip.value;
+        bone  = pose.bones[ bi.idx ];
+
+        this.hip.bind_height = bone.world.pos.y;
+        this.hip.movement.set( 0, 0, 0 );
+        this.hip.effe_dir.from_quat( bone.world.rot, bi.effector_dir );
+        this.hip.pole_dir.from_quat( bone.world.rot, bi.pole_dir );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // HEAD
+        bi    = rig.items.head.value;
+        bone  = pose.bones[ bi.idx ];
+        this.head.effe_dir.from_quat( bone.world.rot, bi.effector_dir );
+        this.head.pole_dir.from_quat( bone.world.rot, bi.pole_dir );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // SPINE
+        bi   = rig.items.spine.value;
+        i    = bi.count - 1;
+
+        bone = pose.bones[ bi.first() ];
+        this.spine[ 0 ].effe_dir.from_quat( bone.world.rot, bi.dirs[ 0 ].effector ); // First Bone
+        this.spine[ 0 ].pole_dir.from_quat( bone.world.rot, bi.dirs[ 0 ].pole );
+        
+        bone = pose.bones[ bi.last() ];
+        this.spine[ 1 ].effe_dir.from_quat( bone.world.rot, bi.dirs[ i ].effector ); // Last Bone
+        this.spine[ 1 ].pole_dir.from_quat( bone.world.rot, bi.dirs[ i ].pole );
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // LIMPS
+        bi = rig.items.leg_l.value;
+        this.leg_l.effe_pos.copy( pose.bones[ bi.leaf_idx ].world.pos );    // LEFT LEG
+        this.leg_l.pole_dir.from_quat( pose.bones[ bi.first() ].world.rot, bi.pole_dir );   
+
+        bi = rig.items.leg_r.value;
+        this.leg_r.effe_pos.copy( pose.bones[ bi.leaf_idx ].world.pos );    // RIGHT LEG
+        this.leg_r.pole_dir.from_quat( pose.bones[ bi.first() ].world.rot, bi.pole_dir );  
+
+        bi = rig.items.arm_l.value;
+        this.arm_l.effe_pos.copy( pose.bones[ bi.leaf_idx ].world.pos );    // LEFT ARM
+        this.arm_l.pole_dir.from_quat( pose.bones[ bi.first() ].world.rot, bi.pole_dir );
+
+        bi = rig.items.arm_r.value;
+        this.arm_r.effe_pos.copy( pose.bones[ bi.leaf_idx ].world.pos );    // RIGHT ARM
+        this.arm_r.pole_dir.from_quat( pose.bones[ bi.first() ].world.rot, bi.pole_dir );
+    }
+    // #endregion ///////////////////////////////////////////////////////////////////////
+
     // #region APPLY METHODS
-    apply_rig( rig ){
+    apply_rig( rig, use_limp_pnt=false ){
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Lower Body
         this.apply_hip( rig );
 
-        if( rig.items[ "leg_l" ] ) this.apply_limb( rig, "leg_l", this.leg_l );
-        if( rig.items[ "leg_r" ] ) this.apply_limb( rig, "leg_r", this.leg_r );
-
-        if( rig.items[ "foot_l" ] ) this.apply_swing_twist( rig, rig.get( "foot_l" ), this.foot_l );
-        if( rig.items[ "foot_r" ] ) this.apply_swing_twist( rig, rig.get( "foot_r" ), this.foot_r );
-
+        if( !use_limp_pnt ){
+            if( rig.items[ "leg_l" ] )  this.apply_limb( rig, "leg_l", this.leg_l );
+            if( rig.items[ "leg_r" ] )  this.apply_limb( rig, "leg_r", this.leg_r );
+            if( rig.items[ "foot_l" ] ) this.apply_swing_twist( rig, rig.get( "foot_l" ), this.foot_l );
+            if( rig.items[ "foot_r" ] ) this.apply_swing_twist( rig, rig.get( "foot_r" ), this.foot_r );
+        }else{
+            if( rig.items[ "leg_l" ] )  this.apply_limb_pnt( rig, "leg_l", this.leg_l );
+            if( rig.items[ "leg_r" ] )  this.apply_limb_pnt( rig, "leg_r", this.leg_r );
+        }
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Upper Body
         this.apply_chain_ends( rig, rig.get( "spine" ) , this.spine );
-        if( rig.items[ "arm_l" ] ) this.apply_limb( rig, "arm_l", this.arm_l );
-        if( rig.items[ "arm_r" ] ) this.apply_limb( rig, "arm_r", this.arm_r );
+
+        if( !use_limp_pnt ){
+            if( rig.items[ "arm_l" ] ) this.apply_limb( rig, "arm_l", this.arm_l );
+            if( rig.items[ "arm_r" ] ) this.apply_limb( rig, "arm_r", this.arm_r );
+        }else{
+            if( rig.items[ "arm_l" ] )  this.apply_limb_pnt( rig, "arm_l", this.arm_l );
+            if( rig.items[ "arm_r" ] )  this.apply_limb_pnt( rig, "arm_r", this.arm_r );
+        }
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         this.apply_swing_twist( rig, rig.get( "head" ), this.head );
     }
 
     apply_hip( rig ){
-        let b_info	= rig.get( "hip" ),					// Get Ring POINT Object of Bone
+        let b_info	= rig.items.hip.value, //rig.get( "hip" ),					// Get Ring POINT Object of Bone
             bind 	= rig.tpose.bones[ b_info.idx ],	// TPose which is our Bind Pose
             pose 	= rig.pose.bones[ b_info.idx ];		// Our Working Pose.
 
@@ -103,6 +166,33 @@ class IKPose_Human{
         solver.apply_chain( this.target, chain, rig.tpose, rig.pose, p_tran );
     }
     
+    apply_limb_pnt( rig, chain_name, ik_info, grounding=false ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Get the chain's parent world space transform plus the first bone of the chain.
+        let p_tran	= new Transform(),	
+            c_tran	= new Transform(),
+            chain	= rig.get( chain_name );
+
+        rig.pose.get_parent_world( chain.first(), p_tran, c_tran );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // How much of the Chain length to use to calc End Effector
+        //let len = ( rig.leg_len_lmt || chain.len ) * limb.len_scale;
+        let len = chain.get_len() * ik_info.len_scale;
+
+        // Next we pass our info to the Target which does a some pre computations that solvers may need.
+        this.target.from_pos( c_tran.pos, ik_info.effe_pos, ik_info.pole_dir );
+
+        if( grounding ) this.apply_grounding( grounding );
+
+        // Each Chain is assigned a IK Solver that will bend the bones to the right places
+        let solver = rig.get_solver( chain_name, LimbSolver );
+
+        // The IK Solver will update the pose with the results of the operation. We pass in the
+        // parent for it to use it to return things back into local space.
+        solver.apply_chain( this.target, chain, rig.tpose, rig.pose, p_tran );
+    }
+
     apply_swing_twist( rig, b_info, ik ){
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Get the chain's parent world space transform plus the first bone of the chain.
@@ -268,25 +358,32 @@ class IKCompute_Human{
 
 // How to visualize the IK Pose Informaation to get an Idea of what we're looking at.
 class IKPose_Human_Debug{
-    static from_rig( rig, ikpose, debug_reset=true ){
+    static from_rig( rig, ikpose, debug_reset=true, use_limp_pnts=false ){
         if( debug_reset ) App.Debug.reset();
 
         this.hip( rig, ikpose );
 
-        this.limb( rig.pose, rig.get( "leg_l" ), ikpose.leg_l );
-        this.limb( rig.pose, rig.get( "leg_r" ), ikpose.leg_r );
-        this.limb( rig.pose, rig.get( "arm_l" ), ikpose.arm_l );
-        this.limb( rig.pose, rig.get( "arm_r" ), ikpose.arm_r );
-        
-        this.look_twist( rig, rig.get( "foot_l" ), ikpose.foot_l );
-        this.look_twist( rig, rig.get( "foot_r" ), ikpose.foot_r );
-        this.look_twist( rig, rig.get( "head" ), ikpose.head );
+        if( !use_limp_pnts ){
+            this.limb( rig.pose, rig.get( "leg_l" ), ikpose.leg_l );
+            this.limb( rig.pose, rig.get( "leg_r" ), ikpose.leg_r );
+            this.limb( rig.pose, rig.get( "arm_l" ), ikpose.arm_l );
+            this.limb( rig.pose, rig.get( "arm_r" ), ikpose.arm_r );
 
-            this.chain_ends( rig, rig.get( "spine" ), ikpose.spine );
+            this.look_twist( rig, rig.get( "foot_l" ), ikpose.foot_l );
+            this.look_twist( rig, rig.get( "foot_r" ), ikpose.foot_r );
+        }else{
+            this.limb_pnt( rig.pose, rig.get( "leg_l" ), ikpose.leg_l );
+            this.limb_pnt( rig.pose, rig.get( "leg_r" ), ikpose.leg_r );
+            this.limb_pnt( rig.pose, rig.get( "arm_l" ), ikpose.arm_l );
+            this.limb_pnt( rig.pose, rig.get( "arm_r" ), ikpose.arm_r );
+        }
+        
+        this.look_twist( rig, rig.get( "head" ), ikpose.head );
+        //this.chain_ends( rig, rig.get( "spine" ), ikpose.spine );
     }
 
     static hip( rig, ik ){
-        let b_info	= rig.get( "hip" ),
+        let b_info	= rig.items.hip.value,  //rig.get( "hip" ),
             ws		= rig.pose.bones[ b_info.idx ].world;
         
         App.Debug.pnt( ws.pos, "orange", 0.09, 6 );
@@ -306,13 +403,24 @@ class IKPose_Human_Debug{
             .ln( posA, posB, "yellow", "orange", true )
             .ln( posA, posC, "yellow", null, true );
     }
+
+    static limb_pnt( pose, chain, ik ){
+        let root_pos = pose.bones[ chain.first() ].world.pos;		    // Starting Point in Limb
+        let pole_pos = Vec3.scale( ik.pole_dir, 0.2 ).add( root_pos ); // Direction of Joint
+
+        App.Debug
+            .pnt( root_pos, "yellow", 0.07, 6 )
+            .pnt( ik.effe_pos, "cyan", 0.06 )
+            .ln( root_pos, ik.effe_pos, "yellow", "cyan", true )
+            //.ln( root_pos, pole_pos, "yellow" );
+    }
     
     static look_twist( rig, b_info, ik ){
         let pos = rig.pose.bones[ b_info.idx ].world.pos;
         App.Debug
             .pnt( pos, "cyan", 0.03, 1 )											    // Foot Position
-            .ln( pos, Vec3.scale( ik.effe_dir, 0.2 ).add( pos ), "cyan", null, true )	// IK.DIR
-            .ln( pos, Vec3.scale( ik.pole_dir, 0.2 ).add( pos ), "cyan", null, true );	// RESULT OF IK.TWIST
+            .ln( pos, Vec3.scale( ik.effe_dir, 0.3 ).add( pos ), "cyan", null, false )	// IK.DIR
+            .ln( pos, Vec3.scale( ik.pole_dir, 0.2 ).add( pos ), "cyan", null, false );	// RESULT OF IK.TWIST
     }
     
     static chain_ends( rig, chain, ik_ary ){

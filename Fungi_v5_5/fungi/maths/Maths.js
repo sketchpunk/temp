@@ -9,6 +9,19 @@ import Transform 	from "./Transform.js";
 
 class Maths{
 	////////////////////////////////////////////////////////////////////
+	// CONSTANTS
+	////////////////////////////////////////////////////////////////////
+	static PI_H			= 1.5707963267948966;
+	static PI_2 		= 6.283185307179586;
+	static PI_2_INV 	= 1 / 6.283185307179586;
+	static PI_Q			= 0.7853981633974483;
+	static PI_Q3 		= this.PI_H + this.PI_Q;
+	static PI_270		= Math.PI + this.PI_H;
+	static DEG2RAD		= 0.01745329251; // PI / 180
+	static RAD2DEG		= 57.2957795131; // 180 / PI
+	static EPSILON		= 1e-6;
+
+	////////////////////////////////////////////////////////////////////
 	// 
 	////////////////////////////////////////////////////////////////////
 		static to_rad(v){ return v * Maths.DEG2RAD; }
@@ -235,6 +248,20 @@ class Maths{
 					(35.0 * e * s3 * t4) + (21.0 * f * s2 * t5) + (7.0 * g * s * t6) + t7;
 		}
 
+		static sigmoid_half( t, k=0 ){ // Over 0, Eases in, under eases out
+			// https://dhemery.github.io/DHE-Modules/technical/sigmoid/
+			// https://www.desmos.com/calculator/q6ukniiqwn
+			return ( t - k*t ) / ( k - 2*k*Math.abs(t) + 1 );
+		}
+	
+		static sigmoid( t, k=0 ){ // Over 0, Eases in the middle, under eases in-out
+			// this uses the -1 to 1 value of sigmoid which allows to create
+			// easing at start and finish.
+			// https://dhemery.github.io/DHE-Modules/technical/sigmoid/
+			// https://www.desmos.com/calculator/q6ukniiqwn
+			let v = ( t - k*t ) / ( k - 2*k*Math.abs(t) + 1 );
+			return v * 0.5 + 0.5;
+		}
 
 		//https://blog.demofox.org/2014/08/28/one-dimensional-bezier-curves/
 		//1D Bezier Curves.
@@ -243,7 +270,6 @@ class Maths{
 
 		//Cubic Bezier curve:
 		//y = A*(1-x)^3+3*B*(1-x)^2*x+3*C*(1-x)*x^2+D*x^3
-
 
 	////////////////////////////////////////////////////////////////////
 	// Lines and Points
@@ -333,17 +359,7 @@ class Maths{
 		}
 }
 
-////////////////////////////////////////////////////////////////////
-// CONSTANTS
-////////////////////////////////////////////////////////////////////
-	Maths.PI_H			= 1.5707963267948966;
-	Maths.PI_2 			= 6.283185307179586;
-	Maths.PI_2_INV 		= 1 / 6.283185307179586;
-	Maths.PI_Q			= 0.7853981633974483;
-	Maths.PI_270		= Math.PI + Maths.PI_H;
-	Maths.DEG2RAD		= 0.01745329251; // PI / 180
-	Maths.RAD2DEG		= 57.2957795131; // 180 / PI
-	Maths.EPSILON		= 1e-6;
+
 
 	
 

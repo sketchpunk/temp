@@ -1,0 +1,154 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform } from "../fungi/App.js";
+import { IKPose_Human, IKPose_Human_Debug } from "../fungi.ik/IKAnimationCompute.js";
+
+//import CharRig			from "../fungi.test/rigs/VegetaRig.js";
+//import CharRig			from "../fungi.test/rigs/TinaRig.js";
+//import CharRig			from "../fungi.test/rigs/BoxyRig.js";
+import CharRig			from "../fungi.test/rigs/SCKCasualRig.js";
+
+import Cycle            from "../fungi.misc/Cycle.js";
+
+//#####################################################
+App
+	.init( true )
+	.use_lighting( true )
+	.load_pkg( { name:"fungi.armature", bone_view:true, mat:true } )
+	.load_pkg( { name:"fungi.ik", spring:false } )
+	.use_events()
+	.use_debug()
+	.set_camera( 0, 20, 3, 0, 0.9, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+let gAnim, gIKPose, gRig, gWalk;
+
+function on_render( dt, ss ){
+    gWalk.update( dt );
+
+    /*
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gAnim.tick( dt, true )					// Generate Pose for Src Armature
+			.update_ik_pose( gIKPose, true )	// Convert Pose to IKPose
+			.apply_pose();						// Apply Pose to Src Armature
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
+    gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
+    */
+}
+
+const LOAD_ANIMATION = true;
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup
+	App.ecs.systems.get( "LightSystem" ).cls.ambient_color = "#303030";
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Character
+	gRig = new CharRig();
+	await gRig.load( "../files/models/sck_casual/", { 
+		see_bones  : false,
+		use_tex    : true,
+		use_spring : false,
+	});
+
+	//gRig.node.set_pos( [1.0,0,0] );
+	//gRig.node.set_scl( 0.9 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gIKPose = new IKPose_Human();
+    gIKPose.from_rig_pose( gRig.rig, gRig.rig.tpose );
+
+    //gIKPose.leg_l.effe_pos.y += 0.2;
+    //gIKPose.leg_l.effe_pos.z -= 0.2;
+
+    //gIKPose.arm_l.effe_pos.y -= 0.2;
+    //gIKPose.arm_l.effe_pos.x -= 0.2;
+
+    /*
+    //console.log( gRig );
+    IKPose_Human_Debug.from_rig( gRig.rig, gIKPose, true, true );
+
+    gIKPose.apply_rig( gRig.rig, true );	// Apply IK Pose to Rig's Working Pose
+	gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
+    */
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gWalk = new ProceduralWalk();
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	if( LOAD_ANIMATION ){
+		//on_render( 0.1 );
+		App.render_by( 1, on_render );
+	}
+
+	return true;
+}
+
+//#####################################################
+
+class ProceduralWalk{
+    constructor(){
+        this.cycle          = new Cycle( 2 );
+        this.hip_rot_range  = Maths.to_rad( 25 );
+        this.hip_y_range    = -0.05;
+    }
+
+    update( dt ){
+        this.cycle.update( dt );
+        this.run_hip();
+        this.run_head();
+
+        gRig.rig.pose.update_world();
+        IKPose_Human_Debug.from_rig( gRig.rig, gIKPose, true, true );
+
+        gIKPose.apply_rig( gRig.rig, true );	// Apply IK Pose to Rig's Working Pose
+        gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
+    }
+
+    run_hip(){
+        let q = new Quat();
+        let v = new Vec3();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Rotate Hips
+        let sin11 = this.cycle.as_sin();
+        q.from_axis_angle( Vec3.UP, this.hip_rot_range * sin11 );
+        v.from_quat( q, Vec3.FORWARD );
+        gIKPose.hip.effe_dir.copy( v );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Move Hip up and Down
+        let sin01 = Math.abs( sin11 );
+        gIKPose.hip.movement.y = this.hip_y_range * sin01;
+
+        //App.Debug.ln( [0,0,0], v, "cyan" );
+    }
+
+    run_head(){
+        let q = new Quat();
+        let v = new Vec3();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Rotate Hips
+        let sin11 = -this.cycle.as_sin();
+        let sin01 = Math.abs( sin11 );
+        q.from_euler(
+            8 * sin01,
+            8 * sin11,
+            0
+        );
+        v.from_quat( q, Vec3.FORWARD );
+        gIKPose.head.effe_dir.copy( v );
+
+    }
+}
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

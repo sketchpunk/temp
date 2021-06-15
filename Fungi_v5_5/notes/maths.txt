@@ -11,6 +11,7 @@ else
 
 
 
+
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 determinant, find what direction a point is in relation to a line, left/right 
 https://stackoverflow.com/questions/1560492/how-to-tell-whether-a-point-is-to-the-right-or-left-side-of-a-line
@@ -213,3 +214,41 @@ float sdf_stick_scurve3( vec3 p, vec3 a, vec3 b, float fa, float fb, float fc ){
     float r = mix( fb, fc, t  );
     return length( pa - h * ba ) - r;
 }
+
+
+===================================================
+SIGMOID CURVES
+
+https://bl.ocks.org/mforando/159c8d6109bca7e7356144b4b068897d
+
+https://en.wikipedia.org/wiki/Sigmoid_function
+function sigmoid(z) {
+  return 1 / (1 + Math.exp(-z));
+}
+
+//https://en.wikipedia.org/wiki/Logistic_function
+function sigmoid(t) {
+    return 1/(1+Math.pow(Math.E, -t));
+}
+
+https://medium.com/hackernoon/ease-in-out-the-sigmoid-factory-c5116d8abce9
+https://medium.com/hackernoon/ease-out-the-half-sigmoid-7240df433d98
+function sigmoidFactory (k) {
+	function base (t) {
+		return (1 / (1 + Math.exp(-k * t))) - 0.5;
+	}
+
+	var correction = 0.5 / base(1);
+
+	return function (t) {
+		t = clamp(t, 0, 1);
+		return correction * base(2 * t - 1) + 0.5;
+	};
+}
+
+function clamp (val, lower, upper) {
+	return Math.max(Math.min(val, upper), lower);
+}
+
+https://medium.com/hackernoon/the-spring-factory-4c3d988e7129#.otyvxccwy
+https://medium.com/hackernoon/the-bounce-factory-3498de1e5262#.t72mlszex

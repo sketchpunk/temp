@@ -1,0 +1,5 @@
+time-scrubber{ display:flex; flex-direction:row;  border:1px solid #606060; user-select: none; }
+time-scrubber svg{ flex:1 1 auto; }
+time-scrubber .track path{ stroke:gray; stroke-width:1px; }
+time-scrubber .track path.main{ stroke:silver; stroke-width:2px; }
+time-scrubber .track text{ fill:silver; font-size:11px; font-family:monospace; }

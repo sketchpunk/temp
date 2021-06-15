@@ -1,0 +1,60 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } from "../../fungi/App.js";
+
+import BezieQuadSpline  from "../../fungi/maths/curves/BezierQuadSpline.js";
+import DragPoints	      from "../../fungi.misc/DragPoints.js";
+
+//#####################################################
+App
+	.init()
+	.use_events()
+	.use_debug()
+	.set_camera( 0, 20, 5, 0, 0.0, 0 )
+	.then( init );
+
+//#####################################################
+
+let gSpline;
+
+function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Setup
+	DragPoints.init().set_move_handler( on_pnt_move );
+	//App.Debug.set_pnt_size( 0.1 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	let tension = 0, bias = 0;
+	gSpline = new BezieQuadSpline( false );
+	gSpline.add( [-1.5, 0, 0] );
+	gSpline.add( [-1, 1.5, 0] );
+    gSpline.add( [1.5, 0, 0] );
+
+	gSpline.add( [2.7, 1, 0] );
+    gSpline.add( [3, 0, 0] );
+
+	console.log( `Spline, Points : ${gSpline.point_cnt}, Curves : ${gSpline.curve_cnt}` );
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	const size = 0.15;
+	for( let p of gSpline.points ){
+		DragPoints.pnt( p.pos, null, "cyan", 1, size );
+	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	on_pnt_move();
+}
+
+function on_pnt_move( idx, pos ){
+	App.Debug.reset();
+
+	let i=0;
+	for( let p of DragPoints.get_points() ){
+		gSpline.update_pos( i++, p.pos );
+	}
+
+	gSpline.debug( App.Debug, 10, true );
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

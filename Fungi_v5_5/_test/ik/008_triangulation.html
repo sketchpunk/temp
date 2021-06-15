@@ -1,0 +1,86 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform } from "../../fungi/App.js";
+import ArmFactory	from "../../fungi.armature/ArmFactory.js";;
+import DragPoints	from "../../fungi.misc/DragPoints.js";
+
+import Chain			from "../../fungi.ik/Chain.js";
+import Target			from "../../fungi.ik/Target.js";
+import TriangulationSolver   from "../../fungi.ik/solvers/TriangulationSolver.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_pkg( { name:"fungi.armature", bone_view:true, mat:false } )
+	.use_events()
+	.use_debug()
+	.set_camera( 45, 20, 3, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let $entity, $tpose, $pose, $chain;
+
+let $end_effector	= new Vec3();
+let $pole_effector	= new Vec3();
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Systems
+	DragPoints.init().set_move_handler( on_pnt_move );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Armature
+	let name_ary	= new Array();
+	let b_ary		= [ 0.2, 0.3, 0.2, 0.2, 0.4, 0.2 ];
+	$entity	= ArmFactory.chain( b_ary, name_ary );
+	$tpose	= $entity.arm.new_pose();
+	$pose	= $entity.arm.new_pose();
+
+	//$entity.node.set_pos( 0, 0.05, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	$chain = new Chain().from_armature( $entity.arm, name_ary );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+	//let pos = [ 0.3, 0.7, 0.0 ];
+    //let pos = [-0.10026335716247559, 0.6032965779304504, 0.41497308015823364 ];
+    let pos = [-0.0038986951112747192, 0.4035147428512573, 0.26106178760528564];
+
+	// IK Targets
+	DragPoints.pnt( pos, null, "cyan", 1, 0.06 );
+	DragPoints.pnt( [0, 0.0, 0.4 ], null, "yellow", 3, 0.06 );
+
+	DragPoints.get_pos( 0, $end_effector );
+    
+    apply_ik();
+
+	return true;
+}
+
+function on_pnt_move( idx, pos ){
+	switch( idx ){
+		case 0: $end_effector.copy( pos ); break;
+		case 1: $pole_effector.copy( pos ); break;
+	}
+
+	apply_ik();
+}
+
+function apply_ik(){
+	App.Debug.reset();
+	let pt = new Transform();
+	let ct = new Transform();
+	$pose.get_parent_world( $chain.first(), pt, ct, $entity.node.local );
+
+	let pole_dir	= Vec3.sub( $pole_effector, ct.pos );
+	let ik			= new Target().from_pos( ct.pos, $end_effector, pole_dir );
+
+	TriangulationSolver.apply_chain( ik, $chain, $tpose, $pose, pt );
+    $pose.apply();
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

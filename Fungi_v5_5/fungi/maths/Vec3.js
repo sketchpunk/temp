@@ -183,14 +183,6 @@ class Vec3 extends Float32Array{
 			return this;
 		}
 
-		from_lerp( a, b, t ){
-			let ti = 1 - t; // Linear Interpolation : (1 - t) * v0 + t * v1;
-			this[0] = a[0] * ti + b[0] * t;
-			this[1] = a[1] * ti + b[1] * t;
-			this[2] = a[2] * ti + b[2] * t;
-			return this;
-		}
-
 		from_polar( lon, lat ) {
 			let phi 	= ( 90 - lat ) * 0.01745329251, //deg 2 rad
 				theta 	= lon * 0.01745329251,  //( lon + 180 ) * 0.01745329251,
@@ -234,6 +226,52 @@ class Vec3 extends Float32Array{
 			return this;
 		}
 
+		from_lerp( a, b, t ){
+			let ti = 1 - t; // Linear Interpolation : (1 - t) * v0 + t * v1;
+			this[0] = a[0] * ti + b[0] * t;
+			this[1] = a[1] * ti + b[1] * t;
+			this[2] = a[2] * ti + b[2] * t;
+			return this;
+		}
+
+		from_slerp( a, b, t ){
+			let angle    = Math.acos( Math.min( Math.max( this.dot( a, b ), -1 ), 1 ) );
+			let sinTotal = Math.sin( angle);
+			let ratioA   = Math.sin((1 - t) * angle) / sinTotal;
+			let ratioB   = Math.sin(t * angle) / sinTotal;
+            
+            this[0] = ratioA * a[0] + ratioB * b[0];
+			this[1] = ratioA * a[1] + ratioB * b[1];
+			this[2] = ratioA * a[2] + ratioB * b[2];
+			return this;
+        }
+        
+        from_hermite( a, b, c, d, t ){
+            let tt = t * t;
+            let f1 = tt * (2 * t - 3) + 1;
+            let f2 = tt * (t - 2) + t;
+            let f3 = tt * (t - 1);
+            let f4 = tt * (3 - 2 * t);
+
+            this[0] = a[0] * f1 + b[0] * f2 + c[0] * f3 + d[0] * f4;
+            this[1] = a[1] * f1 + b[1] * f2 + c[1] * f3 + d[1] * f4;
+            this[2] = a[2] * f1 + b[2] * f2 + c[2] * f3 + d[2] * f4;  
+            return this;
+        }
+
+        from_bezier( a, b, c, d, t ){
+            let it  = 1 - t;
+            let it2 = it * it;
+            let tt  = t * t;
+            let f1  = it2 * it;
+            let f2  = 3 * t * it2;
+            let f3  = 3 * tt * it;
+            let f4  = tt * t;
+            this[0] = a[0] * f1 + b[0] * f2 + c[0] * f3 + d[0] * f4;
+            this[1] = a[1] * f1 + b[1] * f2 + c[1] * f3 + d[1] * f4;
+            this[2] = a[2] * f1 + b[2] * f2 + c[2] * f3 + d[2] * f4;
+            return out;
+        }
 
 	////////////////////////////////////////////////////////////////////
 	// INSTANCE OPERATORS
@@ -313,6 +351,15 @@ class Vec3 extends Float32Array{
 			return out;
 		}
 
+		ceil( out=null ){
+			out = out || this;
+			out[0] = Math.ceil( this[0] );
+			out[1] = Math.ceil( this[1] );
+			out[2] = Math.ceil( this[2] );
+			return out;
+		}
+
+
 		//When values are very small, like less then 0.000001, just make it zero.
 		near_zero( out=null ){
 			out = out || this;
@@ -322,7 +369,7 @@ class Vec3 extends Float32Array{
 			return out;
 		}
 
-		invert( out=null ){
+		invert( out=null ){ // TODO, Should probably be renamed to negate
 			out = out || this;
 			out[0] = -this[0];
 			out[1] = -this[1];

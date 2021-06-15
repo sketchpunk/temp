@@ -1,0 +1,2 @@
+- Every Mesh needs to hold Min/Max Bounding Box info, to make Ray Testing much easier. 
+- Create an Ecs Component or Tag that makes an Entity Ray Cast Selectable.

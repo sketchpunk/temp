@@ -71,12 +71,28 @@ prop-panel:part(header){ border:1px solid black; }*/
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region range & slide */
-range-input { display:flex; flex-direction:row; user-select:none; }
-range-input > canvas{ flex:1 1 auto; height:20px; }
+range-input{ display:flex; flex-direction:row; user-select: none; }
+range-input svg{ flex:1 1 auto; }
+range-input .rng_connect{ stroke:white; stroke-width:6px; }
+range-input .rng_track{ stroke:gray; stroke-width:6px; stroke-linecap:round; }
+range-input .rng_thumb { user-select: none; }
+range-input .rng_thumb rect{ fill:white; rx:3px; }
+range-input .rng_thumb text{ fill:black; font-size:14px; font-family: monospace; font-weight:bold; text-align:center; }
 
 slide-input { display:flex; flex-direction:row; user-select:none; }
 slide-input > canvas{ flex:1 1 auto; height:20px; }
 /* #endregion //////////////////////////////////////////////////////// */
+
+/* #region DragNumberInput */
+drag-number-input{ display:flex; flex-direction:row; min-width:0px; }
+drag-number-input div{ flex:0 0; display: flex; align-items: center; cursor:pointer; user-select: none; }
+drag-number-input svg{ width:10px; height:10px; overflow:visible; transform-box: fill-box; }
+drag-number-input svg * { transform:translate( 50%, 50% ); }
+drag-number-input input{ flex:1 1 auto; min-width:0px; }
+
+drag-number-input svg path{ visibility:hidden; }
+drag-number-input.show svg path{ visibility:visible; }
+/* #endregion */
 
 /* #region THEME */
 
@@ -119,6 +135,15 @@ https://codepen.io/abergin/pen/kjwBz/
 .prop-panel select{ border:none; border-radius:4px; background-color:var(--secondary-bg); padding:4px 6px; color: var(--secondary-txt); }
 .prop-panel select:focus{ outline:0; background-color:#aaabb1; }
 
+/* TEXTBOX */
+.prop-panel input[ type="text" ]{
+	border:none; background-color:#3e4146; padding:2px 0px 2px 6px; color:gray;
+	border-radius:4px; font-size:14px;
+	transition: all .3s ease-out; }
+
+.prop-panel input[type=text]:hover{ color:#ffffff; }
+.prop-panel input[ type="text" ]:focus { outline:0; background-color:#4e4f56; color:white; } 
+
 /* RANGE */
 .prop-panel input[type=range] { margin:1px; box-sizing: border-box; -webkit-appearance: none; min-height:20px; border-radius:5px;}
 .prop-panel input[type=range]:focus{ outline:0; background-color:#404040; border-color:#c0c0c0; color:white; }
@@ -158,5 +183,28 @@ input.chkCircle[type=checkbox]:after {
 
 input.chkCircle[type=checkbox]:checked:before{ background-color:var(--secondary-bg); }
 input.chkCircle[type=checkbox]:checked:after{ transform: scale(0.7, 0.7); }
+
+/* PROP GROUP */
+drag-number-input{ background-color:#3e4146; transition: all .3s ease-out; border-radius:10px 4px 4px 10px; }
+drag-number-input:focus-within{ background-color:#4e4f56; }
+
+drag-number-input div{ padding:0px 0px 0px 5px; }
+drag-number-input svg path:nth-of-type(1){ stroke: white;stroke-dasharray: 2px 2px; }
+drag-number-input svg path:nth-of-type(2){ stroke: white; stroke-width:3px; }
+
+drag-number-input svg circle{ fill:gray; transition: all .3s ease-out; }
+drag-number-input svg circle:hover{ fill:white; }
+drag-number-input.show svg circle{ fill:white; }
+
+drag-number-input input{ padding: 2px 6px 2px 2px; border:none; background-color:transparent;
+	text-align:right; color:gray; font-size:14px; transition: all .3s ease-out; }
+
+drag-number-input  input::-webkit-inner-spin-button, 
+drag-number-input  input::-webkit-outer-spin-button{ display:none; }
+
+drag-number-input input:hover{ color:#ffffff; }
+drag-number-input input:focus { outline:0; color:white; } 
+
+drag-number-input.show input{ color:white; }
 
 /* #endregion //////////////////////////////////////////////////////// */
