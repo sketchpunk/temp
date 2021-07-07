@@ -115,15 +115,31 @@ vec2 up_coord( vec2 uv ){
     return rtn;
 }
 
-float aalias( float s, float len ){
-    float aa = fwidth( len );
-    return 1.0 - smoothstep( s-aa, s+aa, len );
-}
-
 float sdfSegment( vec2 p, vec2 a, vec2 b ){
     vec2 pa = p-a, ba = b-a;
     float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
     return length( pa - ba*h );
+}
+
+// https://www.shadertoy.com/view/XtXyDn
+float arc( vec2 uv, vec2 up, float angle, float radius, float thick ){
+    float hAngle = angle * 0.5;
+
+    // vector from the circle origin to the middle of the arc
+    float c = cos( hAngle );
+    
+    // smoothing perpendicular to the arc
+    float d1 = abs( length( uv ) - radius ) - thick;
+    float w1 = 1.5 * fwidth( d1 ); // proportional to how much d1 change between pixels
+    float s1 = smoothstep( w1 * 0.5, -w1 * 0.5, d1 ); 
+
+    // smoothing along the arc
+    float d2 = dot( up, normalize( uv ) ) - c;
+    float w2 = 1.5 * fwidth( d2 ); // proportional to how much d2 changes between pixels
+    float s2 = smoothstep( w2 * 0.5, -w2 * 0.5, d2 ); 
+
+    // mix perpendicular and parallel smoothing
+    return s1 * ( 1.0 - s2 );
 }
 
 
@@ -133,42 +149,12 @@ float sdfSegment( vec2 p, vec2 a, vec2 b ){
 #define DEG2RAD     0.01745329251  // PI / 180
 
 //-------------------------
-// https://www.reddit.com/r/unrealengine/comments/8yysr7/using_shadernodes_how_would_one_create_a_material/
 void main(void){
-    vec2 c_uv = up_coord( frag_uv ); //frag_uv * 2.0 - 1.0;
+    vec2 c_uv = up_coord( frag_uv );
 
-    /*
-    //float a   = ring( c_uv, 0.80, 0.72 );
-    //out_color = vec4( vec3(a), 1.0 );
-
-    float steps = 360.0 / 10.0;
-    float a     = atan( c_uv.y, c_uv.x ) / TWO_PI;
-    float angle = fract( fract(a) * steps );
-    angle      -= 0.5;                          // Rmap Grad from 0:1 to -5:5
-    angle       = abs( angle );                 // Remap to 0:5:0
-    angle       = step( 0.2, angle );           // Set Threshold
-    out_color   = vec4( vec3( angle ), 1.0 );
-    */
-
-    /*
-    angle;
-    inc = TWO_PI / ( 10.0 * PI / 180 )
-    a_steps = angle / inc; // how many steps has this angle taken?
-    a_step_grad = fract( a_steps ); // What is the gradient of the steps
-    
-    snap_angle = if ( a_step_grad >= 0.9 )? ceil( a_steps )
-    snap_angle = if ( a_step_grad <= 0.1 )? floor( a_steps )
-    snap_angle *= inc;
-
-    vec2 dir = normalize( vec2(
-        cos( snap_angle ),
-        sin( snap_angle )
-    ));
-
-    vec2 max_pos = dir * 0.5;
-    vec2 min_pos = dir * 0.2;
-    */
-    float inc        = 2.0 * DEG2RAD;
+    //-------------------------------------------
+    // SETUP
+    float inc        = radians( 2.0 );
     float steps      = PI2 / inc;                       // 36 steps 
     float frag_angle = atan( c_uv.y, c_uv.x );          // Angle of Fragment from Center
     float grad_angle = fract( frag_angle * PI2_INV );   // 0:360 mapped to 0:1
@@ -176,31 +162,40 @@ void main(void){
     float a_step     = steps * grad_angle;              // Divide the Gradient by the number of steps, Gives whole+fract value
     float grad_step  = fract( a_step );                 // For each angle step, get a 0:1 Mapping
 
-    float snap_step  = ( grad_step >= 0.5 )? ceil( a_step ) : floor( a_step ); //0.0;
-
-    //if( grad_step >= 0.55 ) snap_step = ceil( a_step );  // if Near the next step, Round up
-    //if( grad_step <= 0.45 ) snap_step = floor( a_step ); // If near the bottom, Round Down
-
-    float snap_angle = snap_step * inc;
-    vec2 dir = vec2(
+    // Snap Step to next whole number
+    float snap_step  = ( grad_step >= 0.5 )? ceil( a_step ) : floor( a_step ); // round doesn't work
+    float snap_angle = snap_step * inc;   // Get the Center Angle of the Sector
+    vec2 dir         = vec2(              // Compute Direction, Normalized by default
         cos( snap_angle ),
         sin( snap_angle )
     );
 
+    // Set Different Lengths for different increments
     float len = 0.93;
     if( mod( snap_step, 5.0 ) <= 0.9999 )  len = 0.87;
     if( mod( snap_step, 45.0 ) <= 0.9999 ) len = 0.8;
 
-    
-    float d = sdfSegment( c_uv, dir * len, dir * 1.0 );
-    d = aalias( 0.004, d );
-    //d = 1.0 - step( 0.001, d );
-    d *= 1.0 - step( 0.98, length( c_uv ) );
+    // Get pixel's distance from Line Segment
+    float thick = 0.002;
+    float d     = sdfSegment( c_uv, dir * len, dir * 1.0 ) - thick;
 
+    float fw = fwidth( c_uv.x );                // Apply Anti-Alias to Lines
+    d = 1.0 - clamp( d / fw, 0.0, 1.0 );
 
+    d *= 1.0 - step( 0.98, length( c_uv ) );    // Mask out any lines outside of ring radius
+
+    //----------------------------------------------
+    // Draw angle 45 to 135
+    float rad_spread = radians( 90.0 ); // Total Angle from Start to finish
+    float rad_center = radians( 90.0 ); // Angle of the center of the arc wanting to draw
+    vec2  rad_dir    = vec2( cos(rad_center), sin(rad_center ) ); // Compute Direction of that center angle
+
+    d = max( d, arc( c_uv, rad_dir, rad_spread, 0.58, 0.42 ) * 0.3 );
+
+    //----------------------------------------------
     d = max( d, ring( c_uv, 0.98, 0.92 ) );
 
-
+    //----------------------------------------------
     out_color = vec4( vec3( d ), 1.0 );
 }`;
 

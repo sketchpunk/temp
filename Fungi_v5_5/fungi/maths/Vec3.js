@@ -39,10 +39,12 @@ class Vec3 extends Float32Array{
 
 		reset(){ this[0] = 0; this[1] = 0; this[2] = 0; return this; }
 
-		to_string( rnd=0 ){
+		to_string( rnd=0, inc_bracket=true ){
 			if( rnd == 0 ) return "[" + this.join(",") + "]";
 			else{
-				let s = "[";
+				let s = "";
+				if( inc_bracket ) s += "[";
+
 				for( let i=0; i < 3; i++ ){
 					switch( this[i] ){
 						case 0	: s += "0,"; break;
@@ -51,7 +53,9 @@ class Vec3 extends Float32Array{
 					}
 				}
 
-				return s.slice(0,-1) + "]";
+				s = s.slice( 0, -1 );
+				if( inc_bracket ) s += "]";
+				return s;
 			}
 		}
 		

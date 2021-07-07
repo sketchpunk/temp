@@ -24,6 +24,23 @@ const ANIM_TIME = 5;
 
 let gAnim, gSAnim, gCube;
 
+window.addEventListener( "keypress", e=>{
+    if( e.keyCode == 32 ){
+        let p, pnts = gSAnim.spline.points;
+
+        let buf = "";
+        for( p of pnts ){
+            buf += p.pos.to_string( 2, false );
+            buf += "," + p.tension;
+            buf += "," + p.bias;
+            buf += ",";
+            //console.log( p.pos.to_string( 2, false ), p );
+        }
+
+        console.log( buf.slice( 0, -1 ) );
+    }
+});
+
 function on_render( dt, ss ){
     gAnim.tick( dt ).run();
 }
@@ -35,7 +52,8 @@ function init(){
 	//App.Debug.set_pnt_size( 0.1 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	let tension = 0, bias = 0;
+    
+    let tension = 0, bias = 0;
 	let spline  = new HermiteSpline( true );
 	spline.add( [0, 0, 0], tension, bias );
 	spline.add( [1, 0.05, 0], tension, bias );
@@ -44,6 +62,13 @@ function init(){
 	spline.add( [-1, 0.2, 0], tension, bias );
     spline.add( [-1, 0.0, 0], tension, bias );
     
+    /*
+    let spline  = new HermiteSpline( false );
+    spline.add( [0, 0.2, 0.4] );
+    spline.add( [0, 0.0, 0.3] );
+    spline.add( [0, 0.0, -0.3] );
+    spline.add( [0, 0.2, -0.4] );
+    */
     gSAnim = new SplineAnimator( spline );
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -75,7 +100,18 @@ function init(){
     
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     on_pnt_move();
-    App.render_by( 1, on_render );
+
+    let tt = gSAnim.map.at_curve( 0, 1 );
+    let p = new Vec3();
+    gSAnim.spline.at( tt, p );
+
+    App.Debug.pnt( p, "blue", 0.1 );
+
+    console.log( tt );
+
+
+
+    //App.render_by( 1, on_render );
 }
 
 function on_pnt_move( idx, pos ){

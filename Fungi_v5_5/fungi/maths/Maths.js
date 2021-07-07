@@ -186,7 +186,7 @@ class Maths{
 		// Diff Concave Wave :: y = pow(abs((x++ % 6) - 3), 0.5);
 
 	////////////////////////////////////////////////////////////////////
-	// CURVES
+	// CURVES / EASING
 	////////////////////////////////////////////////////////////////////
 		static CBezierEase(target, x0,y0, x1,y1, x2,y2, x3,y3 ){
 			const TRIES		= 30;
@@ -247,20 +247,14 @@ class Maths{
 			return 	(7.0 * b * s6 * t) + (21.0 * c * s5 * t2) + (35.0 * d * s4 * t3) +
 					(35.0 * e * s3 * t4) + (21.0 * f * s2 * t5) + (7.0 * g * s * t6) + t7;
 		}
-
-		static sigmoid_half( t, k=0 ){ // Over 0, Eases in, under eases out
-			// https://dhemery.github.io/DHE-Modules/technical/sigmoid/
-			// https://www.desmos.com/calculator/q6ukniiqwn
-			return ( t - k*t ) / ( k - 2*k*Math.abs(t) + 1 );
-		}
 	
 		static sigmoid( t, k=0 ){ // Over 0, Eases in the middle, under eases in-out
 			// this uses the -1 to 1 value of sigmoid which allows to create
-			// easing at start and finish.
+			// easing at start and finish. Can pass in range 0:1 and it'll return that 
+			// range.
 			// https://dhemery.github.io/DHE-Modules/technical/sigmoid/
 			// https://www.desmos.com/calculator/q6ukniiqwn
-			let v = ( t - k*t ) / ( k - 2*k*Math.abs(t) + 1 );
-			return v * 0.5 + 0.5;
+			return ( t - k*t ) / ( k - 2*k*Math.abs(t) + 1 );
 		}
 
 		//https://blog.demofox.org/2014/08/28/one-dimensional-bezier-curves/
@@ -359,6 +353,17 @@ class Maths{
 		}
 }
 
+
+/*
+function lonLatZoomXY( zoom, lon, lat ){
+    const width     = Math.pow( 2, zoom );
+    const height    = Math.pow( 2, zoom );
+    const latRad    = ( lat * Math.PI ) / 180;
+    const x         = ~~(( width * ( lon + 180 ) ) / 360 );
+    const y         = ~~((( 1 - Math.asinh( Math.tan( latRad ) ) / Math.PI ) / 2.0 ) * height );
+    return { x, y };
+}
+*/
 
 
 	
@@ -592,7 +597,8 @@ function closestPointS_2Segments(A0,A1,B0,B1){
         }
 
 	//https://www.desmos.com/calculator/3zhzwbfrxd
-	function something( t, p, s ){
+	// Configurable easing Function
+	function ExpBlend( t, p, s ){
 		let c = (2 / (1-s)) - 1;
 		if( t > p ){
 			t = 1 - t;

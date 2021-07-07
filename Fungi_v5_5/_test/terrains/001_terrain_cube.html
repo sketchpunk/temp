@@ -1,0 +1,534 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } 	from "../../fungi/App.js";
+
+import Wireframe    from "../../fungi/shaders/Wireframe.js";
+//import Grid         from "../../fungi/geo/Grid.js";
+//import Geo          from "./lib/Geo.js";
+//import PlaneAltTri  from "./lib/PlaneAltTri.js";
+
+import Noise        from "../../lib/Noise.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "Phong.js" )
+	.set_camera( 45, 45, 2, 0, 0.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init(){
+
+    let tcube = new TerrainCube();
+    tcube.init( 0.1, 1, 1, 24, 24, true );
+
+    let freq = 0.2;
+    let amp  = 0.4;
+    let p, n;
+    for( p of tcube.gridIter() ){
+        n = Noise.perlin2( p.pos[0] * freq, p.pos[1] * freq );
+        n = n * 0.5 + 0.5;
+        //console.log( p.pos, n );
+        p.setY( tcube.minHeight + n * amp );
+        //App.Debug.pnt( p.vec, "cyan", 0.05 );
+    }
+
+    tcube.syncEdges();
+    tcube.updateNormals();
+
+	let mesh 	= tcube.geo.toMesh();
+	let mat     = App.shader.new_material( "Phong", null, { cullFace:true } );
+    let e       = App.mesh_entity( "Grid", mesh, mat, App.mesh.TRI );
+	//console.log( mesh );
+	//e.node.set_pos( 0, 0.05, 0 );
+
+    Wireframe.append_tri( e.draw, 
+        tcube.geo.getArray("indices"), 
+        tcube.geo.getArray("vertices"), 
+        { line_color:"#00000060", face_color:"#00000000" }
+    );
+
+	return true;
+}
+
+/*
+- Generate 6 seperate faces.
+- Assign Vert Groups, Maybe Two versions, Face Index and layered Edge Loops
+
+
+class Geo{
+    vertexCount = 0;
+    vertices    = null;
+    indices     = null;
+    uvs         = null;
+    normals     = null;
+
+    constructor( initSize=0, useInd=false, useNorm=false, useUv=false, vertCompLen=3 ){
+        this.vertCompLen    = vertCompLen;
+        this.vertices       = new Array( initSize * vertCompLen ).fill( 0 );
+        this.vertexCount    = initSize;
+
+        if( useInd )    this.indices    = new Array();
+        if( useNorm )   this.normals    = new Array( initSize * 3 ).fill( 0 );
+        if( useUv )     this.uvs        = new Array( initSize * 2 ).fill( 0 );
+    }
+
+    pushVertex( pos, uv=null, norm=null ){
+        this.vertices.push( ...pos );
+        if( uv && this.uvs )        this.uvs.push( ...uv );
+        if( norm && this.normals )  this.normals.push( ...norm );
+
+        let idx = this.vertexCount;
+        this.vertexCount++;
+        return idx;
+    }
+
+    getVertex( i ){
+
+    }
+
+    finalizeType(){
+        this.vertices = new Float32Array( this.vertices );
+        if( this.indices )  this.indices    = new Uint16Array( this.indices );
+        if( this.normals )  this.normals    = new Float32Array( this.normals );
+        if( this.uvs )      this.uvs        = new Float32Array( this.uvs );
+    }
+}
+*/
+
+//#####################################################
+
+class TerrainCube{
+    constructor(){
+        this.geo = Geo.withVertIndice();
+        this.geo.useUv();
+
+        this.edge       = null;
+        this.topEdge    = null;
+        this.botEdge    = null;
+        this.topVIndex  = 0;
+        this.botVIndex  = 0;
+        this.capVIndex  = null; // Vert Index of Cap 
+        this.capIIndex  = null; // Indice Indes start of Cap Faces
+
+        this.xCells     = 0;
+        this.yCells     = 0;
+        this.minHeight  = 0;
+    }
+
+    init( minH=1, w=1, h=1, xCells=2, yCells=2, centerOffset=false ){
+        this.xCells     = xCells;
+        this.yCells     = yCells;
+        this.minHeight  = minH;
+        this.edge       = PlaneAltTri.mkWithEdge( this.geo, w, h, xCells, yCells, centerOffset );
+        
+        this.extrudeEdge();
+        this.wallIndices();
+        this.bottomCap();
+        this.geo.useNormal( this.capVIndex+1 );
+
+        this.geo.debugAttribCount();
+    }
+
+    extrudeEdge(){
+        const vert = this.geo.getVertices(),
+              uv   = this.geo.getUvs();
+
+        let vIdx    = vert.length / 3;
+        let wallTop = new Array();
+        let wallBot = new Array();
+        let eLen    = this.edge.length - 1;
+        let v       = new Vec3();
+        let i, u;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Shift Plane Verts Up
+        for( i=1; i < vert.length; i +=3 ) vert[ i ] = this.minHeight;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Duplicate Edge Vertices as Top of the Sides
+        u = 0;
+        this.topVIndex = vIdx;
+
+        for( i of this.edge ){
+            vert.push( ...v.from_buf( vert, i * 3 ) );
+            uv.push( u / eLen, 0 );
+
+            wallTop.push( vIdx++ );
+            u++;
+        }
+        this.topEdge = wallTop;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Duplicate Edge Vertices as Bottom of the Side
+        // Reset Y so its touching the floor
+        u = 0;
+        this.botVIndex = vIdx;
+
+        for( i of this.edge ){
+            v.from_buf( vert, i * 3 )
+            vert.push( v[ 0 ], 0, v[ 2 ] );
+            uv.push( u / eLen, 1 );
+
+            wallBot.push( vIdx++ );
+            u++;
+        }
+        this.botEdge = wallBot;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        /*
+        for( i of wallBot ){
+            v.from_buf( vert, i * 3 );
+            App.Debug.pnt( v, "cyan", 0.05 );
+        }
+        */
+    }
+
+    wallIndices(){
+        let i, ii, a, b, c, d;
+        const   ind     = this.geo.getIndices(),
+                top     = this.topEdge,
+                bot     = this.botEdge,
+                elen    = top.length;
+
+        for( i=0; i < elen; i++ ){
+            ii = (i + 1) % elen;
+            a  = top[ i ];
+            b  = bot[ i ];
+            c  = bot[ ii ];
+            d  = top[ ii ];
+            ind.push( a, d, c, c, b, a );
+        }
+    }
+
+    bottomCap(){
+        const   vert = this.geo.getVertices(),
+                ind  = this.geo.getIndices(),
+                uv   = this.geo.getUvs(),
+                cIdx = vert.length / 3,
+                bot  = this.botEdge,
+                eLen = bot.length;
+        let i, ii, a, b;
+
+        vert.push( 0, 0, 0 );
+        uv.push( 0,0 );
+
+        this.capVIndex  = cIdx;
+        this.capIIndex  = ind.length;
+
+        for( i=0; i < eLen; i++ ){
+            ii = ( i + 1 ) % eLen;
+            a  = bot[ i ];
+            b  = bot[ ii ];
+
+            ind.push( a, b, cIdx );
+        }        
+    }
+
+    syncEdges(){
+        let len = this.edge.length;
+        let buf = this.geo.getVertices();
+        let i, a, b;
+
+        for( i=0; i < len; i++ ){
+            a = this.edge[ i ] * 3;
+            b = this.topEdge[ i ] * 3;
+
+            buf[ b ]    = buf[ a ];
+            buf[ b+1 ]  = buf[ a+1 ];
+            buf[ b+2 ]  = buf[ a+2 ];
+        }
+
+        return this;
+    }
+
+    updateNormals(){
+        let vert = this.geo.getVertices();
+        let norm = this.geo.getNormals();
+        let ind  = this.geo.getIndices();
+
+        let i, ii;
+        let a = new Vec3();
+        let b = new Vec3();
+        let c = new Vec3();
+        let ab = new Vec3();
+        let ac = new Vec3();
+        let n  = new Vec3();
+        let s  = new Vec3();
+
+        for( i=0; i < this.capIIndex; i+=3 ){
+            a.from_buf( vert, ind[ i ] * 3 );
+            b.from_buf( vert, ind[ i+1 ] * 3 );
+            c.from_buf( vert, ind[ i+2 ] * 3 );
+
+            ab.from_sub( b, a );
+            ac.from_sub( c, a );
+            n.from_cross( ab, ac );
+
+            s.from_buf( norm, ind[ i ] * 3 ).add( n ).to_buf( norm, ind[ i ] * 3 );
+            s.from_buf( norm, ind[ i+1 ] * 3 ).add( n ).to_buf( norm, ind[ i+1 ] * 3 );
+            s.from_buf( norm, ind[ i+2 ] * 3 ).add( n ).to_buf( norm, ind[ i+2 ] * 3 );
+        }
+
+        // Normalize 
+        for( i=0; i < norm.length; i+=3 ){
+            s.from_buf( norm, i ).norm().to_buf( norm, i );
+        }
+    }
+
+    gridIter(){
+        let result  = { 
+                done    : false, 
+                value   : {
+                    idx     : 0,
+                    vec     : [ 0, 0, 0 ],
+                    pos     : [ 0, 0 ],
+                    setY    : function( v ){
+                        buf[ this.idx+1 ] = v;
+                    },
+                }
+            },
+            buf     = this.geo.getVertices(),
+            len     = this.topVIndex,
+            i       = 0,
+            ii      = 0;
+
+        let next    = ()=>{
+            if( i >= len ) result.done = true;
+            else{
+                ii = i * 3;
+                result.value.idx        = ii;
+                result.value.vec[ 0 ]   = buf[ ii ];
+                result.value.vec[ 1 ]   = buf[ ii+1 ];
+                result.value.vec[ 2 ]   = buf[ ii+2 ];
+                result.value.pos[ 1 ]   = Math.floor( i / ( this.xCells + 1 ) );
+                result.value.pos[ 0 ]   = i - result.value.pos[ 1 ] * ( this.xCells + 1 );
+                i++;
+            }
+            return result;
+        };
+    
+        return { [Symbol.iterator](){ return { next }; } };
+    }
+}
+
+
+class Attrib{
+    constructor( name, compLen=3, size=null, type=null, data=null ){
+        this.name       = name;
+        this.compLen    = compLen;
+        this.type       = ( type != null )? type : Geo.TAttrib.float;
+        this.data       = ( data )? data :
+            ( size != null )? new Array( size ).fill( 0 ) : new Array();
+    }
+
+    static fromData( name, data, compLen=3, type = Geo.TAttrib.float ){ return new Attrib( name, compLen, null, type, data ); }
+}
+
+class Geo{
+    static TAttrib = {
+        "float"     : 0,
+        "uint16"    : 1,
+    };
+
+    // #region MAIN
+    attrib = new Map();
+    // #endregion ////////////////////////////////////////////////////////////
+
+    // #region GETTER/SETTERS
+    addAttrib( name, compLen=3, type=Geo.TAttrib.float, size=null ){ this.attrib.set( name, new Attrib( name, compLen, size, type ) ); return this; }
+    addAttribData( name, compLen=3, type, rawData ){ this.attrib.set( name, Attrib.fromData( name, rawData, compLen, type ) ); return this; }
+    
+    useUv( size=0 ){ this.addAttrib( "uvs", 2, Geo.TAttrib.float, size * 2 ); return this; }
+    useNormal( size=0 ){ this.addAttrib( "normals", 3, Geo.TAttrib.float, size * 3 ); return this; }
+
+    getVertices(){ return this.getArray( "vertices" ); }
+    getIndices(){ return this.getArray( "indices" ); }
+    getNormals(){ return this.getArray( "normals" ); }
+    getUvs(){ return this.getArray( "uvs" ); }
+
+    getArray( name ){
+        let i = this.attrib.get( name );
+
+        if( !i ){ console.error( "Geo Attrib not found :", name ); return null; }
+        if( !i.data ){ console.error( "Geo Attrib has no data : ", name ); return null; }
+
+        return i.data;
+    }
+
+    toType( name ){
+        let a = this.attrib.get( name );
+        if( !a ) return null;
+
+        switch( a.type ){
+            case Geo.TAttrib.float	: return new Float32Array( a.data );
+            case Geo.TAttrib.uint16	: return new Uint16Array( a.data );
+            default			        : console.log( "Unknown Type", a.type );
+        }
+
+        return null;
+    }
+
+    toMesh( name="NoNameGeo" ){
+        const vert  = this.toType( "vertices" );
+        const idx   = this.toType( "indices" );
+        const norm  = this.toType( "normals" );
+        return App.mesh.from_data( name, vert, vert.compLen, idx, norm );
+    }
+
+    // #endregion ////////////////////////////////////////////////////////////
+
+    // #region SPECIALTY
+    attribIter( name ){
+        return { [Symbol.iterator]:()=>{ 
+            let j, i	= 0;
+            let atb = this.attrib.get( name );
+            let ary = atb.data;
+            let out	= { value:new Array( atb.compLen ), done:false };
+            let len = ary.length;
+            return {
+                next: function(){
+                    for( j=0; j < atb.compLen; j++ ) out.value[ j ] = ary[ i++ ];
+                    
+                    if( i > len ) out.done = true;
+                    return out;
+                }
+            } 
+        } };
+    }
+    // #endregion ////////////////////////////////////////////////////////////
+
+    // #region STATIC BUILDERS
+    static withVert(){ return new Geo().addAttrib( "vertices", 3 ); }
+    static withVertIndice(){ return new Geo().addAttrib( "vertices", 3 ).addAttrib( "indices", 1, Geo.TAttrib.uint16 ); }
+    static fullMesh( vertCompLen=3 ){
+        return new Geo()
+            .addAttrib( "vertices", vertCompLen )
+            .addAttrib( "normals", 3 )
+            .addAttrib( "uvs", 2 )
+            .addAttrib( "indices", 1, Geo.TAttrib.uint16 );
+    }
+    // #endregion ////////////////////////////////////////////////////////////
+
+    // #region GETTER/SETTERS
+    debugAttribCount(){
+        let k,v;
+        for( [k,v] of this.attrib ){
+            console.log( k, v.data.length / v.compLen );
+        }
+    }
+    // #endregion ////////////////////////////////////////////////////////////
+}
+
+
+class PlaneAltTri{
+
+static mk( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
+    this.mkVerts( geo, w, h, x_cells, y_cells, center_offset );
+    this.mkIndices( geo, x_cells, y_cells );
+    this.mkUv( geo, x_cells, y_cells );
+    return geo;
+}
+
+static mkWithEdge( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
+    this.mkVerts( geo, w, h, x_cells, y_cells, center_offset );
+    this.mkIndices( geo, x_cells, y_cells );
+    this.mkUv( geo, x_cells, y_cells );
+    return this.mkEdge( geo, x_cells, y_cells );
+}
+
+static mkEdge( geo, x_cells=2, y_cells=2 ){
+    const   clen  = x_cells + 1,
+            rlen  = y_cells + 1,
+            len   = clen * rlen,
+            rtn   = new Array();
+    let i;
+
+    // Top - Left To Right
+    for( i=0; i < clen; i++ ) rtn.push( i );
+
+    // Right - Top To Bottom
+    for( i=1; i < rlen; i++ ) rtn.push( rlen * i + x_cells );
+
+    // Bottom - Right to Left
+    for( i=1; i < clen; i++ ) rtn.push( len - i - 1 );
+
+    // Left - Top To Bottom
+    for( i=y_cells-1; i > 0; i-- ) rtn.push( rlen * i );
+    
+    /* DEBUG 
+    let v     = new Vec3();
+    let verts = geo.getArray( "vertices" );
+    for( i of rtn ){
+        v.from_buf( verts, i*3 );
+        console.log( i );
+        App.Debug.pnt( v, "cyan", 0.05 );
+    }
+    */
+    
+    return rtn;
+}
+
+static mkVerts( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
+    let vert	= geo.getVertices(),
+        x_inc   = w / x_cells,
+        y_inc   = h / y_cells,
+        v       = new Vec3(),
+        vv      = new Vec3(),
+        offset  = [0,0,0],
+        xx, yy;
+
+    if( center_offset ){
+        offset[ 0 ] = -w * 0.5;
+        offset[ 2 ] = -h * 0.5;
+    }
+
+    for( yy=0; yy <= y_cells; yy++ ){
+        v.z = yy * y_inc;
+
+        for( xx=0; xx <= x_cells; xx++ ){
+            v.x = xx * x_inc;  //App.Debug.pnt( v );
+            vv.from_add( v, offset ).push_to( vert );
+        }
+    }
+}
+
+static mkIndices( geo, x_cells, y_cells ){
+    let ary     = geo.getIndices(),
+        col_cnt = x_cells + 1,
+        x, y, a, b, c, d, bit;
+
+    for( y=0; y < y_cells; y++ ){
+        bit = y & 1; // Alternate the starting Quad Layout for every row 
+
+        for( x=0; x < x_cells; x++ ){
+            a   = y * col_cnt + x;
+            b   = a + col_cnt;
+            c   = b + 1
+            d   = a + 1;
+            // Alternate the Quad Layout for each cell
+            if( ( x & 1 ) == bit )	ary.push( d, a, b, b, c, d ); // Front Slash
+            else					ary.push( a, b, c, c, d, a ); // Back Slash
+        }
+    }
+}
+
+static mkUv( geo, x_cells, y_cells ){
+    const ary = geo.getUvs();
+    let x, y, u, v;
+    for( y=0; y <= y_cells; y++ ){
+        v = y / y_cells;
+        for( x=0; x <= x_cells; x++ ){
+            u = x / x_cells;
+            ary.push( u, v );
+        }
+    }
+}
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

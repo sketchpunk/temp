@@ -7,7 +7,10 @@ import MixamoAnimator	from "../fungi.test/MixamoAnimator.js";
 //import CharRig			from "../fungi.test/rigs/VegetaRig.js";
 //import CharRig			from "../fungi.test/rigs/TinaRig.js";
 //import CharRig			from "../fungi.test/rigs/BoxyRig.js";
-import CharRig			from "../fungi.test/rigs/SCKCasualRig.js";
+//import CharRig			from "../fungi.test/rigs/SCKCasualRig.js";
+//import CharRig			from "../fungi.test/rigs/CherubBotRig.js";
+//import CharRig			from "../fungi.test/rigs/TRex.js";
+import CharRig			from "../fungi.test/rigs/LigerZero.js";
 
 //#####################################################
 App
@@ -17,7 +20,7 @@ App
 	.load_pkg( { name:"fungi.ik", spring:true } )
 	.use_events()
 	.use_debug()
-	.set_camera( 0, 20, 3, 0, 0.9, 0 )
+	.set_camera( 90, -10, 3, 0, 0.9, 0 )
 	.task( init )
 	.then();
 
@@ -31,7 +34,8 @@ function on_render( dt, ss ){
 			.apply_pose();						// Apply Pose to Src Armature
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
+	//gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
+	gIKPose.apply_quadraped_rig( gRig.rig );
 	gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
 }
 
@@ -45,13 +49,13 @@ async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Load Character
 	gRig = new CharRig();
-	await gRig.load( "../files/models/sck_casual/", { 
+	await gRig.load( null, { 
 		see_bones  : false,
 		use_tex    : true,
-		use_spring : false,
+		use_spring : true,
 	});
 
-	gRig.node.set_pos( [1.0,0,0] );
+	gRig.node.set_pos( [0.0,0,-1.4] );
 	//gRig.node.set_scl( 0.9 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -61,15 +65,33 @@ async function init(){
 		gIKPose = new IKPose_Human();
 		gAnim 	= new MixamoAnimator();
 
-		//await gAnim.load( "../files/anim/Catwalk" );
-		await gAnim.load( "../files/anim/Walking" );
+		await gAnim.load( "../files/anim/Catwalk" );
+		//await gAnim.load( "../files/anim/Walking" );
 
 		//---------------------------
 		//on_render( 0.1 );
 		App.render_by( 1, on_render );
 	}
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//debug();
 
 	return true;
+}
+
+function debug(){
+	let rig = gRig.rig;
+	let chain = rig.get( "spine" );
+	let pose = rig.tpose;
+
+	let cb, tb;
+	for( cb of chain.bones ){
+		tb = pose.bones[ cb.idx ];
+
+		console.log( tb );
+
+		App.Debug.pnt( tb.world.pos, "cyan", 0.1 );
+	}
 }
 
 //#####################################################

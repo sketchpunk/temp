@@ -158,7 +158,7 @@ class MeshFactory{
 			o = json.indices;
 			switch( o.data_type ){ // Indices can be imported as different Int types.
 				case "uint16": mesh.element_type = USHORT; break;
-				case "uint32": mesh.element_type = INT; break;
+				case "uint32": mesh.element_type = UINT; break;
 				default: console.error("Unknown Array Type when Adding Indices", o.data_type ); return null;
 			}
 

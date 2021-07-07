@@ -33,7 +33,7 @@ export default async( App, config )=>{
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	let ubo = App.ubo.new( "Armature", 2, [
-		{ name:"bones",	type:"mat4", ary_len:90 },
+		{ name:"bones",	type:"mat4", ary_len:100 },
 	]);
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

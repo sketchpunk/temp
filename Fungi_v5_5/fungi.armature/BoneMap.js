@@ -25,16 +25,18 @@ class BoneInfo{
 class BoneMap{
     static of_armature( arm, get_idx=true ){
         let bi, b, i, n, save, rtn = {};
-        for( bi of this.bones ){
-            for( i=0; i < arm.bones.length; i++ ){
-                b = arm.bones[ i ];
+        for( i=0; i < arm.bones.length; i++ ){
+            b = arm.bones[ i ];
+            //console.log( "--", i, b.name );
+            for( bi of this.bones ){
                 if( (n = bi.test( b.name )) ){
+                    //console.log( "----TEST", b.name , " is ", n, "Index", i );
                     save = ( get_idx )? i : b.name;
-                    //console.log( n, b.name, i );
-            
-                    if( !rtn[n] )       rtn[ n ] = ( bi.multi )? [save] : save;
-                    else if( bi.multi ) rtn[ n ].push( save );
-                    else continue; // Dont continue if not a multi
+
+                    if( !rtn[n] )       rtn[ n ] = ( bi.multi )? [save] : save;     // Save First Instance
+                    else if( bi.multi ) rtn[ n ].push( save );                      // If Multiple, Add to array
+                    
+                    break;
                 }
             }
         }
@@ -42,16 +44,16 @@ class BoneMap{
     }
 
     static bones = [
-        new BoneInfo( "thigh", 3, "thigh|up.*leg" ), //upleg | upperleg
-        new BoneInfo( "shin", 3, "shin|leg|calf", "up" ),
+        new BoneInfo( "thigh", 3, "thigh|up.*leg", "twist" ), //upleg | upperleg
+        new BoneInfo( "shin", 3, "shin|leg|calf", "up|twist" ),
         new BoneInfo( "foot", 3, "foot" ),
-        new BoneInfo( "forearm", 3, "forearm|arm", "up" ),
-        new BoneInfo( "upperarm", 3, "(upper.*arm|arm)", "fore" ),
+        new BoneInfo( "upperarm", 3, "(upper.*arm|arm)", "fore|twist|lower" ),
+        new BoneInfo( "forearm", 3, "forearm|arm", "up|twist" ),
         new BoneInfo( "hand", 3, "hand", "thumb|index|middle|ring|pinky" ),
         new BoneInfo( "head", 0, "head" ),
         new BoneInfo( "neck", 0, "neck" ),
         new BoneInfo( "hip", 0, "hips*|pelvis" ),
-        new BoneInfo( "spine", 0, "spine.*\d?", null, true ),
+        new BoneInfo( "spine", 0, "spine.*\d*|chest", null, true ),
     ];
 }
 

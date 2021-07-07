@@ -23,7 +23,7 @@ https://jeremybouny.fr/en/articles/webgl_lod/
 
 async function init(){
 
-	let geo = Geo.new_vert_indice();
+	let geo = Geo.with_vert_indice();
 
 	create_grid_verts( geo, 1, 1, 4, 4 );
 	grid_alt_tri_idx( geo, 4, 4 );
@@ -85,7 +85,7 @@ class Geo{
 		let info = {
 			name : name,
 			type : type,
-			data : (size)? new Array( size ) : new Array(),
+			data : ( size )? new Array( size ) : new Array(),
 		};
 		this.attrib.set( name, info );
 		return this;
@@ -107,6 +107,7 @@ class Geo{
 		switch( a.type ){
 			case "float"	: return new Float32Array( a.data );
 			case "uint16"	: return new Uint16Array( a.data );
+			default			: console.log( "Unknown Type", a.type );
 		}
 
 		return null;
@@ -139,8 +140,8 @@ class Geo{
 	// #endregion ////////////////////////////////////////////////////////////
 
 	// #region STATIC BUILDERS
-	static new_vert(){ return new Geo().add_attrib( "vertices" ); }
-	static new_vert_indice(){ return new Geo().add_attrib( "vertices" ).add_attrib( "indices", "uint16" ); }
+	static with_vert(){ return new Geo().add_attrib( "vertices" ); }
+	static with_vert_indice(){ return new Geo().add_attrib( "vertices" ).add_attrib( "indices", "uint16" ); }
 	// #endregion ////////////////////////////////////////////////////////////
 }
 

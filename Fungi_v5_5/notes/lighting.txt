@@ -15,3 +15,8 @@ https://github.com/glslify/glsl-specular-gaussian
 https://github.com/glslify/glsl-diffuse-lambert
 
 https://github.com/glslify/glsl-aastep anti-alias
+
+
+https://github.com/nekotogd/Godot_BoTW_Toon_Shader
+https://godotshaders.com/shader/update-botw-toon-shader/
+https://www.youtube.com/watch?v=N8xDQeB3wBs

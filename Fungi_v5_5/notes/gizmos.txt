@@ -10,3 +10,4 @@ https://threejs.org/examples/misc_controls_transform.html
 https://github.com/mrdoob/three.js/blob/master/examples/jsm/controls/TransformControls.js
 
 
+https://maxliani.wordpress.com/2021/06/29/offline-to-realtime-manipulators/

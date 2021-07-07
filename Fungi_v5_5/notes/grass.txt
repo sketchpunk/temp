@@ -2,3 +2,8 @@
 Volumetric Swaying Grass ( Kinda like RayMarching )
 https://twitter.com/AlvarBer/status/1300352292181422080?s=20
 https://medium.com/@shahriyarshahrabi/volumetric-grass-shader-28ebb9f6860b
+
+https://www.youtube.com/watch?v=NMlVZYvspJk
+https://kenney.nl/assets/foliage-sprites
+https://roystan.net/articles/grass-shader.html
+https://gist.github.com/phi-lira/225cd7c5e8545be602dca4eb5ed111ba

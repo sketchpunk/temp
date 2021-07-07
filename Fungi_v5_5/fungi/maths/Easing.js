@@ -1,6 +1,17 @@
 //http://easings.net/
 //Easing functions from https://github.com/tweenjs/tween.js/blob/master/src/Tween.js
 
+// https://github.com/lordofduct/spacepuppy-unity-framework/blob/master/SpacepuppyBase/Tween/Easing.cs
+
+// https://www.febucci.com/2018/08/easing-functions/
+
+// https://www.youtube.com/watch?v=mr5xkf6zSzk VERY GOOD
+
+// https://realtimevfx.com/uploads/default/original/2X/1/1ff761b19b6df461fc5befeab1e8f979ba17a040.png
+
+// https://github.com/julianshapiro/velocity/blob/master/src/Velocity/easing/bezier.ts
+// https://github.com/julianshapiro/velocity/blob/master/src/Velocity/easing/bezier.ts
+
 class Easing{
 	static linear(k){ return k; }
 

@@ -9,6 +9,11 @@ import CharRig			from "../fungi.test/rigs/SCKCasualRig.js";
 
 import Cycle            from "../fungi.misc/Cycle.js";
 
+import AnimatorStack    from "../../fungi.misc/AnimatorStack.js";
+import SplineAnimator   from "../../fungi.misc/SplineAnimator.js";
+import HermiteSpline    from "../../fungi/maths/curves/HermiteSpline.js";
+
+// https://twitter.com/leedoppo/status/1389540103459123201
 //#####################################################
 App
 	.init( true )
@@ -17,34 +22,24 @@ App
 	.load_pkg( { name:"fungi.ik", spring:false } )
 	.use_events()
 	.use_debug()
-	.set_camera( 0, 20, 3, 0, 0.9, 0 )
+	.set_camera( 90, 0, 3, 0, 0.9, 0 )
 	.task( init )
 	.then();
 
 //#####################################################
+const LOAD_ANIMATION    = true;
+const ANIM_SPEED        = 1.5;
+
 let gAnim, gIKPose, gRig, gWalk;
 
 function on_render( dt, ss ){
-    gWalk.update( dt );
-
-    /*
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    gAnim.tick( dt, true )					// Generate Pose for Src Armature
-			.update_ik_pose( gIKPose, true )	// Convert Pose to IKPose
-			.apply_pose();						// Apply Pose to Src Armature
-
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
-    gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
-    */
+    gAnim.tick( dt ).run();
 }
-
-const LOAD_ANIMATION = true;
 
 async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Setup
-	App.ecs.systems.get( "LightSystem" ).cls.ambient_color = "#303030";
+    App.ecs.systems.get( "LightSystem" ).cls.ambient_color = "#303030";
     
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Load Character
@@ -78,12 +73,18 @@ async function init(){
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     gWalk = new ProceduralWalk();
-    
+    gAnim = new AnimatorStack( ANIM_SPEED );
+    gAnim.push( gWalk.on_cycle_bind );
+
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	if( LOAD_ANIMATION ){
 		//on_render( 0.1 );
 		App.render_by( 1, on_render );
-	}
+    }else{
+        on_render( 0 );
+        //gAnim.tick( 0 ).run();
+        //gWalk.debug();
+    }
 
 	return true;
 }
@@ -92,30 +93,93 @@ async function init(){
 
 class ProceduralWalk{
     constructor(){
-        this.cycle          = new Cycle( 2 );
-        this.hip_rot_range  = Maths.to_rad( 25 );
-        this.hip_y_range    = -0.05;
+        this.on_cycle_bind  = this.on_cycle.bind( this );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.hip_rot_range  = Maths.to_rad( 12 );
+        this.hip_y_range    = -0.025;
+        this.hip_x_range    = 0.01;
+
+        this.chest_rot_range  = 12;
+        this.chest_rotx_range  = 3;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.left_foot_offset = new Vec3( 0.09, 0.0, 0.0 );
+        this.right_foot_offset = new Vec3( -0.09, 0.0, 0.0 );
+
+        this.feet_path = new HermiteSpline( true );
+        this.feet_path.add( [0, 0.0, 0.2] );
+        this.feet_path.add( [0, 0.02, -0.2] );
+        this.feet_path.add( [0, 0.20, -0.24] );
+        this.feet_path.add( [0, 0.2, 0] );
+        this.feet_path.add( [0, 0.08, 0.24] );
+
+        this.feet_path_anim = new SplineAnimator( this.feet_path );
+        this.feet_path_anim.offset.set( 0, gIKPose.leg_l.effe_pos.y - this.hip_y_range, -0.1 );
+
+        /*
+        - Need to split T in half.
+        -- First Half goes to the First Curve
+        -- Second halg goes to the rest of the spline.
+
+        */
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.left_hand_offset  = new Vec3( 0.3, 0.0, 0.0 );
+        this.right_hand_offset = new Vec3( -0.3, 0.0, 0.0 );
+
+        this.hand_path = new HermiteSpline( false );
+        this.hand_path.add( [ 0, 0.6,  0.1] );
+        this.hand_path.add( [ 0, 0.05,     0.17] );
+        this.hand_path.add( [ 0, -0.055,    -0.2] );
+        this.hand_path.add( [ 0, 0.12, -0.3] );
+
+        this.hand_path_anim = new SplineAnimator( this.hand_path );
+        this.hand_path_anim.offset.set( 0, 1, 0 );
     }
 
-    update( dt ){
-        this.cycle.update( dt );
-        this.run_hip();
-        this.run_head();
+    on_cycle( cycle ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.run_hip( cycle );
+        //this.run_spine( cycle );
+        this.run_feet( cycle );
+        //this.run_head( cycle );
+        this.run_hands( cycle );
 
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         gRig.rig.pose.update_world();
-        IKPose_Human_Debug.from_rig( gRig.rig, gIKPose, true, true );
-
         gIKPose.apply_rig( gRig.rig, true );	// Apply IK Pose to Rig's Working Pose
         gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.debug();
     }
 
-    run_hip(){
-        let q = new Quat();
-        let v = new Vec3();
+    debug(){
+        // Visual Debugging
+        //IKPose_Human_Debug.from_rig( gRig.rig, gIKPose, true, true );
+        //this.feet_path_anim.debug( App.Debug, false );
+        //this.feet_path.debug_points( App.Debug, this.feet_path_anim.offset );
 
+        this.hand_path_anim.debug( App.Debug, false );
+        this.hand_path.debug_points( App.Debug, this.hand_path_anim.offset );
+    }
+
+    run_hip( cycle ){
+        //let q = new Quat();
+        //let v = new Vec3();
+
+        let t   = cycle.as_cycle01();       // Get Animation Time
+        let tt  = Maths.fract( t / 0.5 );   // Split Time into 2 Phases, fract to get T
+        tt      = 1 - gradient010( tt );    // Remap 0:1 to 1:0:1
+        tt      = sigmoid( tt, -0.25 );     // Make T curvey since its linear
+
+        gIKPose.hip.movement.y = this.hip_y_range * tt;
+
+        /*
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Rotate Hips
-        let sin11 = this.cycle.as_sin();
+        let sin11 = cycle.as_sin();
         q.from_axis_angle( Vec3.UP, this.hip_rot_range * sin11 );
         v.from_quat( q, Vec3.FORWARD );
         gIKPose.hip.effe_dir.copy( v );
@@ -124,17 +188,46 @@ class ProceduralWalk{
         // Move Hip up and Down
         let sin01 = Math.abs( sin11 );
         gIKPose.hip.movement.y = this.hip_y_range * sin01;
+        gIKPose.hip.movement.x = this.hip_x_range * sin11;
+        */
 
         //App.Debug.ln( [0,0,0], v, "cyan" );
     }
 
-    run_head(){
+    run_spine( cycle ){
+        let q = new Quat();
+        let v = new Vec3();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      
+        let sin11 = -cycle.as_sin();
+        let sin01 = Math.abs( sin11 );
+        q.from_euler(
+            this.chest_rotx_range   * sin01,
+            this.chest_rot_range    * sin11,
+            0
+        );
+        v.from_quat( q, Vec3.FORWARD );
+
+        gIKPose.spine[ 1 ].pole_dir.copy( v );
+
+        q.from_euler(
+            0,
+            5 * sin11,
+            0
+        );
+        v.from_quat( q, Vec3.FORWARD );
+
+        gIKPose.spine[ 0 ].pole_dir.copy( v );
+    }
+
+    run_head( cycle ){
         let q = new Quat();
         let v = new Vec3();
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Rotate Hips
-        let sin11 = -this.cycle.as_sin();
+        let sin11 = -cycle.as_sin();
         let sin01 = Math.abs( sin11 );
         q.from_euler(
             8 * sin01,
@@ -143,8 +236,125 @@ class ProceduralWalk{
         );
         v.from_quat( q, Vec3.FORWARD );
         gIKPose.head.effe_dir.copy( v );
-
     }
+
+    run_feet( cycle ){
+        let tt, t, pos = new Vec3();
+        let a, b;
+
+        // ---------------------------------------- 
+        t = cycle.as_cycle01();
+        
+        if( t <= 0.5 ){
+            t = t * 2; // Remap 0:0.5 to 0:1
+            a = 0;
+            b = 0;
+        }else{
+            t = (t - 0.5) * 2;  // Remap 0.5:1 to 0:1
+            a = 1;
+            b = this.feet_path_anim.spline.curve_count - 1;
+        }
+
+        t = t * 2 - 1;      // Remape 0:1 to -1:1
+        t = sigmoid( t, -0.2 ) * 0.5 + 0.5; // Remape Sigmoid -1:1 to 0:1
+        this.feet_path_anim.at_idx_range( t, a, b, pos );   
+
+        pos.add( this.left_foot_offset );
+        gIKPose.leg_l.effe_pos.copy( pos );
+
+        // ---------------------------------------- 
+        t = cycle.as_cycle01( Math.PI );
+        
+        if( t <= 0.5 ){
+            t = t * 2; // Remap 0:0.5 to 0:1
+            a = 0;
+            b = 0;
+        }else{
+            t = (t - 0.5) * 2;  // Remap 0.5:1 to 0:1
+            a = 1;
+            b = this.feet_path_anim.spline.curve_count - 1;
+        }
+
+        t = t * 2 - 1;      // Remape 0:1 to -1:1
+        t = sigmoid( t, -0.2 ) * 0.5 + 0.5; // Remape Sigmoid -1:1 to 0:1
+        this.feet_path_anim.at_idx_range( t, a, b, pos );   
+
+        pos.add( this.right_foot_offset );
+        gIKPose.leg_r.effe_pos.copy( pos );
+        
+
+        /*
+        let t, pos = new Vec3();
+        let s = 0.0;
+        
+        t = cycle.as_sigmoid01( s );
+        this.feet_path_anim.at( t, pos );
+        pos.add( this.left_foot_offset );
+
+        gIKPose.leg_l.effe_pos.copy( pos );
+
+
+        t = cycle.as_sigmoid01( s, Math.PI );
+        this.feet_path_anim.at( t, pos );
+        pos.add( this.right_foot_offset );
+
+        gIKPose.leg_r.effe_pos.copy( pos );
+        */
+
+        //leg_l = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3(), effe_pos:new Vec3() };
+        //leg_r = { len_scale:0,	effe_dir:new Vec3(), pole_dir:new Vec3(), effe_pos:new Vec3() };
+    }
+
+    run_hands( cycle ){
+        let t, tt, pos = new Vec3();
+
+        t  = cycle.as_cycle01();
+        tt = 1 - gradient010( t );
+        tt = quad_InOut( tt );
+
+        this.hand_path_anim.at( tt, pos );
+        pos.add( this.left_hand_offset );
+        gIKPose.arm_l.effe_pos.copy( pos );
+
+        this.hand_path_anim.at( 1-tt, pos );
+        pos.add( this.right_hand_offset );
+        gIKPose.arm_r.effe_pos.copy( pos );
+
+        /*
+        let s = 0.0;
+        //t = cycle.as_cycle010();
+        t = cycle.as_sigmoid010( s, Math.PI );
+        this.hand_path_anim.at( t, pos );
+        pos.add( this.left_hand_offset );
+        gIKPose.arm_l.effe_pos.copy( pos );
+
+        t = cycle.as_sigmoid010( s );
+        this.hand_path_anim.at( t, pos );
+        pos.add( this.right_hand_offset );
+        gIKPose.arm_r.effe_pos.copy( pos );
+        */
+    }
+}
+
+//
+function sigmoid( t, k=0 ){ // Over 0, Eases in the middle, under eases in-out
+    // this uses the -1 to 1 value of sigmoid which allows to create
+    // easing at start and finish.
+    // https://dhemery.github.io/DHE-Modules/technical/sigmoid/
+    // https://www.desmos.com/calculator/q6ukniiqwn
+    return ( t - k*t ) / ( k - 2*k*Math.abs(t) + 1 );
+}
+
+function fract( f ){ return f - Math.floor( f ); }
+
+function gradient010( t ){
+    var tt = t * 2;
+    return ( tt > 1 )? 1 - (tt - 1) : tt;
+}
+
+function quad_InOut(k) {
+    if ((k *= 2) < 1) return 0.5 * k * k;
+    return - 0.5 * (--k * (k - 2) - 1);
 }
 
 

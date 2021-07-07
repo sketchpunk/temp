@@ -25,7 +25,7 @@ const vert_src = `#version 300 es
 	} model;
 
 	uniform Armature{
-		mat4x4[90] bones;
+		mat4x4[100] bones;
 	} arm;
 
 	//------------------------------------------

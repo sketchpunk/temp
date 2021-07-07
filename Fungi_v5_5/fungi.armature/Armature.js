@@ -1,4 +1,4 @@
-import App, { Mat4, Transform } from "../fungi/App.js";
+import App, { Vec3, Mat4, Transform } from "../fungi/App.js";
 import Pose from "./Pose.js";
 
 //###################################################################################
@@ -183,7 +183,16 @@ class Armature{
 				this.offset_buffer.set( mat, i*16 );
 			}
 		}
-    }
+	}
+	
+	fix_bone_length( bName, bOffsetName ){
+		let a = this.get_bone( bName );
+		let b = this.get_bone( bOffsetName );
+		if( a == null || b == null ) return;
+
+		a.len = Vec3.len( a.world.pos, b.world.pos );
+		return this;
+	}
     // #endregion /////////////////////////////////////////////////////////////
 }
 

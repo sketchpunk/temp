@@ -198,7 +198,7 @@ layout(location=8) in vec4 a_skin_idx;
 layout(location=9) in vec4 a_skin_wgt;
 
 uniform Armature{
-    mat4x4[90] bones;
+    mat4x4[100] bones;
 } arm;
 
 mat4x4 mtx_bone_transform( vec4 b_idx, vec4 b_wgt  ){

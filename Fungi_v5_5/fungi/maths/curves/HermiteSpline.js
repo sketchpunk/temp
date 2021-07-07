@@ -197,6 +197,22 @@ class HermiteSpline{
             prev.copy( pos );
         }
     }
+
+    debug_points( draw, offset=null ){
+        let p, col, cnt = this.points.length;
+
+        if( !offset ) offset = new Vec3();
+        let pos = new Vec3();
+
+        for( let i=0; i < cnt; i++ ){
+            p   = this.points[ i ];
+            col = ( i == 0 )? "green" :
+                  ( i == cnt-1 )? "red" : "yellow";
+
+            pos.from_add( p.pos, offset ); 
+            draw.pnt( pos, col, 0.08 );
+        }
+    }
     //#endregion ////////////////////////////////////////////////////////
 }
 

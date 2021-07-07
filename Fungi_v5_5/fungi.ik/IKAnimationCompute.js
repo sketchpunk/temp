@@ -120,6 +120,38 @@ class IKPose_Human{
         this.apply_swing_twist( rig, rig.get( "head" ), this.head );
     }
 
+    apply_quadraped_rig( rig, use_limp_pnt=false ){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Lower Body
+        this.apply_hip( rig );
+
+        if( !use_limp_pnt ){
+            if( rig.items[ "leg_l" ] )  this.apply_limb( rig, "leg_l", this.leg_l );
+            if( rig.items[ "leg_r" ] )  this.apply_limb( rig, "leg_r", this.leg_r );
+            if( rig.items[ "foot_l" ] ) this.apply_swing_twist( rig, rig.get( "foot_l" ), this.foot_l );
+            if( rig.items[ "foot_r" ] ) this.apply_swing_twist( rig, rig.get( "foot_r" ), this.foot_r );
+        }else{
+            if( rig.items[ "leg_l" ] )  this.apply_limb_pnt( rig, "leg_l", this.leg_l );
+            if( rig.items[ "leg_r" ] )  this.apply_limb_pnt( rig, "leg_r", this.leg_r );
+        }
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Upper Body
+        this.apply_chain_ends( rig, rig.get( "spine" ) , this.spine );
+
+        if( !use_limp_pnt ){
+            if( rig.items[ "arm_l" ] ) this.apply_limb( rig, "arm_l", this.leg_r );
+            if( rig.items[ "arm_r" ] ) this.apply_limb( rig, "arm_r", this.leg_l );
+            if( rig.items[ "hand_l" ] ) this.apply_swing_twist( rig, rig.get( "hand_l" ), this.foot_r );
+            if( rig.items[ "hand_r" ] ) this.apply_swing_twist( rig, rig.get( "hand_r" ), this.foot_l );
+        }else{
+            if( rig.items[ "arm_l" ] )  this.apply_limb_pnt( rig, "arm_l", this.leg_r );
+            if( rig.items[ "arm_r" ] )  this.apply_limb_pnt( rig, "arm_r", this.leg_l );
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.apply_swing_twist( rig, rig.get( "head" ), this.head );
+    }
+
     apply_hip( rig ){
         let b_info	= rig.items.hip.value, //rig.get( "hip" ),					// Get Ring POINT Object of Bone
             bind 	= rig.tpose.bones[ b_info.idx ],	// TPose which is our Bind Pose
@@ -379,7 +411,7 @@ class IKPose_Human_Debug{
         }
         
         this.look_twist( rig, rig.get( "head" ), ikpose.head );
-        //this.chain_ends( rig, rig.get( "spine" ), ikpose.spine );
+        this.chain_ends( rig, rig.get( "spine" ), ikpose.spine );
     }
 
     static hip( rig, ik ){
@@ -420,7 +452,7 @@ class IKPose_Human_Debug{
         App.Debug
             .pnt( pos, "cyan", 0.03, 1 )											    // Foot Position
             .ln( pos, Vec3.scale( ik.effe_dir, 0.3 ).add( pos ), "cyan", null, false )	// IK.DIR
-            .ln( pos, Vec3.scale( ik.pole_dir, 0.2 ).add( pos ), "cyan", null, false );	// RESULT OF IK.TWIST
+            .ln( pos, Vec3.scale( ik.pole_dir, 0.2 ).add( pos ), "yellow", null, false );	// RESULT OF IK.TWIST
     }
     
     static chain_ends( rig, chain, ik_ary ){
@@ -430,16 +462,16 @@ class IKPose_Human_Debug{
         ws = rig.pose.bones[ chain.first() ].world;
         ik = ik_ary[ 0 ];
         App.Debug
-                .pnt( ws.pos, "cyan", 0.025, 1 )
-                .ln( ws.pos, Vec3.scale( ik.effe_dir, 0.2 ).add(ws.pos), "yellow", null )
+                .pnt( ws.pos, "cyan", 0.06, 1 )
+                .ln( ws.pos, Vec3.scale( ik.effe_dir, 0.2 ).add(ws.pos), "cyan", null )
                 .ln( ws.pos, Vec3.scale( ik.pole_dir, 0.2 ).add(ws.pos), "yellow", null );
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         ws = rig.pose.bones[ chain.last() ].world;
         ik = ik_ary[ 1 ];
         App.Debug
-                .pnt( ws.pos, "cyan", 0.025, 1 )
-                .ln( ws.pos, Vec3.scale( ik.effe_dir, 0.2 ).add(ws.pos), "yellow", null )
+                .pnt( ws.pos, "cyan", 0.06, 1 )
+                .ln( ws.pos, Vec3.scale( ik.effe_dir, 0.2 ).add(ws.pos), "cyan", null )
                 .ln( ws.pos, Vec3.scale( ik.pole_dir, 0.2 ).add(ws.pos), "yellow", null );
     }
 }

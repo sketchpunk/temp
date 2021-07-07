@@ -60,11 +60,11 @@ class Rig{
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// LEGS
-		if( bMap.thigh_l && bMap.shin_l && bMap.foot_l ){
+		if( bMap.thigh_l && bMap.shin_l ){  //&& bMap.foot_l
 			this.add_chain( "leg_l", [ bMap.thigh_l, bMap.shin_l ], bMap.foot_l );
 		}else console.log( `-- AutoRig : Left Leg is Missing` );
 
-		if( bMap.thigh_r && bMap.shin_r && bMap.foot_r ){
+		if( bMap.thigh_r && bMap.shin_r ){ //&& bMap.foot_r
 			this.add_chain( "leg_r", [ bMap.thigh_r, bMap.shin_r ], bMap.foot_r );
 		}else console.log( `-- AutoRig : Right Leg is Missing` );
 
@@ -85,8 +85,8 @@ class Rig{
 		this.get( "spine" ).set_directions( Vec3.UP, Vec3.FORWARD, this.tpose, true );
 
 		this.get( "hip" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
-		this.get( "foot_l" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
-		this.get( "foot_r" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
+		if( bMap.foot_l ) this.get( "foot_l" )?.set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
+		if( bMap.foot_r ) this.get( "foot_r" )?.set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
 
 		this.get( "neck" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
 		this.get( "head" ).set_directions( Vec3.FORWARD, Vec3.UP, this.tpose );
