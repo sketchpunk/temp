@@ -580,7 +580,6 @@ SlideInput.Template.innerHTML = `<svg>
 window.customElements.define( "slide-input", SlideInput );
 
 
-
 class SlideInputXX extends HTMLElement{
     // #region MAIN
     constructor(){
