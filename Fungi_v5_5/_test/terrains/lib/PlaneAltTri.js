@@ -1,87 +1,120 @@
 import App, { Vec3 }  from "../../../fungi/App.js";
-import { LightSystem } from "../../../fungi/ecs/Lights.js";
 
 class PlaneAltTri{
 
-    static mk( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
-        this.mkVerts( geo, w, h, x_cells, y_cells, center_offset );
-        this.mkIndices( geo, x_cells, y_cells );
-        this.mkUv( geo, x_cells, y_cells );
-        return geo;
+    static mkWithEdgeLoop( geo, w=1, h=1, xCells=2, yCells=2, centerOffset=false ){
+        this.mkVertUvNorm( geo, w, h, xCells, yCells, centerOffset );
+        this.mkIndices( geo, xCells, yCells );
+        return this.mkEdgeLoop( geo, xCells, yCells );
     }
 
-    static mkWithEdge( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
-        this.mkVerts( geo, w, h, x_cells, y_cells, center_offset );
-        this.mkIndices( geo, x_cells, y_cells );
-        this.mkUv( geo, x_cells, y_cells );
-        return this.mkEdge( geo, x_cells, y_cells );
+    static mkWithEdges( geo, w=1, h=1, xCells=2, yCells=2, centerOffset=false ){
+        this.mkVertUvNorm( geo, w, h, xCells, yCells, centerOffset );
+        this.mkIndices( geo, xCells, yCells );
+        return this.mkEdges( geo, xCells, yCells );
     }
-    
-    static mkEdge( geo, x_cells=2, y_cells=2 ){
-        const   clen  = x_cells + 1,
-                rlen  = y_cells + 1,
+
+    static mkEdgeLoop( geo, xCells=2, yCells=2 ){
+        const   clen  = xCells + 1,
+                rlen  = yCells + 1,
                 len   = clen * rlen,
                 rtn   = new Array();
         let i;
 
         // Top - Left To Right
-        for( i=0; i < clen; i++ ) rtn.push( i );
+        for( i=0; i < clen; i++ )       rtn.push( i );
 
         // Right - Top To Bottom
-        for( i=1; i < rlen; i++ ) rtn.push( rlen * i + x_cells );
+        for( i=1; i < rlen; i++ )       rtn.push( rlen * i + xCells );
 
         // Bottom - Right to Left
-        for( i=1; i < clen; i++ ) rtn.push( len - i - 1 );
+        for( i=1; i < clen; i++ )       rtn.push( len - i - 1 );
 
         // Left - Top To Bottom
-        for( i=y_cells-1; i > 0; i-- ) rtn.push( rlen * i );
+        for( i=yCells-1; i > 0; i-- )   rtn.push( rlen * i );
         
         /* DEBUG 
         let v     = new Vec3();
-        let verts = geo.getArray( "vertices" );
+        let verts = geo.vertices.data;
         for( i of rtn ){
             v.from_buf( verts, i*3 );
-            console.log( i );
             App.Debug.pnt( v, "cyan", 0.05 );
-        }
-        */
-        
+        }*/
         return rtn;
     }
 
-    static mkVerts( geo, w=1, h=1, x_cells=2, y_cells=2, center_offset=false ){
-        let vert	= geo.getVertices(),
-            x_inc   = w / x_cells,
-            y_inc   = h / y_cells,
-            v       = new Vec3(),
-            vv      = new Vec3(),
-            offset  = [0,0,0],
-            xx, yy;
-    
-        if( center_offset ){
-            offset[ 0 ] = -w * 0.5;
-            offset[ 2 ] = -h * 0.5;
+    static mkEdges( geo, xCells=2, yCells=2 ){
+        const   clen  = xCells + 1,
+                rlen  = yCells + 1,
+                len   = clen * rlen,
+                a     = new Array(),
+                b     = new Array(),
+                c     = new Array(),
+                d     = new Array();
+        let i;
+
+        // Top - Left To Right
+        for( i=0; i < clen; i++ )    a.push( i );
+
+        // Right - Top To Bottom
+        for( i=0; i < rlen; i++ )    b.push( rlen * i + xCells );
+
+        // Bottom - Right to Left
+        for( i=0; i < clen; i++ )    c.push( len - i - 1 );
+
+        // Left - Top To Bottom
+        for( i=yCells; i >= 0; i-- ) d.push( rlen * i );
+        
+        /* DEBUG
+        let v     = new Vec3();
+        let verts = geo.vertices.data;
+        for( i of d ){
+            v.from_buf( verts, i*3 );
+            App.Debug.pnt( v, "cyan", 0.05 );
         }
-    
-        for( yy=0; yy <= y_cells; yy++ ){
-            v.z = yy * y_inc;
-    
-            for( xx=0; xx <= x_cells; xx++ ){
-                v.x = xx * x_inc;  //App.Debug.pnt( v );
-                vv.from_add( v, offset ).push_to( vert );
+        */
+
+        return [ a, b, c, d ];
+    }
+
+    static mkVertUvNorm( geo, w=1, h=1, xCells=2, yCells=2, centerOffset=false ){
+        let vert    = [ 0, 0, 0 ],
+            uv      = [ 0, 0 ],
+            norm    = [ 0, 1, 0 ],
+            xInc    = w / xCells,
+            yInc    = h / yCells,
+            xOffset = 0,
+            yOffset = 0,
+            x, y, yPos;
+
+        if( centerOffset ){
+            xOffset = -w * 0.5;
+            yOffset = -h * 0.5;
+        }
+
+        for( y=0; y <= yCells; y++ ){
+            yPos    = y * yInc;
+            uv[ 1 ] = 1 - ( y / yCells );
+
+            for( x=0; x <= xCells; x++ ){
+                vert[ 0 ]   = x * xInc + xOffset;
+                vert[ 2 ]   = yPos + yOffset;
+                uv[ 0 ]     = x / xCells;
+
+                geo.pushVertex( vert, uv, norm );
             }
         }
     }
-    
-    static mkIndices( geo, x_cells, y_cells ){
-        let ary     = geo.getIndices(),
-            col_cnt = x_cells + 1,
+
+    static mkIndices( geo, xCells, yCells ){
+        let ary     = geo.indices.data,
+            col_cnt = xCells + 1,
             x, y, a, b, c, d, bit;
-    
-        for( y=0; y < y_cells; y++ ){
+
+        for( y=0; y < yCells; y++ ){
             bit = y & 1; // Alternate the starting Quad Layout for every row 
-    
-            for( x=0; x < x_cells; x++ ){
+
+            for( x=0; x < xCells; x++ ){
                 a   = y * col_cnt + x;
                 b   = a + col_cnt;
                 c   = b + 1
@@ -93,17 +126,6 @@ class PlaneAltTri{
         }
     }
 
-    static mkUv( geo, x_cells, y_cells ){
-        const ary = geo.getUvs();
-        let x, y, u, v;
-        for( y=0; y <= y_cells; y++ ){
-            v = y / y_cells;
-            for( x=0; x <= x_cells; x++ ){
-                u = x / x_cells;
-                ary.push( u, v );
-            }
-        }
-    }
 }
 
 export default PlaneAltTri;

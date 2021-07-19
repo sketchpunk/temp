@@ -1,110 +1,176 @@
 import App, { }  from "../../../fungi/App.js";
 
-class Attrib{
-    constructor( name, compLen=3, size=null, type=null, data=null ){
-        this.name       = name;
-        this.compLen    = compLen;
-        this.type       = ( type != null )? type : Geo.TAttrib.float;
-        this.data       = ( data )? data :
-            ( size != null )? new Array( size ).fill( 0 ) : new Array();
+class GeoAttrib{
+    constructor( name, compLen=3, type=Geo.FLOAT ){
+        this.name    = name;
+        this.compLen = compLen;
+        this.type    = type;
+        this.data    = null;
     }
 
-    static fromData( name, data, compLen=3, type = Geo.TAttrib.float ){ return new Attrib( name, compLen, null, type, data ); }
-}
-
-class Geo{
-    static TAttrib = {
-        "float"     : 0,
-        "uint16"    : 1,
-    };
-
-    // #region MAIN
-    attrib = new Map();
-    // #endregion ////////////////////////////////////////////////////////////
-
-    // #region GETTER/SETTERS
-    addAttrib( name, compLen=3, type=Geo.TAttrib.float, size=null ){ this.attrib.set( name, new Attrib( name, compLen, size, type ) ); return this; }
-    addAttribData( name, compLen=3, type, rawData ){ this.attrib.set( name, Attrib.fromData( name, rawData, compLen, type ) ); return this; }
-    
-    useUv( size=0 ){ this.addAttrib( "uvs", 2, Geo.TAttrib.float, size * 2 ); return this; }
-    useNormal( size=0 ){ this.addAttrib( "normals", 3, Geo.TAttrib.float, size * 3 ); return this; }
-
-    getVertices(){ return this.getArray( "vertices" ); }
-    getIndices(){ return this.getArray( "indices" ); }
-    getNormals(){ return this.getArray( "normals" ); }
-    getUvs(){ return this.getArray( "uvs" ); }
-
-    getArray( name ){
-        let i = this.attrib.get( name );
-
-        if( !i ){ console.error( "Geo Attrib not found :", name ); return null; }
-        if( !i.data ){ console.error( "Geo Attrib has no data : ", name ); return null; }
-
-        return i.data;
+    useData( d ){ this.data = d; return this; }
+    init( s=0 ){
+        this.data = ( s > 0 )? new Array( s ).fill( 0 ) : [];
+        return this;
     }
 
-    toType( name ){
-        let a = this.attrib.get( name );
-        if( !a ) return null;
+    elementCount(){ return this.data.length / this.compLen; }
 
-        switch( a.type ){
-            case Geo.TAttrib.float	: return new Float32Array( a.data );
-            case Geo.TAttrib.uint16	: return new Uint16Array( a.data );
-            default			        : console.log( "Unknown Type", a.type );
+    toTArray(){
+        switch( this.type ){
+            case Geo.FLOAT  : return new Float32Array( this.data );
+            case Geo.UINT16 : return new Uint16Array( this.data );
+            default : console.error( "GeoAttrib - Unknown type : ", this.type );
         }
-
         return null;
     }
 
-    toMesh( name="NoNameGeo" ){
-        const vert  = this.toType( "vertices" );
-        const idx   = this.toType( "indices" );
-        const norm  = this.toType( "normals" );
-        return App.mesh.from_data( name, vert, vert.compLen, idx, norm );
-    }
-
-    // #endregion ////////////////////////////////////////////////////////////
-
-    // #region SPECIALTY
-    attribIter( name ){
-        return { [Symbol.iterator]:()=>{ 
-            let j, i	= 0;
-            let atb = this.attrib.get( name );
-            let ary = atb.data;
-            let out	= { value:new Array( atb.compLen ), done:false };
-            let len = ary.length;
-            return {
-                next: function(){
-                    for( j=0; j < atb.compLen; j++ ) out.value[ j ] = ary[ i++ ];
-                    
-                    if( i > len ) out.done = true;
-                    return out;
-                }
-            } 
-        } };
-    }
-    // #endregion ////////////////////////////////////////////////////////////
-
-    // #region STATIC BUILDERS
-    static withVert(){ return new Geo().addAttrib( "vertices", 3 ); }
-    static withVertIndice(){ return new Geo().addAttrib( "vertices", 3 ).addAttrib( "indices", 1, Geo.TAttrib.uint16 ); }
-    static fullMesh( vertCompLen=3 ){
-        return new Geo()
-            .addAttrib( "vertices", vertCompLen )
-            .addAttrib( "normals", 3 )
-            .addAttrib( "uvs", 2 )
-            .addAttrib( "indices", 1, Geo.TAttrib.uint16 );
-    }
-    // #endregion ////////////////////////////////////////////////////////////
-
-    // #region GETTER/SETTERS
-    debugAttribCount(){
-        let k,v;
-        for( [k,v] of this.attrib ){
-            console.log( k, v.data.length / v.compLen );
+    finalize(){
+        let d = this.toTArray();
+        if( d ){
+            this.data.length = 0;   // Clear out array
+            this.data = d;          // Replace Array with TypeArray
         }
     }
-    // #endregion ////////////////////////////////////////////////////////////
+}
+
+class Geo{
+    // #region MAIN
+    static FLOAT    = 0;
+    static UINT16   = 1;
+
+    vertices    = null;
+    indices     = null;
+    uvs         = null;
+    normals     = null;
+    attribs     = new Map();
+
+    constructor(){}
+    // #endregion ////////////////////////////////////////////////////////
+
+    // #region ATTRIBUTES
+    addAttrib( name, compLen=2, size=0, type=Geo.FLOAT ){
+        let attr = new GeoAttrib( name, compLen, type );
+        if( size != null ) attr.init( size );
+        this.attribs.set( name, attr );
+        return attr;
+    }
+
+    getAttrib( name ){
+        let rtn = this.attribs.get( name );
+        if( !rtn ){
+            console.error( "Geo : Attribute does not exist - ", name );
+            return null;
+        }
+
+        return rtn;
+    }
+
+    addIndices( size=0, type=Geo.UINT16 ){
+        this.indices = new GeoAttrib( "indices", 1, type );
+        if( size != null ) this.indices.init( size );
+        return this.indices;
+    }
+
+    addVertices( size=0, compLen=3 ){
+        this.vertices = new GeoAttrib( "vertices", compLen );
+        if( size != null ) this.vertices.init( size * compLen );
+        return this.vertices;
+    }
+
+    addNormals( size=0, compLen=3 ){
+        this.normals = new GeoAttrib( "normals", compLen );
+        if( size != null ) this.normals.init( size * compLen );
+        return this.normals;
+    }
+
+    addUV( size=0, compLen=2 ){
+        this.uvs = new GeoAttrib( "uvs", compLen );
+        if( size != null ) this.uvs.init( size * compLen );
+        return this.uvs;
+    }
+    // #endregion ////////////////////////////////////////////////////////
+
+    // #region METHODS
+    toMesh( name="NoNameGeo" ){
+        const vert  = this.vertices.toTArray();
+        const idx   = ( this.indices )? this.indices.toTArray() : null;
+        const norm  = ( this.normals )? this.normals.toTArray() : null;
+        const uv    = ( this.uvs )? this.uvs.toTArray() : null;
+        return App.mesh.from_data( name, vert, this.vertices.compLen, idx, norm, uv  );
+    }
+
+    finalizeType(){
+        if( this.vertices ) this.vertices.finalize();
+        if( this.indices )  this.indices.finalize();
+        if( this.normals )  this.normals.finalize();
+        if( this.uvs )      this.uvs.finalize();
+    }
+    // #endregion ////////////////////////////////////////////////////////
+
+    // #region VERTEX SETTERS / GETTERS
+    pushTriIndices( a, b, c ){ this.indices.data.push( a, b, c ); }
+    pushQuadIndices( a, b, c, d ){ this.indices.data.push( a, d, c, c, b, a ); }
+    pushVertex( pos, uv=null, norm=null ){
+        let idx = null;
+        
+        if( pos && this.vertices ){
+            idx = this.vertices.elementCount();
+            this.vertices.data.push( ...pos );
+        }
+
+        if( uv && this.uvs )        this.uvs.data.push( ...uv );
+        if( norm && this.normals )  this.normals.data.push( ...norm );
+
+        return idx;
+    }
+
+    getVertex( i, out=null ){
+        if( !this.vertices ) return null;
+        out = out || [];
+        
+        let clen = this.vertices.compLen;
+        i *= clen;
+
+        for( let j=0; j < clen; j++ ) out[ j ] = this.vertices.data[ i+j ];
+
+        return out;
+    }
+    // #endregion ////////////////////////////////////////////////////////
+
+    // #region DEBUGGING
+    debugVertices(){
+        let eCnt    = this.vertices.elementCount();
+        let v       = [0,0,0];
+
+        for( let i=0; i < eCnt; i++ ){
+            this.getVertex( i, v );
+            App.Debug.pnt( v, "cyan", 0.1 );
+        }
+    }
+
+    debugAttribCount(){
+        if( this.vertices ) console.log( "Vertices ", this.vertices.elementCount() );
+        if( this.indices ) console.log( "indices ", this.indices.elementCount() );
+        if( this.uvs ) console.log( "uvs ", this.uvs.elementCount() );
+        if( this.normals ) console.log( "indices ", this.normals.elementCount() );
+
+        let k,v;
+        for( [k,v] of this.attribs ) console.log( k, v.elementCount() );
+    }
+    // #endregion ////////////////////////////////////////////////////////
+
+    // #region STATIC METHODS
+    static new(){ 
+        let geo = new Geo();
+        geo.addVertices();
+        geo.addIndices();
+        geo.addNormals()
+        geo.addUV();
+        return geo;
+    }
+    // #endregion ////////////////////////////////////////////////////////
+
 }
 
 export default Geo;

@@ -1,0 +1,361 @@
+<!DOCTYPE html><script type="module">
+
+import App, { Colour }		from "../../fungi/App.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+import UVSphere				from "../../fungi/geo/UVSphere.js";
+import Cube					from "../../fungi/geo/Cube.js";
+
+import PropPanel	    	from "../../sage.ui/PropPanelv2.js";
+
+//#####################################################
+App
+    .init()
+    .set_camera( 0, 5, 3.5, 0, 0.6, 0 )
+    .task( init )
+    .then();
+
+//#####################################################
+let MAT;
+
+async function init( x ){
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Shader
+    init_shader();
+
+    MAT = App.shader.new_material( "TESTER", { 
+    
+    } ).set_cullface( false );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Load Mesh  
+    Quad( "quad", MAT ).node.set_pos( 0, 0.6, 0 );
+    UVSphere( "sphere", MAT ).node.set_pos( -1.3, 0.6, 0 );
+    Cube( "cube", MAT ).node.set_pos( 1.5, 0.6, 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    initUI();
+    //App.render_by( 1, on_render );
+    return true;
+}
+
+//#####################################################
+
+function init_shader(){
+    App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"UScale", type:"float", value:10, },
+        { name:"UStepMin", type:"float", value:0, },
+        { name:"UStepMax", type:"float", value:1, },
+        { name:"URemap", type:"int", value:1, },
+        { name:"UInvert", type:"int", value:0, },
+
+        { name:"UPeriod", type:"int", value:0, },
+        { name:"UPeriodX", type:"float", value:1, },
+        { name:"UPeriodY", type:"float", value:1, },
+        { name:"UPeriodZ", type:"float", value:1, },
+    ], App.ubo.get_array( "Global", "Model" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+uniform vec2 scale;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_uv		= a_uv * scale;
+    frag_wpos	= world_pos.xyz;
+    frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position	= global.proj_view * world_pos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+uniform float UScale;
+uniform float UStepMin;
+uniform float UStepMax;
+uniform int   URemap;
+uniform int   UInvert;
+
+uniform int   UPeriod;
+uniform float UPeriodX;
+uniform float UPeriodY;
+uniform float UPeriodZ;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec2 frag_uv;
+
+//-------------------------
+// https://github.com/JimmyCushnie/Noisy-Nodes/blob/master/NoiseShader/HLSL/ClassicNoise3D.hlsl
+
+vec3 mod289(vec3 x){ return x - floor(x / 289.0) * 289.0; }
+vec4 mod289(vec4 x){ return x - floor(x / 289.0) * 289.0; }
+vec4 permute(vec4 x){ return mod289((x * 34.0 + 1.0) * x); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - r * 0.85373472095314; }
+vec3 fade(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+float cnoise(vec3 P){
+  vec3 Pi0 = floor(P); // Integer part for indexing
+  vec3 Pi1 = Pi0 + vec3(1.0); // Integer part + 1
+  Pi0 = mod289(Pi0);
+  Pi1 = mod289(Pi1);
+  vec3 Pf0 = fract(P); // Fractional part for interpolation
+  vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+  vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+  vec4 iy = vec4(Pi0.y, Pi0.y, Pi1.y, Pi1.y);
+  vec4 iz0 = vec4(Pi0.z);
+  vec4 iz1 = vec4(Pi1.z);
+
+  vec4 ixy = permute(permute(ix) + iy);
+  vec4 ixy0 = permute(ixy + iz0);
+  vec4 ixy1 = permute(ixy + iz1);
+
+  vec4 gx0 = ixy0 / 7.0;
+  vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+  gx0 = fract(gx0);
+  vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+  vec4 sz0 = step(gz0, vec4(0.0));
+  gx0 -= sz0 * (step(vec4(0.0), gx0) - 0.5);
+  gy0 -= sz0 * (step(vec4(0.0), gy0) - 0.5);
+
+  vec4 gx1 = ixy1 / 7.0;
+  vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+  gx1 = fract(gx1);
+  vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+  vec4 sz1 = step(gz1, vec4(0.0));
+  gx1 -= sz1 * (step(vec4(0.0), gx1) - 0.5);
+  gy1 -= sz1 * (step(vec4(0.0), gy1) - 0.5);
+
+  vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+  vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+  vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+  vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+  vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+  vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+  vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+  vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+  vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+  g000 *= norm0.x;
+  g010 *= norm0.y;
+  g100 *= norm0.z;
+  g110 *= norm0.w;
+
+  vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+  g001 *= norm1.x;
+  g011 *= norm1.y;
+  g101 *= norm1.z;
+  g111 *= norm1.w;
+
+  float n000 = dot(g000, Pf0);
+  float n100 = dot(g100, vec3(Pf1.x, Pf0.y, Pf0.z));
+  float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+  float n110 = dot(g110, vec3(Pf1.x, Pf1.y, Pf0.z));
+  float n001 = dot(g001, vec3(Pf0.x, Pf0.y, Pf1.z));
+  float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+  float n011 = dot(g011, vec3(Pf0.x, Pf1.y, Pf1.z));
+  float n111 = dot(g111, Pf1);
+
+  vec3 fade_xyz = fade(Pf0);
+  vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+  vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+  float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+  return 2.2 * n_xyz;
+}
+
+// Classic Perlin noise, periodic variant
+float pnoise(vec3 P, vec3 rep){
+  vec3 Pi0 = mod(floor(P), rep); // Integer part, modulo period
+  vec3 Pi1 = mod(Pi0 + vec3(1.0), rep); // Integer part + 1, mod period
+  Pi0 = mod289(Pi0);
+  Pi1 = mod289(Pi1);
+  vec3 Pf0 = fract(P); // Fractional part for interpolation
+  vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+  vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+  vec4 iy = vec4(Pi0.y, Pi0.y, Pi1.y, Pi1.y);
+  vec4 iz0 = vec4(Pi0.z);
+  vec4 iz1 = vec4(Pi1.z);
+
+  vec4 ixy = permute(permute(ix) + iy);
+  vec4 ixy0 = permute(ixy + iz0);
+  vec4 ixy1 = permute(ixy + iz1);
+
+  vec4 gx0 = ixy0 / 7.0;
+  vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+  gx0 = fract(gx0);
+  vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+  vec4 sz0 = step(gz0, vec4(0.0));
+  gx0 -= sz0 * (step(vec4(0.0), gx0) - 0.5);
+  gy0 -= sz0 * (step(vec4(0.0), gy0) - 0.5);
+
+  vec4 gx1 = ixy1 / 7.0;
+  vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+  gx1 = fract(gx1);
+  vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+  vec4 sz1 = step(gz1, vec4(0.0));
+  gx1 -= sz1 * (step(vec4(0.0), gx1) - 0.5);
+  gy1 -= sz1 * (step(vec4(0.0), gy1) - 0.5);
+
+  vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+  vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+  vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+  vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+  vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+  vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+  vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+  vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+  vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+  g000 *= norm0.x;
+  g010 *= norm0.y;
+  g100 *= norm0.z;
+  g110 *= norm0.w;
+  vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+  g001 *= norm1.x;
+  g011 *= norm1.y;
+  g101 *= norm1.z;
+  g111 *= norm1.w;
+
+  float n000 = dot(g000, Pf0);
+  float n100 = dot(g100, vec3(Pf1.x, Pf0.y, Pf0.z));
+  float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+  float n110 = dot(g110, vec3(Pf1.x, Pf1.y, Pf0.z));
+  float n001 = dot(g001, vec3(Pf0.x, Pf0.y, Pf1.z));
+  float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+  float n011 = dot(g011, vec3(Pf0.x, Pf1.y, Pf1.z));
+  float n111 = dot(g111, Pf1);
+
+  vec3 fade_xyz = fade(Pf0);
+  vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+  vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+  float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+  return 2.2 * n_xyz;
+}
+
+//-------------------------
+
+float lerpStep( float a, float b, float n ){ return clamp( ( n-a ) / ( b-a ), 0.0, 1.0 ); }
+
+void main(void){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    float n;
+    if( UPeriod == 1 ) n = pnoise( frag_wpos * UScale, vec3( UPeriodX, UPeriodY, UPeriodZ ) );
+    else               n = cnoise( frag_wpos * UScale );
+
+    if( URemap == 1 )   n = n * 0.5 + 0.5;  // Remap -1:1 to 0:1
+    if( UInvert == 1 )  n = 1.0 - n;
+
+    n = lerpStep( UStepMin, UStepMax, n );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    out_color = vec4( n, n, n, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // DEBUGGING
+    //if( n < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+}`;
+
+//#####################################################
+
+function initUI(){
+    onInput( "UScale", updateMaterial );
+    onInput( "UStep", updateMaterial );
+    onInput( "URemap", updateMaterial );
+    onInput( "UInvert", updateMaterial );
+
+    onInput( "UPeriod", updateMaterial );
+    onInput( "UPeriodX", updateMaterial );
+    onInput( "UPeriodY", updateMaterial );
+    onInput( "UPeriodZ", updateMaterial );
+}
+
+function onInput( name, fn ){ document.getElementById( name ).addEventListener( "input", fn ); }
+function updateMaterial( e ){
+    let uniform = e.srcElement.id;
+
+    switch( uniform ){
+        default: MAT.set( uniform, e.detail.value ); break;
+
+        case "URemap": MAT.set( uniform, e.detail.value? 1 : 0 ); break;
+        case "UInvert": MAT.set( uniform, e.detail.value? 1 : 0 ); break;
+
+        case "UPeriod": MAT.set( uniform, e.detail.value? 1 : 0 ); break;
+        case "UStep" :
+            MAT.set( "UStepMin", e.detail.min );
+            MAT.set( "UStepMax", e.detail.max );
+        break;
+    }
+
+    App.render();
+}
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="350px">
+        <prop-panel label="Classic Perlin" foot="Shader Options">
+            <prop-row label="Scale"><slide-input id="UScale" min="0.1" max="30" value="10"></slide-input></prop-row>
+            <prop-row label="Step"><range-input id="UStep" min="0" max="1" minValue="0" maxValue="1"></range-input></prop-row>
+            <prop-row label="Remap01"><check-button id="URemap" class="onoff" on="true"></check-button></prop-row>
+            <prop-row label="Invert"><check-button id="UInvert" class="yesno" on="false"></check-button></prop-row>
+            <prop-group label="Periodic" open="true">
+                <prop-row label="Active"><check-button id="UPeriod" class="onoff" on="false"></check-button></prop-row>
+                <prop-row label="XYZ">
+                    <div style="display:flex; flex-direction:row; min-width:0px;">
+                        <drag-number-input id="UPeriodX" style="flex:1 1 auto; margin-right:5px; " value="1" step="0.1"></drag-number-input>
+                        <drag-number-input id="UPeriodY" style="flex:1 1 auto; margin-right:5px; " value="1" step="0.1"></drag-number-input>
+                        <drag-number-input id="UPeriodZ" style="flex:1 1 auto;" value="1" step="0.1"></drag-number-input>
+                    </div>
+                </prop-row>
+            </prop-group>         
+        </prop-panel>
+    </prop-panel-btncont>
+
+</body></html>

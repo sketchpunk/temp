@@ -1,3 +1,11 @@
+:root{
+    --head-bg               : #3d4145;
+    --text-col              : #b6b9be;
+    --secondary-bg          : #c8cad0;
+    --secondary-bg-hover    : #838488;
+    --secondary-txt         : #2f3137;
+}
+
 
 /* #region prop-panel-btncont */
 prop-panel-btncont{ position:absolute; bottom:10px; right:10px; }
@@ -34,8 +42,8 @@ prop-panel-btncont{ position:absolute; bottom:10px; right:10px; }
 
 .prop-panel-btncont > section.open{ opacity:1; transform:scale(1); }
 .prop-panel-btncont > section{
-    background-color:white; box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.2);
-    border:0px solid green; border-radius:8px;
+    box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.2);
+    border-radius:8px;
     position:absolute; width:00px; bottom:60%; right:60%;
     opacity: 0; transform: scale(0);
     transform-origin: bottom right;
@@ -53,11 +61,13 @@ prop-panel:part(header){ border:1px solid black; }*/
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region prop-row */
-.prop-row{ display:flex; box-sizing:border-box; }
-.prop-row > label{ flex:0 0 35%; display:flex; justify-content:left; align-items:center; }
-.prop-row > main{ flex:1 1 auto; display:flex; }
+
+.prop-row{ display:flex; box-sizing:border-box; min-width:0px; }
+.prop-row > label{ flex:0 0 30%; display:flex; justify-content:left; align-items:center; }
+.prop-row > main{ flex:0 0 70%; display:flex; flex-direction:row; min-width:0px; }
 /*.prop-row > main:before{ content:":"; color:red; }*/
 .prop-row > main ::slotted(*){ flex: 1 1 auto; }
+
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region prop-group */
@@ -71,27 +81,63 @@ prop-panel:part(header){ border:1px solid black; }*/
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region range & slide */
-range-input{ display:flex; flex-direction:row; user-select: none; }
+range-input{ display:flex; flex-direction:row; user-select: none; min-width:0px; height:20px; }
 range-input svg{ flex:1 1 auto; }
-range-input .rng_connect{ stroke:white; stroke-width:6px; }
+range-input .rng_connect{ stroke:white; stroke-width:6px; stroke-linecap:round; }
 range-input .rng_track{ stroke:gray; stroke-width:6px; stroke-linecap:round; }
 range-input .rng_thumb { user-select: none; }
 range-input .rng_thumb rect{ fill:white; rx:3px; }
-range-input .rng_thumb text{ fill:black; font-size:14px; font-family: monospace; font-weight:bold; text-align:center; }
+range-input .rng_thumb text{ fill:black; font-size:13px; font-family: monospace; font-weight:bold; text-align:center; }
 
-slide-input { display:flex; flex-direction:row; user-select:none; }
-slide-input > canvas{ flex:1 1 auto; height:20px; }
+slide-input{ display:flex; flex-direction:row; user-select: none; min-width:0px; height:20px; }
+slide-input svg{ flex:1 1 auto; }
+slide-input .rng_connect{ stroke:white; stroke-width:6px; stroke-linecap:round; }
+slide-input .rng_track{ stroke:gray; stroke-width:6px; stroke-linecap:round; }
+slide-input .rng_thumb { user-select: none; }
+slide-input .rng_thumb rect{ fill:white; rx:3px; }
+slide-input .rng_thumb text{ fill:black; font-size:13px; font-family: monospace; font-weight:bold; text-align:center; }
 /* #endregion //////////////////////////////////////////////////////// */
 
 /* #region DragNumberInput */
 drag-number-input{ display:flex; flex-direction:row; min-width:0px; }
 drag-number-input div{ flex:0 0; display: flex; align-items: center; cursor:pointer; user-select: none; }
-drag-number-input svg{ width:10px; height:10px; overflow:visible; transform-box: fill-box; }
+drag-number-input svg{ width:10px; height:10px; overflow:visible; transform-box: fill-box; z-index:100; }
 drag-number-input svg * { transform:translate( 50%, 50% ); }
 drag-number-input input{ flex:1 1 auto; min-width:0px; }
 
 drag-number-input svg path{ visibility:hidden; }
 drag-number-input.show svg path{ visibility:visible; }
+/* #endregion */
+
+/* #region Check Button */
+check-button{ display:flex; flex-direction:row; overflow:hidden; }
+check-button input{ position:absolute !important; clip:rect(0,0,0,0); overflow:hidden; height:1px; height:1px; border:0px; }
+check-button label{ flex:1 1 auto; user-select: none; -ms-user-select: none; cursor: pointer; }
+
+check-button label{
+    font-family         : "Lucida Console", Monaco, monospace;
+    font-size           : 16px;
+    text-align          : center ;
+    color               : var(--text-col);
+    background-color    : var(--head-bg);
+    border-radius       : 4px;
+    padding             : 2px 8px;
+    transition          : all 0.2s ease-in-out;
+}
+
+check-button input:checked + label{ background-color:var(--secondary-bg); color:var(--secondary-txt); }
+
+check-button.onoff label:after { content:"OFF"; }
+check-button.onoff input:checked + label:after { content:"ON"; }
+    
+check-button.yesno label:after { content:"NO"; }
+check-button.yesno input:checked + label:after { content:"YES"; }
+
+check-button.tf label:after { content:"FALSE"; }
+check-button.tf input:checked + label:after { content:"TRUE"; }
+
+check-button.check label:after { content:"\2716"; font-size:14px; }
+check-button.check input:checked + label:after { content:"\2714";  font-size:14px; }
 /* #endregion */
 
 /* #region THEME */
@@ -108,12 +154,6 @@ https://codepen.io/LeonardMeagher2/pen/NvOLZr
 https://codepen.io/abergin/pen/kjwBz/
 */
 
-:root{
-    --head-bg               : #3d4145;
-    --secondary-bg          : #c8cad0;
-    --secondary-bg-hover    : #838488;
-    --secondary-txt         : #2f3137;
-}
 
 /* PROP PANEL */
 .prop-panel,

@@ -143,7 +143,7 @@ class ShaderFactory{
 			tex_slot	= 0;
 			
 		for( [ name, itm ] of map ){
-			//console.log( itm );
+			//console.log( name, itm );
 			switch( itm.type ){
 				case "float":	gl.ctx.uniform1f(	itm.loc, itm.data ); break;
 				case "afloat":	gl.ctx.uniform1fv(	itm.loc, itm.data ); break;

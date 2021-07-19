@@ -1,3 +1,9 @@
+https://github.com/blender/blender/tree/master/intern/cycles/kernel/shaders
+https://github.com/blender/blender/tree/master/source/blender/gpu/shaders/material
+https://github.com/wdas/brdf/blob/main/src/brdfs/disney.brdf
+https://github.com/dfelinto/blender/blob/master/source/blender/blenlib/intern/noise.c HAS ALOT OF WHAT I NEED
+
+
 https://ciechanow.ski/lights-and-shadows/ INSANE VISUALS
 
 https://observablehq.com/@mbostock/gray-scott-reaction-diffusion AMAZING PATTERNS

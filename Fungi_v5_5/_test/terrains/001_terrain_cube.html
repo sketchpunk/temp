@@ -56,44 +56,100 @@ async function init(){
 /*
 - Generate 6 seperate faces.
 - Assign Vert Groups, Maybe Two versions, Face Index and layered Edge Loops
+--- Store the Vert Groups with UV as ZW
 
+class GeoAttrib{
+    constructor( name, compLen=3, type=Geo.FLOAT ){
+        this.name    = name;
+        this.compLen = compLen;
+        this.type    = type;
+        this.data    = null;
+    }
+
+    useData( d ){ this.data = d; return this; }
+    init( s=0 ){
+        this.data = ( s > 0 )? new Array( s ).fill( 0 ) : [];
+        return this;
+    }
+
+    elementCount(){ return this.data.length / this.compLen; }
+
+    toTArray(){
+        switch( this.type ){
+            case Geo.FLOAT  : return new Float32Array( this.data );
+            case Geo.UINT16 : return new Uint16Array( this.data );
+            default : console.error( "GeoAttrib - Unknown type : ", this.type );
+        }
+        return null;
+    }
+
+    finalize(){
+        let d = this.toTArray();
+        if( d ){
+            this.data.length = 0;   // Clear out array
+            this.data = d;          // Replace Array with TypeArray
+        }
+    }
+}
 
 class Geo{
+    static FLOAT    = 0;
+    static UINT16   = 1;
+
     vertexCount = 0;
     vertices    = null;
     indices     = null;
     uvs         = null;
     normals     = null;
+    //attribs     = new Map(); // Extra Attributes beyond the Standard 4.
 
-    constructor( initSize=0, useInd=false, useNorm=false, useUv=false, vertCompLen=3 ){
-        this.vertCompLen    = vertCompLen;
-        this.vertices       = new Array( initSize * vertCompLen ).fill( 0 );
-        this.vertexCount    = initSize;
+    constructor(){}
 
-        if( useInd )    this.indices    = new Array();
-        if( useNorm )   this.normals    = new Array( initSize * 3 ).fill( 0 );
-        if( useUv )     this.uvs        = new Array( initSize * 2 ).fill( 0 );
+    addIndices( size=0, type=Geo.UINT16 ){
+        this.indices = new GeoAttrib( "indices", 1, type );
+        if( size != null ) this.indices.init( size * compLen );
+        return this.indices;
+    }
+
+    addVertices( size=0, compLen=3 ){
+        this.vertices = new GeoAttrib( "vertices", compLen );
+        if( size != null ) this.vertices.init( size * compLen );
+        return this.vertices;
+    }
+
+    addNormals( size=0, compLen=3 ){
+        this.normals = new GeoAttrib( "normals", compLen );
+        if( size != null ) this.normals.init( size * compLen );
+        return this.normals;
+    }
+
+    addUV( size=0, compLen=2 ){
+        this.uvs = new GeoAttrib( "uvs", compLen );
+        if( size != null ) this.uvs.init( size * compLen );
+        return this.uvs;
     }
 
     pushVertex( pos, uv=null, norm=null ){
-        this.vertices.push( ...pos );
+        let idx = null;
+        
+        if( pos && this.vertices ){
+            idx = this.vertices.elementCount();
+            this.vertices.push( ...pos );
+        }
+
         if( uv && this.uvs )        this.uvs.push( ...uv );
         if( norm && this.normals )  this.normals.push( ...norm );
 
-        let idx = this.vertexCount;
-        this.vertexCount++;
         return idx;
     }
 
-    getVertex( i ){
-
-    }
+    getVertex( i ){}
 
     finalizeType(){
-        this.vertices = new Float32Array( this.vertices );
-        if( this.indices )  this.indices    = new Uint16Array( this.indices );
-        if( this.normals )  this.normals    = new Float32Array( this.normals );
-        if( this.uvs )      this.uvs        = new Float32Array( this.uvs );
+        if( this.vertices ) this.vertices.finalize();
+        if( this.indices )  this.indices.finalize();
+        if( this.normals )  this.normals.finalize();
+        if( this.uvs )      this.uvs.finalize();
     }
 }
 */

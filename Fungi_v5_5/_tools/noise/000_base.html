@@ -1,0 +1,122 @@
+<!DOCTYPE html><script type="module">
+
+import App, { Colour }		from "../../fungi/App.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+import UVSphere				from "../../fungi/geo/UVSphere.js";
+import Cube					from "../../fungi/geo/Cube.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 5, 2.5, 0, 0.6, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+async function init( x ){
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+
+	let mat = App.shader.new_material( "TESTER", { 
+	
+	} ).set_cullface( false );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	Quad( "quad", mat ).node.set_pos( 0, 0.6, 0 );
+	UVSphere( "sphere", mat ).node.set_pos( -1.5, 0.6, 0 );
+	Cube( "cube", mat ).node.set_pos( 1.5, 0.6, 0 );
+
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		{ name:"scale", type:"vec2", value:new Float32Array([1,1]), },
+	], App.ubo.get_array( "Global", "Model" ) );
+}
+
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+uniform vec2 scale;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_uv		= a_uv * scale;
+	frag_wpos	= world_pos.xyz;
+	frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position	= global.proj_view * world_pos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec2 frag_uv;
+
+//-------------------------
+
+void main(void){
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	out_color = vec4( 1.0, 1.0, 1.0, 1.0 );
+}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

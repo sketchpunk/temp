@@ -1,0 +1,387 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } 	from "../../fungi/App.js";
+import PropPanel	    from "../../sage.ui/PropPanelv2.js";
+
+import TerrainCube  from "./lib/TerrainCube.js";
+
+//#####################################################
+App
+	.init()
+	//.use_debug()
+	.set_camera( 45, 45, 2, 0, 0.0, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let MAT;
+
+async function init(){
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    mkShader();
+    MAT = App.shader.new_material( "TESTER", null, { cullFace:true } );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let tcube = new TerrainCube();
+    tcube.init( 0.5, 1, 1, 40, 40, true );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //let mesh 	= tcube.geo.toMesh();
+    let mesh    = tcube.toMesh();
+	//let mat     = App.shader.new_material( "KennyUnlit", null, { cullFace:true } );
+    let e       = App.mesh_entity( "Grid", mesh, MAT, App.mesh.TRI );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    initUI();
+
+    App.render_by( 1, null );
+	return true;
+}
+
+//#####################################################
+
+function mkShader(){
+    let sh = App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+            { name:"UWaves", type:"vec4", value:new Float32Array( [ 0.2,0.7,0.02,20, 0,1,0.015,15, -0.5,-0.5,0.01,5,  ] ) },
+            { name:"UWaveCnt", type:"int", value:3 },
+            { name:"UWaveSpeed", type:"float", value:1 },
+            { name:"UWaveXZ", type:"int", value:0 },
+            { name:"UGridSize", type:"int", value:40 },
+        ], App.ubo.get_array( "Global","Model" )
+    );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+layout(location=2) in vec2 a_uv;
+layout(location=3) in vec4 a_config;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_wpos;
+out float max_height;
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+uniform 	vec4	UWaves[3];
+uniform 	int 	UWaveCnt;
+uniform		float 	UWaveSpeed;
+uniform 	int 	UWaveXZ;
+uniform     int     UGridSize;
+
+const float PI_2	= 6.283185307179586;
+
+// https://catlikecoding.com/unity/tutorials/flow/waves/
+// XY : norm( Dir.xy ), Z : Steepness( 0->1 ), W : WaveLength( PI2 / n )
+vec3 gerstnerWave( vec2 dir, float steepness, float wavelength, vec2 pnt, float time, out vec3 tangent, out vec3 binormal ){
+		float k = PI_2 / wavelength;	                // Phase Increment
+		float c = sqrt( 9.8 / k );	                    // Phase Speed. Higher the wave, the faster it moves, Gravity Constant
+        float f = k * ( dot( dir, pnt ) - c * time );   // Frequency - Specific time in Phase : PhaseInc * ( Angle - PhaseSpeed * Time )
+        float a = steepness / k;		                // Amptitude, Steep=1, app is at max where mesh will start to loop onto self.
+        
+        // cache results for multi reuse.
+        float sin_f  = sin( f );
+        float cos_f  = cos( f );
+        float acos_f = a * cos_f;
+        float scos_f = steepness * cos_f;
+        float ssin_f = steepness * sin_f;
+
+        /*====================================
+        Must Init outside function as
+        vec3 tangent = vec3( 1.0, 0.0, 0.0 );
+        vec3 binormal = vec3( 0.0, 0.0, 1.0 );
+		normal  is normalize(cross(binormal, tangent)); */
+		tangent += vec3(
+			-dir.x * dir.x * ssin_f,
+             dir.x * scos_f,
+			-dir.x * dir.y * ssin_f
+		);
+
+		binormal += vec3(
+			-dir.x * dir.y * ssin_f,
+             dir.y * scos_f,
+			-dir.y * dir.y * ssin_f
+		);
+		
+		return vec3( 
+			dir.x * acos_f, 
+			a * sin_f, 
+			dir.y * acos_f
+		);
+	}
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+void main(void){
+    int faceIdx     = int( a_config.z );
+    int layerIdx    = int( a_config.w );
+    vec2 grid       = a_config.xy;
+    vec3 pos        = a_pos;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Calculate 3 Possible Gerstner Waves
+    vec3 norm = a_norm;
+    if( layerIdx <= 1 ){
+        vec3 offset     = vec3( 0.0 );
+        vec3 tangent    = vec3( 1.0, 0.0, 0.0 );
+        vec3 binormal   = vec3( 0.0, 0.0, 1.0 );
+        float time      = global.clock*UWaveSpeed;
+
+        if( UWaveCnt > 0 ) offset += gerstnerWave( normalize(UWaves[0].xy), UWaves[0].z, UWaves[0].w, grid, time, tangent, binormal );
+        if( UWaveCnt > 1 ) offset += gerstnerWave( normalize(UWaves[1].xy), UWaves[1].z, UWaves[1].w, grid, time, tangent, binormal );
+        if( UWaveCnt > 2 ) offset += gerstnerWave( normalize(UWaves[2].xy), UWaves[2].z, UWaves[2].w, grid, time, tangent, binormal );
+        
+        // Don't shift X,Z positions to use Barymetric Detection
+        if( UWaveXZ == 1 ){
+            offset.x = 0.0;
+            offset.z = 0.0;
+        }else{
+            ivec2 igrid = ivec2( grid );
+            if( igrid.x < 1 || igrid.x >= UGridSize ) offset.x = 0.0;
+            if( igrid.y < 1 || igrid.y >= UGridSize ) offset.z = 0.0;
+        }
+        
+        pos += offset;
+        if( layerIdx == 0) norm = normalize( cross( binormal, tangent ) );
+    }
+
+    max_height = 2.0;  // Give Fragment Shader Max Height
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec4 wpos   = model.view_matrix * vec4( pos, 1.0 );
+    frag_wpos   = wpos.xyz;
+    //frag_norm   = mat3( transpose( inverse( model.view_matrix ) ) ) * norm; // Need to Rotate and Scale Normal, do on CPU
+    frag_norm   = norm;
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_PointSize = 4.0;
+    gl_Position = global.proj_view * wpos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+out vec4 out_color;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+//-------------------------
+
+vec3 rgb( int c ){
+    return vec3(
+        float( ( c >> 16 ) & 0xff ) * 0.00392156863,
+        float( ( c >> 8 ) & 0xff ) * 0.00392156863,
+        float( c & 0xff ) * 0.00392156863
+    );
+}
+
+vec3 color_step_ramp( vec3[5] color, float[5] wgt, float t, float feather, int i ){
+	for( i; i > 0; i-- ){
+		if( ( wgt[ i ] - feather ) <= t ){
+            return mix( 
+			    color[ i-1 ], 
+			    color[ i ],
+			    smoothstep( wgt[ i ] - feather, wgt[ i ] + feather, t )
+            );
+		}
+	}
+	return color[ 0 ];
+}
+
+//-------------------------
+
+in float max_height;
+in vec3 frag_norm;
+in vec3 frag_wpos;
+
+const vec3 ambient		= vec3( 0.2 );
+const vec3 light_pos 	= vec3( 9.0, 8.0, 10.0 );
+const vec3 light_color	= vec3( 1.0, 1.0, 1.0 );
+
+const vec3	specular_color = vec3( 1.0, 1.0, 1.0 );
+const float	specular_strength = 1.0;
+const float	specular_shine = 32.0;
+
+//-------------------------
+
+void main( void ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Color Ramp based on Vertex Height
+    vec3	ramp_col[5]	= vec3[]( rgb(0x6b541d), rgb(0x00fdf2), rgb(0xdbb976), rgb(0x17e45d), rgb(0xd0d0d0) );
+	float	ramp_wgt[5]	= float[]( 0.0, 0.2, 0.5, .7, .95 );
+
+    float tc        = clamp( frag_wpos.y / max_height, 0.0, 1.0 );
+    vec3 base_color = color_step_ramp( ramp_col, ramp_wgt, tc, 0.1, 4 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //vec3 norm       = normalize( cross( dFdx(frag_wpos), dFdy(frag_wpos) ) );
+    vec3 norm 		= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+    vec3 dir_light	= normalize( light_pos - frag_wpos );	// Direction of light from fragment
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // DIFFUSE LIGHT
+
+    float diff		= max( dot( norm, dir_light ), 0.0 ); 	// Angle between Frag Normal and Light Direction ( 0 to 1 )
+    vec3 diffuse	= diff * light_color;					// Use the angle to scale the amount of light to use.
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // SPECULAR LIGHT
+
+    vec3 dir_reflect	= reflect( -dir_light, norm );		// Reflection Dir of Fragment to Light
+    vec3 dir_frag_cam	= normalize( global.camera_pos - frag_wpos );	// Dir from Fragment to Camera
+    float specular 		= specular_strength * pow( max( dot( dir_frag_cam, dir_reflect ), 0.0 ), specular_shine );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // OUTPUT
+    out_color = vec4( base_color.rgb * ( ambient + diffuse ), 1.0 );
+    out_color.rgb = mix( out_color.rgb, specular_color, specular );
+
+    //out_color.rgb = vec3( abs( dot( norm, vec3(0.0, 1.0, 0.0) ) ) );
+    //out_color.rgb = normalize( frag_norm );
+}`;
+
+/*
+this.waves		= new Float32Array( 3 * 4 );	// Raw Container for 3 waves [ x_angle, y_angle, steepness (0-1), wave_length( 0 to Grid_div )]
+		
+
+		let rad = angle * 0.01745329251,
+			x 	= Math.cos( rad ),
+			y 	= Math.sin( rad ),
+			w	= this.waves;
+
+		w[ i++ ] = x;
+		w[ i++ ] = y;
+		w[ i++ ] = steepness;
+		w[ i   ] = wavelength;
+
+    uniform 	vec4	u_waves[3];
+	uniform 	int 	u_wave_cnt;
+	uniform		float 	u_wave_speed;
+	uniform 	int 	u_wave_static_xz;
+
+	const float PI_2	= 6.283185307179586;
+
+	// Wave = norm( Dir.xy ), Steepness( 0->1 ), WaveLength( PI2 / n )
+	vec3 gerstnerWave( vec4 wave, vec2 pnt, float time, float speed ){
+		float	k		= PI_2 / wave.w,	// Phase Increment
+				c 		= sqrt( 9.8 / k ),	// Phase Speed. Higher the wave, the faster it moves, Gravity Constant
+				// Frequency - Specific time in Phase
+				// PhaseInc * ( Angle - PhaseSpeed * Time )
+				f		= k * ( dot( wave.xy, pnt ) - c * time * speed ),
+				a		= wave.z / k,		// Amptitude, Steep=1, app is at max where mesh will start to loop onto self.
+				cos_af	= a * cos( f );		// cache results for multi reuse.
+
+		//Save for applying normals to mesh.
+		normal  is normalize(cross(binormal, tangent));
+		tangent = vec3(
+			-wave.x * wave.x * (steepness * sin(f)),
+			wave.x * (steepness * cos(f)),
+			-wave.x * wave.y * (steepness * sin(f))
+		);
+
+		binormal = vec3(
+			-wave.x * wave.y * (steepness * sin(f)),
+			wave.y * (steepness * cos(f)),
+			-wave.y * wave.y * (steepness * sin(f))
+		);
+		
+
+		return vec3( 
+			wave.x * cos_af, 
+			a * sin( f ), 
+			wave.y * cos_af
+		);
+	}
+
+	void main(void){
+		vec3 offset	= vec3( 0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Calculate 3 Possible Gerstner Waves
+		if( u_wave_cnt > 0 ) offset += gerstnerWave( u_waves[ 0 ], a_coord, globalTime, u_wave_speed );
+		if( u_wave_cnt > 1 ) offset += gerstnerWave( u_waves[ 1 ], a_coord, globalTime, u_wave_speed );
+		if( u_wave_cnt > 2 ) offset += gerstnerWave( u_waves[ 2 ], a_coord, globalTime, u_wave_speed );
+
+		// Don't shift X,Z positions to use Barymetric Detection
+		if( u_wave_static_xz == 1 ){
+			offset.x = 0.0;
+			offset.z = 0.0;
+		}
+
+		gl_PointSize 	= 6.0; //gl_PointSize	= u_pnt_size * ( SCALE / -ws_pos.z ); 
+		gl_Position 	= projViewMatrix * modelMatrix * vec4( a_position + offset, 1.0);		
+    }
+*/
+
+//#####################################################
+
+function initUI(){
+    onInput( "UAmp", updateMaterial );
+    onInput( "UFreq", updateMaterial );
+    onInput( "UAmpRate", updateMaterial );
+
+    onInput( "UOffsetX", updateMaterialUOffset );
+    onInput( "UOffsetY", updateMaterialUOffset );
+}
+
+function onInput( name, fn ){ document.getElementById( name ).addEventListener( "input", fn ); }
+function updateMaterial( e ){
+    let uniform = e.srcElement.id;
+    let val     = e.detail.value;
+
+    MAT.set( uniform, val );
+    App.render();
+}
+
+function updateMaterialUOffset( e ){
+    let ox = document.getElementById( "UOffsetX" );
+    let oy = document.getElementById( "UOffsetY" );
+
+    MAT.set( "UOffset", [ ox.value, oy.value ] );
+    App.render();
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="300px">
+        <prop-panel label="" foot="Shader Options">
+            <prop-row label="Offset">
+                <div style="display:flex; flex-direction:row; min-width:0px;">
+                    <drag-number-input id="UOffsetX" style="margin-right:5px;" step="1"></drag-number-input>
+                    <drag-number-input id="UOffsetY" style="" step="1"></drag-number-input>
+                </div>
+            </prop-row>
+
+            <prop-group label="Fractal Brownian Motion">
+                <prop-row label="Amp"><slide-input id="UAmp" min="0.1" max="0.6" value="0.3"></slide-input></prop-row>
+                <prop-row label="Freq"><slide-input id="UFreq" min="0.01" max="1.0" value="0.1"></slide-input></prop-row>
+                <prop-row label="AmpRate"><slide-input id="UAmpRate" min="0.1" max="3.0" value="1.8"></slide-input></prop-row>
+            </prop-group>
+        </prop-panel>
+    </prop-panel-btncont>
+
+</body></html>

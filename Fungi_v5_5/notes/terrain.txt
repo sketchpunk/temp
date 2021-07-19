@@ -21,3 +21,5 @@ http://www-cs-students.stanford.edu/~amitp/game-programming/grids/ Grid Systems
 https://www.babylonjs-playground.com/#3D3RPL#57 grass
 
 https://github.com/hughsk/poly-terrain-demo
+
+https://www.alanzucconi.com/2019/10/08/journey-sand-shader-1/

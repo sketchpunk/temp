@@ -1,0 +1,10 @@
+	/*
+	LAYER WEIGHT
+	https://blenderartists.org/t/what-is-it-that-layer-weight-nodes-facing-output-is-supposed-to-be/691884/32
+	if blend in [0.0, 0.5[:
+		result = 1 - pow(dot(N,I), 2*blend)
+	if blend == 0.5:
+		result = 1 - dot(N,I)
+	if blend in ]0.5, 1.0[:
+		result = 1 - pow(dot(N,I), 0.5/(1-blend))
+	*/

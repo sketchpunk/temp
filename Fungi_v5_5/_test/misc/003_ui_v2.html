@@ -30,35 +30,87 @@ import PropPanel	from "../../sage.ui/PropPanelv2.js";
     </svg>
 </div>
 
+<style>
+    /*
+    slide-input{ display:flex; flex-direction:row; user-select: none; height:20px; }
+    slide-input svg{ flex:1 1 auto; }
+    slide-input .rng_connect{ stroke:white; stroke-width:6px; stroke-linecap:round; }
+    slide-input .rng_track{ stroke:gray; stroke-width:6px; stroke-linecap:round; }
+    slide-input .rng_thumb { user-select: none; }
+    slide-input .rng_thumb rect{ fill:white; rx:3px; }
+    slide-input .rng_thumb text{ fill:black; font-size:14px; font-family: monospace; font-weight:bold; text-align:center; }
+    */
+
+
+
+    tester-elm{ display:flex; flex-direction:row; min-width:0px; }
+    tester-elm svg{ border:2px solid orange; flex:1 1 50px; }
+
+*/
+
+</style>
+
+<!--
+<div style="border:1px solid red; width:300px; height:150px; position:absolute; left:200px; top:200px; display:flex;">
+    <div style="border:1px solid yellow; flex:0 0 35%;">test</div>
+    <div style="display:flex; min-width:0px;">
+        <svg style="border:2px solid green;"></svg>
+    </div>
+</div>
+
+<div style="border:1px solid red; width:300px; height:150px; position:absolute; left:200px; top:400px; display:flex;">
+    <div style="border:1px solid yellow; flex:0 0 35%;">test</div>
+    <tester-elm></tester-elm>
+</div>
+
+<div style="border:1px solid red; width:300px; height:150px; position:absolute; left:200px; top:600px; display:flex;">
+    <div style="border:1px solid yellow; flex:0 0 35%;">test</div>
+    <slide-input id="islide" min="0" max="1" value="0.5" style="border:3px solid green;"></slide-input>
+</div>
+
+<prop-row label="Rester" style="position:absolute; left:600px; top:200px; width:300px;">
+    <svg style="border:2px solid green; flex:1 1 auto;"></svg>
+</prop-row>
+-->
 
     <prop-panel-btncont open="true" panelWidth="400px">
 
-        <prop-panel label="" foot="Options">
+        <prop-panel label="Label" foot="Options">
             <select label="Eyes">
                 <option value="">Option 0</option>
                 <option value="">Option 1</option>
                 <option value="">Option 2</option>
             </select>
-           
-            <range-input id="irange"></range-input>
-            <slide-input id="islide" min="0" max="1" value="0.5"></slide-input>
 
+            <check-button class="onoff"></check-button>
+            <check-button class="yesno" on="false"></check-button>
+            <check-button class="tf"></check-button>
+            <check-button class="check" on="false"></check-button>
+
+            <prop-row label="Drag">
+                <range-input id="irange"></range-input>
+            </prop-row>
+            
+            <prop-row label="Drag">
+                <slide-input id="islide" min="0" max="1" value="0.5"></slide-input>
+            </prop-row>
+            
             <button>Test Button</button>
             <prop-row label="Testing"><button>yy</button></prop-row>
-
-            <prop-row label="Testing">
-                <input type="text">
-            </prop-row>
+            
+            <prop-row label="Testing"><input type="text"></prop-row>
 
             <prop-row label="Drag">
                 <drag-number-input></drag-number-input>
             </prop-row>
-
-            <div style="display:flex; flex-direction:row;">
-                <drag-number-input style="flex:1 1 auto; "></drag-number-input>
-                <drag-number-input style="flex:1 1 auto; "></drag-number-input>
-                <drag-number-input style="flex:1 1 auto;"></drag-number-input>
-            </div>
+            
+            <prop-row label="Testing">
+                <div style="display:flex; flex-direction:row; min-width:0px;">
+                    <drag-number-input style="flex:1 1 auto; "></drag-number-input>
+                    <drag-number-input style="flex:1 1 auto; "></drag-number-input>
+                    <drag-number-input style="flex:1 1 auto;"></drag-number-input>
+                </div>
+            </prop-row>
 
             <prop-group label="Group 0">
                 <button>Btn01</button>
@@ -69,6 +121,9 @@ import PropPanel	from "../../sage.ui/PropPanelv2.js";
                         <option value="">Option 1</option>
                         <option value="">Option 2</option>
                     </select>
+                </prop-row>
+                <prop-row label="Drag">
+                    <slide-input id="islide" min="0" max="1" value="0.5"></slide-input>
                 </prop-row>
             </prop-group>
         </prop-panel>
@@ -220,6 +275,40 @@ class Dragger{
 }
 
 
+class TesterElm extends HTMLElement{
+    // #region MAIN
+    constructor(){
+        super();
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.appendChild( document.importNode( TesterElm.Template.content, true ) );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Events
+        this.observer = new ResizeObserver( this.on_resize.bind(this) );
+        this.observer.observe( this );
+    }
+    // #endregion ////////////////////////////////////////
+
+    // #region GETTER / SETTERS
+    // #endregion ////////////////////////////////////////
+
+    // #region WEB COM 
+	connectedCallback(){}
+    // #endregion ////////////////////////////////////////
+
+    // #region EVENTS 
+    on_resize( ary ){
+        let cr       = ary[0].contentRect;
+        console.log( "RESIZE", cr );
+	}
+    // #endregion ////////////////////////////////////////
+}
+
+TesterElm.Template = document.createElement( "template" );
+TesterElm.Template.innerHTML = `<svg></svg>`;
+
+window.customElements.define( "tester-elm", TesterElm );
 
 
 

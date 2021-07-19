@@ -1,0 +1,1003 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }  from "../../fungi/App.js";
+import Quad	            from "../../fungi/geo/Quad.js";
+
+import GltfUtil         from "../../fungi/lib/GltfUtil.js";
+import XhrQueue         from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gUbo;
+
+//#####################################################
+//C:\Users\vor\Desktop\blender-master\source\blender\gpu\shaders\material
+function on_render( dt, ss ){
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.6, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    e = Quad( "Quad", mat );
+    e.node.set_pos( 1.5, 0.6, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//on_render( 0, 0 );
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"base_color", type:"rgba", value:"#DB00FFFF" },
+		//{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model" ) );
+}
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mediump mat4 proj_view; 
+		mediump mat4 camera_matrix;
+		mediump vec3 camera_pos;
+		mediump float delta_time;
+		mediump vec2 screen_size;
+		mediump float clock;
+	} global;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+//precision highp uint;
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+out vec4 out_color;
+
+//-------------------------
+
+uniform vec4 base_color;
+uniform vec4 other_color;
+uniform vec3 specular_color;
+
+in vec3 frag_norm;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//##########################################################################
+// OSL - noise( "hash", seed, u );
+uint rotl( uint x, uint s ){
+    return ( x << s ) | ( x >> (32u - s) ); // srl(x,32-s)
+}
+
+uint bjfinal( uint a, uint b, uint c ){
+    c ^= b; c -= rotl( b, 14u );
+    a ^= c; a -= rotl( c, 11u );
+    b ^= a; b -= rotl( a, 25u );
+    c ^= b; c -= rotl( b, 16u );
+    a ^= c; a -= rotl( c, 4u );
+    b ^= a; b -= rotl( a, 14u );
+    c ^= b; c -= rotl( b, 24u );
+    return c;
+}
+
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L239
+uint inthash( uint k0, uint k1 ){
+    uint start_val  = 0xdeadbeefU + (2u << 2u) + 13u;
+    uint a          = start_val + k0;
+    uint b          = start_val + k1;
+    uint c          = bjfinal( a, b, start_val );
+    return c;
+}
+
+uint inthash( uint k0, uint k1, uint k2 ) {
+    // now hash the data!
+    uint start_val  = 0xdeadbeefU + (3u << 2u) + 13u;
+    uint a          = start_val + k0;
+    uint b          = start_val + k1;
+    uint c          = start_val + k2;
+    return bjfinal( a, b, c );
+}
+
+// Construct a float with half-open range [0:1] using low 23 bits.
+// All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
+float floatConstruct( uint m ) {
+    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    m |= ieeeOne;                          // Add fractional part to 1.0
+    float  f = uintBitsToFloat( m );       // Range [1:2]
+    return f - 1.0;                        // Range [0:1]
+}
+
+// noise( "hash", seed, u );
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L366
+float hashFloat( float seed, float x ){
+    uint v = inthash( uint( seed ), uint( x ) );
+    return floatConstruct( v );
+    //return float(v) / float( 0xffffffffU );
+}
+
+float hashFloat( float seed, float x, float y ){
+    uint v = inthash( uint( seed ), uint( x ), uint( y ) );
+    return floatConstruct( v );
+    //return float(v) / float( 0xffffffffU );
+}
+
+//##########################################################################
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/liboslnoise/simplexnoise.cpp#L318
+
+const vec3 grad3lut[16] = vec3[](
+    vec3( 1.0f,  0.0f,  1.0f ), vec3( 0.0f,  1.0f,  1.0f ), // 12 cube edges
+    vec3( -1.0f,  0.0f,  1.0f ), vec3(  0.0f, -1.0f,  1.0f ),
+    vec3(  1.0f,  0.0f, -1.0f ), vec3( 0.0f,  1.0f, -1.0f ),
+    vec3( -1.0f,  0.0f, -1.0f ), vec3( 0.0f, -1.0f, -1.0f ),
+    vec3(  1.0f, -1.0f,  0.0f ), vec3(  1.0f,  1.0f,  0.0f ),
+    vec3( -1.0f,  1.0f,  0.0f ), vec3( -1.0f, -1.0f,  0.0f ),
+    vec3(  1.0f,  0.0f,  1.0f ), vec3( -1.0f,  0.0f,  1.0f ), // 4 repeats to make 16
+    vec3(  0.0f,  1.0f, -1.0f ), vec3(  0.0f, -1.0f, -1.0f )
+);
+
+uint scramble( uint v0, uint v1, uint v2 ){
+    return bjfinal( v0, v1, v2 ^ 0xdeadbeefU );
+}
+
+vec3 grad3( int i, int j, int k, int seed ){
+    uint h = scramble( uint(i), uint(j), scramble( uint(k), uint(seed), 0u ) );
+    return grad3lut[ h & 15u ];
+}
+
+float simplexnoise3(float x, float y, float z, int seed ){
+    // Skewing factors for 3D simplex grid:
+    const float F3 = 0.333333333;   // = 1/3
+    const float G3 = 0.166666667;   // = 1/6
+
+    // Skew the input space to determine which simplex cell we're in
+    float s = (x+y+z)*F3; // Very nice and simple skew factor for 3D
+    float xs = x+s;
+    float ys = y+s;
+    float zs = z+s;
+    int i = int(xs);
+    int j = int(ys);
+    int k = int(zs);
+
+    float t = float( i + j + k ) * G3; 
+    float X0 = float(i)-t; // Unskew the cell origin back to (x,y,z) space
+    float Y0 = float(j)-t;
+    float Z0 = float(k)-t;
+    float x0 = x-X0; // The x,y,z distances from the cell origin
+    float y0 = y-Y0;
+    float z0 = z-Z0;
+
+    // For the 3D case, the simplex shape is a slightly irregular tetrahedron.
+    // Determine which simplex we are in.
+    int i1, j1, k1; // Offsets for second corner of simplex in (i,j,k) coords
+    int i2, j2, k2; // Offsets for third corner of simplex in (i,j,k) coords
+
+    if (x0>=y0) {
+        if (y0>=z0) {
+            i1=1; j1=0; k1=0; i2=1; j2=1; k2=0;  /* X Y Z order */
+        } else if (x0>=z0) {
+            i1=1; j1=0; k1=0; i2=1; j2=0; k2=1;  /* X Z Y order */
+        } else {
+            i1=0; j1=0; k1=1; i2=1; j2=0; k2=1;  /* Z X Y order */
+        }
+    } else { // x0<y0
+        if (y0<z0) {
+            i1=0; j1=0; k1=1; i2=0; j2=1; k2=1;  /* Z Y X order */
+        } else if (x0<z0) {
+            i1=0; j1=1; k1=0; i2=0; j2=1; k2=1;  /* Y Z X order */
+        } else {
+            i1=0; j1=1; k1=0; i2=1; j2=1; k2=0;  /* Y X Z order */
+        }
+    }
+
+    // A step of (1,0,0) in (i,j,k) means a step of (1-c,-c,-c) in (x,y,z),
+    // a step of (0,1,0) in (i,j,k) means a step of (-c,1-c,-c) in (x,y,z), and
+    // a step of (0,0,1) in (i,j,k) means a step of (-c,-c,1-c) in (x,y,z),
+    // where c = 1/6.
+    float x1 = x0 - float(i1) + G3; // Offsets for second corner in (x,y,z) coords
+    float y1 = y0 - float(j1) + G3;
+    float z1 = z0 - float(k1) + G3;
+    float x2 = x0 - float(i2) + 2.0f * G3; // Offsets for third corner in (x,y,z) coords
+    float y2 = y0 - float(j2) + 2.0f * G3;
+    float z2 = z0 - float(k2) + 2.0f * G3;
+    float x3 = x0 - 1.0f + 3.0f * G3; // Offsets for last corner in (x,y,z) coords
+    float y3 = y0 - 1.0f + 3.0f * G3;
+    float z3 = z0 - 1.0f + 3.0f * G3;
+
+    float t20 = 0.0f, t40 = 0.0f;
+    float t21 = 0.0f, t41 = 0.0f;
+    float t22 = 0.0f, t42 = 0.0f;
+    float t23 = 0.0f, t43 = 0.0f;
+    float n0=0.0f, n1=0.0f, n2=0.0f, n3=0.0f; // Noise contributions from the four simplex corners
+
+    // Calculate the contribution from the four corners
+    float t0 = 0.5f - x0*x0 - y0*y0 - z0*z0;
+    if (t0 >= 0.0f) {
+        vec3 g0 = grad3 (i, j, k, seed);
+        t20 = t0 * t0;
+        t40 = t20 * t20;
+        n0 = t40 * (g0[0] * x0 + g0[1] * y0 + g0[2] * z0);
+    }
+
+    float t1 = 0.5f - x1*x1 - y1*y1 - z1*z1;
+    if (t1 >= 0.0f) {
+        vec3 g1 = grad3 (i+i1, j+j1, k+k1, seed);
+        t21 = t1 * t1;
+        t41 = t21 * t21;
+        n1 = t41 * (g1[0] * x1 + g1[1] * y1 + g1[2] * z1);
+    }
+
+    float t2 = 0.5f - x2*x2 - y2*y2 - z2*z2;
+    if (t2 >= 0.0f) {
+        vec3 g2 = grad3 (i+i2, j+j2, k+k2, seed);
+        t22 = t2 * t2;
+        t42 = t22 * t22;
+        n2 = t42 * (g2[0] * x2 + g2[1] * y2 + g2[2] * z2);
+    }
+
+    float t3 = 0.5f - x3*x3 - y3*y3 - z3*z3;
+    if (t3 >= 0.0f) {
+        vec3 g3 = grad3 (i+1, j+1, k+1, seed);
+        t23 = t3 * t3;
+        t43 = t23 * t23;
+        n3 = t43 * (g3[0] * x3 + g3[1] * y3 + g3[2] * z3);
+    }
+
+    // Sum up and scale the result.  The scale is empirical, to make it
+    // cover [-1,1], and to make it approximately match the range of our
+    // Perlin noise implementation.
+    const float scale = 68.0f;
+    float noise = scale * (n0 + n1 + n2 + n3);
+
+    return noise;
+}
+
+//##########################################################################
+
+//https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L899
+float fade( float t ){ return t * t * t * (t * (t * 6.0 - 15.0 ) + 10.0 ); }
+
+//https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L861
+float floorfrac( float x, out uint i) {
+    float fx = floor( x );
+    i        = uint( fx );
+    return x - fx;
+}
+
+//https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L1028
+float scale3 ( float result) { return 0.9820f * result; }
+
+//https://github.com/OpenImageIO/oiio/blob/master/src/include/OpenImageIO/fmath.h#L495
+
+float trilerp( float v0, float v1, float v2, float v3, float v4, float v5, float v6, float v7, float s, float t, float r ) {
+    // NOTE: a*(t-1) + b*t is much more numerically stable than a+t*(b-a)
+    float s1 = 1.0 - s;
+    float t1 = 1.0 - t;
+    float r1 = 1.0 - r;
+    return (r1*(t1*(v0*s1 + v1*s) + t*(v2*s1 + v3*s)) +
+               r*(t1*(v4*s1 + v5*s) + t*(v6*s1 + v7*s)));
+}
+
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/sfm_simplex.h#L372
+float select( bool b, float t, float f ){ return b ? t : f; }
+float negate_if( float val, bool b) { return b ? -val : val; }
+
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L608
+float grad( uint hash, float x, float y, float z ){
+    // use vectors pointing to the edges of the cube
+    uint h      = hash & 15u;
+    float xz    = select( (h == 12u) || ( h==14u), x, z );
+    float u     = select( (h < 8u), x, y );
+    float v     = select( (h < 4u), y, xz );
+    return negate_if( u, ( (h & 1u) == 1u) ) + negate_if( v, ( (h & 2u) == 2u) );
+}
+
+//https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L1369
+float perlin( float x, float y, float z ){
+    // ORIGINAL -- non-SIMD
+    uint X; float fx = floorfrac(x, X);
+    uint Y; float fy = floorfrac(y, Y);
+    uint Z; float fz = floorfrac(z, Z);
+    float u = fade(fx);
+    float v = fade(fy);
+    float w = fade(fz);
+
+    // hash is inthash if you dig enough
+    //https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h#L1003 Grad
+    float trilerp_result = trilerp (
+        grad (inthash (X   , Y   , Z  ),    fx     , fy     , fz     ),
+        grad (inthash (X+1u, Y   , Z  ),    fx-1.0f, fy     , fz     ),
+        grad (inthash (X   , Y+1u, Z  ),    fx     , fy-1.0f, fz     ),
+        grad (inthash (X+1u, Y+1u, Z  ),    fx-1.0f, fy-1.0f, fz     ),
+        grad (inthash (X   , Y   , Z+1u),   fx     , fy     , fz-1.0f),
+        grad (inthash (X+1u, Y   , Z+1u),   fx-1.0f, fy     , fz-1.0f),
+        grad (inthash (X   , Y+1u, Z+1u),   fx     , fy-1.0f, fz-1.0f),
+        grad (inthash (X+1u, Y+1u, Z+1u),   fx-1.0f, fy-1.0f, fz-1.0f),
+        u, v, w);
+
+    return scale3( trilerp_result );
+}
+
+float uperlin( float x, float y, float z ){ return perlin( x, y, z ) * 0.5 + 0.5; }
+
+//##########################################################################
+
+vec3 random_vector3_offset( float seed ){
+    return vec3( 100.0 + hashFloat( seed, 0.0 ) * 100.0,
+                 100.0 + hashFloat( seed, 1.0 ) * 100.0,
+                 100.0 + hashFloat( seed, 2.0 ) * 100.0 );
+}
+
+float safe_snoise( vec3 p ){
+    float f = simplexnoise3( p.x, p.y, p.z, 0 ); //float f = noise("snoise", p);
+    if( isinf(f) ) return 0.0;
+    return f;
+}
+
+float safe_noise(vec3 p){
+    float f = uperlin( p.x, p.y, p.z ); //noise("noise", p ); // Documentation say noise is Unsigned
+    if( isinf(f) ) return 0.5;
+    return f;
+}
+
+/* The fractal_noise functions are all exactly the same except for the input type. */
+float fractal_noise( vec3 p, float details, float roughness ){
+  float fscale = 1.0;
+  float amp = 1.0;
+  float maxamp = 0.0;
+  float sum = 0.0;
+  float octaves = clamp( details, 0.0, 16.0);
+  int n = int( octaves );
+  for (int i = 0; i <= n; i++) {
+    float t = safe_noise(fscale * p);
+    sum += t * amp;
+    maxamp += amp;
+    amp *= clamp(roughness, 0.0, 1.0);
+    fscale *= 2.0;
+  }
+  float rmd = octaves - floor(octaves);
+  if (rmd != 0.0) {
+    float t = safe_noise(fscale * p);
+    float sum2 = sum + t * amp;
+    sum /= maxamp;
+    sum2 /= maxamp + amp;
+    return (1.0 - rmd) * sum + rmd * sum2;
+  }
+
+    return sum / maxamp;
+}
+
+
+float noise_texture_3D( vec3 co, float detail, float roughness, float distortion, out vec3 Color ){
+  vec3 p = co;
+
+  if( distortion != 0.0 ){
+    p += vec3( safe_snoise( p + random_vector3_offset(0.0)) * distortion,
+               safe_snoise( p + random_vector3_offset(1.0)) * distortion,
+               safe_snoise( p + random_vector3_offset(2.0)) * distortion );
+  }
+
+  float value = fractal_noise( p, detail, roughness );
+  Color = vec3( value,
+                fractal_noise( p + random_vector3_offset(3.0), detail, roughness),
+                fractal_noise( p + random_vector3_offset(4.0), detail, roughness));
+
+  return value;
+}
+
+// https://github.com/blender/blender/blob/master/intern/cycles/kernel/shaders/node_noise_texture.osl
+// Vector(0,0,0), W=0, Scale=5, Detail=2, Roughness = 0.5, Distortion = 0.0
+void node_noise_texture( vec3 Vector, float Scale, float Detail, float Roughness, float Distortion, out float Fac, out vec3 Color ){
+    vec3 p  = Vector * Scale;
+    Fac     = noise_texture_3D( p, Detail, Roughness, Distortion, Color );
+}
+
+//##########################################################################
+
+// https://github.com/blender/blender/blob/master/intern/cycles/kernel/shaders/node_wave_texture.osl
+
+const int WAVE_BANDS = 0;
+const int WAVE_RINGS = 1;
+
+const int WAVE_DIR_X = 0;
+const int WAVE_DIR_Y = 1;
+const int WAVE_DIR_Z = 2;
+const int WAVE_DIR_D = 3;
+
+const int WAVE_PRO_SINE = 0;
+const int WAVE_PRO_SAW = 1;
+const int WAVE_PRO_TRI = 2;
+
+const float M_PI_2 = 1.5707963267948966;       /* pi/2 */
+const float M_2PI = 6.2831853071795865;       /* 2*pi */
+
+float wave(vec3 p_input,
+           int type,
+           int bands_direction,
+           int rings_direction,
+           int profile,
+           float distortion,
+           float detail,
+           float dscale,
+           float droughness,
+           float phase)
+{
+    /* Prevent precision issues on unit coordinates. */
+    vec3 p = (p_input + 0.000001) * 0.999999;
+    float n = 0.0;
+
+    if (type == WAVE_BANDS){
+        if (bands_direction == WAVE_DIR_X )         n = p[0] * 20.0;
+        else if (bands_direction == WAVE_DIR_Y )    n = p[1] * 20.0;
+        else if (bands_direction == WAVE_DIR_Z )    n = p[2] * 20.0;
+        else                                        n = (p[0] + p[1] + p[2]) * 10.0; /* diagonal */
+    }else if(type == WAVE_RINGS){
+        vec3 rp = p;
+        if (rings_direction == WAVE_DIR_X )         rp *= vec3(0.0, 1.0, 1.0);
+        else if (rings_direction == WAVE_DIR_Y )    rp *= vec3(1.0, 0.0, 1.0);
+        else if (rings_direction == WAVE_DIR_Z )    rp *= vec3(1.0, 1.0, 0.0);
+
+        /* else: "spherical" */
+        n = length( rp ) * 20.0;
+    }
+
+    n += phase;
+    if (distortion != 0.0) n = n + (distortion * (fractal_noise(p * dscale, detail, droughness) * 2.0 - 1.0));
+
+    if (profile == WAVE_PRO_SINE) {
+        return 0.5 + 0.5 * sin( n - M_PI_2 );
+    }else if (profile == WAVE_PRO_SAW) {
+        n /= M_2PI;
+        return n - floor(n);
+    }else { /* profile tri */
+        n /= M_2PI;
+        return abs(n - floor(n + 0.5)) * 2.0;
+    }
+}
+
+
+void node_wave_texture( int wave_type,
+                          int bands_direction,
+                          int rings_direction,
+                          int profile,
+                          float Scale,
+                          float Distortion,
+                          float Detail,
+                          float DetailScale,
+                          float DetailRoughness,
+                          float PhaseOffset,
+                          vec3 Vector,
+                          out float Fac,
+                          out vec3 Color )
+{
+  vec3 p = Vector;
+
+  Fac = wave(p * Scale,
+             wave_type,
+             bands_direction,
+             rings_direction,
+             profile,
+             Distortion,
+             Detail,
+             DetailScale,
+             DetailRoughness,
+             PhaseOffset);
+  Color = vec3( Fac );
+}
+
+//##########################################################################
+const int DIST_MILTISCATTER_GGX = 0;
+const int DIST_GGX = 1;
+const int SUBSURF_BURLEY = 0;
+
+//liboslexec/opcolor.cpp
+float luminance( vec3 RGB ) {
+    const vec3 m_luminance_scale = vec3(0.2125, 0.7154, 0.0721); // This is a global value set by blender which I could not find. Googled for a possible value for testing.
+    return dot( RGB, m_luminance_scale );
+}
+
+// shaders/stdosl.h
+vec3 rotate (vec3 p, float angle, vec3 a, vec3 b ){
+    vec3 axis = normalize(b - a);
+    float cosang = cos( angle );
+    float sinang = sin( angle );
+    float cosang1 = 1.0 - cosang;
+    float x = axis[0], y = axis[1], z = axis[2];
+
+    mat4 M = mat4 (x * x + (1.0 - x * x) * cosang,
+                       x * y * cosang1 + z * sinang,
+                       x * z * cosang1 - y * sinang,
+                       0.0,
+                       x * y * cosang1 - z * sinang,
+                       y * y + (1.0 - y * y) * cosang,
+                       y * z * cosang1 + x * sinang,
+                       0.0,
+                       x * z * cosang1 + y * sinang,
+                       y * z * cosang1 - x * sinang,
+                       z * z + (1.0 - z * z) * cosang,
+                       0.0,
+                       0.0, 0.0, 0.0, 1.0);
+    return ( M * vec4(p-a, 1.0)).xyz + a;
+}
+
+/*
+vec3 principled_diffuse( const PrincipledDiffuseBsdf *bsdf, float3 N, float3 V, float3 L, float3 H, float *pdf){
+  float NdotL = max(dot(N, L), 0.0f);
+  float NdotV = max(dot(N, V), 0.0f);
+
+  if (NdotL < 0 || NdotV < 0) {
+    *pdf = 0.0f;
+    return make_float3(0.0f, 0.0f, 0.0f);
+  }
+
+  float LdotH = dot(L, H);
+
+  float FL = schlick_fresnel(NdotL), FV = schlick_fresnel(NdotV);
+  const float Fd90 = 0.5f + 2.0f * LdotH * LdotH * bsdf->roughness;
+  float Fd = (1.0f * (1.0f - FL) + Fd90 * FL) * (1.0f * (1.0f - FV) + Fd90 * FV);
+
+  float value = M_1_PI_F * NdotL * Fd;
+
+  return vec3(value, value, value);
+}
+*/
+
+float principled_sheen(float NV)
+{
+  float f = 1.0 - NV;
+  /* Empirical approximation (manual curve fitting). Can be refined. */
+  float sheen = f * f * f * 0.077 + f * 0.01 + 0.00026;
+  return sheen;
+}
+
+
+
+/*
+int distribution = "Multiscatter GGX",
+int subsurface_method = "burley",
+vec3 BaseColor = color(0.8, 0.8, 0.8),
+float Subsurface = 0.0,
+vector SubsurfaceRadius = vector(1.0, 1.0, 1.0),
+color SubsurfaceColor = color(0.7, 0.1, 0.1),
+float Metallic = 0.0,
+float Specular = 0.5,
+float SpecularTint = 0.0,
+float Roughness = 0.5,
+float Anisotropic = 0.0,
+float AnisotropicRotation = 0.0,
+float Sheen = 0.0,
+float SheenTint = 0.5,
+float Clearcoat = 0.0,
+float ClearcoatRoughness = 0.03,
+float IOR = 1.45,
+float Transmission = 0.0,
+float TransmissionRoughness = 0.0,
+normal Normal = N,
+normal ClearcoatNormal = N,
+normal Tangent = normalize(dPdu),
+out vec3 BSDF
+*/
+
+void node_principled_bsdf( int distribution,
+                            int subsurface_method,
+                            vec3 BaseColor,
+                            float Subsurface,
+                            vec3 SubsurfaceRadius,
+                            vec3 SubsurfaceColor,
+                            float Metallic,
+                            float Specular,
+                            float SpecularTint,
+                            float Roughness,
+                            float Anisotropic,
+                            float AnisotropicRotation,
+                            float Sheen,
+                            float SheenTint,
+                            float Clearcoat,
+                            float ClearcoatRoughness,
+                            float IOR,
+                            float Transmission,
+                            float TransmissionRoughness,
+                            vec3 Normal,
+                            vec3 ClearcoatNormal,
+                            vec3 Tangent,
+                            out vec3 BSDF )
+{
+  float f = max(IOR, 1e-5);
+  float diffuse_weight = (1.0 - clamp(Metallic, 0.0, 1.0)) * (1.0 - clamp(Transmission, 0.0, 1.0));
+  float final_transmission = clamp(Transmission, 0.0, 1.0) * (1.0 - clamp(Metallic, 0.0, 1.0));
+  float specular_weight = (1.0 - final_transmission);
+
+  vec3 T = Tangent;
+
+  float m_cdlum = luminance(BaseColor);
+  vec3 m_ctint = m_cdlum > 0.0 ? BaseColor / m_cdlum : vec3(1.0, 1.0, 1.0);  // normalize lum. to isolate hue+sat
+
+  /* rotate tangent */
+  if(AnisotropicRotation != 0.0) T = rotate( T, AnisotropicRotation * M_2PI, vec3(0.0, 0.0, 0.0), Normal );
+
+  if (diffuse_weight > 1e-5) {
+    if (Subsurface > 1e-5) {
+      color mixed_ss_base_color = SubsurfaceColor * Subsurface + BaseColor * (1.0 - Subsurface);
+      if (subsurface_method == "burley") {
+        BSDF = mixed_ss_base_color * bssrdf("principled",
+                                            Normal,
+                                            Subsurface * SubsurfaceRadius,
+                                            SubsurfaceColor,
+                                            "roughness",
+                                            Roughness);
+      }
+      else {
+        BSDF = mixed_ss_base_color * bssrdf("principled_random_walk",
+                                            Normal,
+                                            Subsurface * SubsurfaceRadius,
+                                            mixed_ss_base_color,
+                                            "roughness",
+                                            Roughness);
+      }
+    }
+    else {
+      BSDF = BaseColor * principled_diffuse(Normal, Roughness);
+    }
+
+    if (Sheen > 1e-5) {
+      color sheen_color = color(1.0, 1.0, 1.0) * (1.0 - SheenTint) + m_ctint * SheenTint;
+
+      BSDF = BSDF + sheen_color * Sheen * principled_sheen(Normal);
+    }
+
+    BSDF = BSDF * diffuse_weight;
+  }
+
+  if (specular_weight > 1e-5) {
+    float aspect = sqrt(1.0 - Anisotropic * 0.9);
+    float r2 = Roughness * Roughness;
+
+    float alpha_x = r2 / aspect;
+    float alpha_y = r2 * aspect;
+
+    color tmp_col = color(1.0, 1.0, 1.0) * (1.0 - SpecularTint) + m_ctint * SpecularTint;
+
+    color Cspec0 = (Specular * 0.08 * tmp_col) * (1.0 - Metallic) + BaseColor * Metallic;
+
+    if (distribution == "GGX" || Roughness <= 0.075) {
+      BSDF = BSDF + specular_weight *
+                        microfacet_ggx_aniso_fresnel(Normal,
+                                                     T,
+                                                     alpha_x,
+                                                     alpha_y,
+                                                     (2.0 / (1.0 - sqrt(0.08 * Specular))) - 1.0,
+                                                     BaseColor,
+                                                     Cspec0);
+    }
+    else {
+      BSDF = BSDF + specular_weight * microfacet_multi_ggx_aniso_fresnel(
+                                          Normal,
+                                          T,
+                                          alpha_x,
+                                          alpha_y,
+                                          (2.0 / (1.0 - sqrt(0.08 * Specular))) - 1.0,
+                                          BaseColor,
+                                          Cspec0);
+    }
+  }
+
+  if (final_transmission > 1e-5) {
+    color Cspec0 = BaseColor * SpecularTint + color(1.0, 1.0, 1.0) * (1.0 - SpecularTint);
+    float eta = backfacing() ? 1.0 / f : f;
+
+    if (distribution == "GGX" || Roughness <= 5e-2) {
+      float cosNO = dot(Normal, I);
+      float Fr = fresnel_dielectric_cos(cosNO, eta);
+
+      float refl_roughness = Roughness;
+      if (Roughness <= 1e-2)
+        refl_roughness = 0.0;
+
+      float transmission_roughness = refl_roughness;
+      if (distribution == "GGX")
+        transmission_roughness = 1.0 - (1.0 - refl_roughness) * (1.0 - TransmissionRoughness);
+
+      BSDF = BSDF +
+             final_transmission *
+                 (Fr * microfacet_ggx_fresnel(
+                           Normal, refl_roughness * refl_roughness, eta, BaseColor, Cspec0) +
+                  (1.0 - Fr) * BaseColor *
+                      microfacet_ggx_refraction(
+                          Normal, transmission_roughness * transmission_roughness, eta));
+    }
+    else {
+      BSDF = BSDF +
+             final_transmission * microfacet_multi_ggx_glass_fresnel(
+                                      Normal, Roughness * Roughness, eta, BaseColor, Cspec0);
+    }
+  }
+
+  if (Clearcoat > 1e-5) {
+    BSDF = BSDF + principled_clearcoat( ClearcoatNormal, Clearcoat, ClearcoatRoughness * ClearcoatRoughness);
+  }
+}
+
+
+//##########################################################################
+
+// Node math - https://github.com/blender/blender/blob/master/intern/cycles/kernel/shaders/node_math.osl
+// GreaterThan functions the same as STEP in glsl.
+
+// Node Mix - https://github.com/blender/blender/blob/master/intern/cycles/kernel/shaders/node_mix.osl
+// Mix Functions the same as mix, just normal lerp between two values
+// Add = mix( a, a+b, t );
+// Mul = mix( a, a*b, t );
+
+// fac = 1.0. colorIn = 0.8
+vec3 node_invert( float Fac, vec3 ColorIn ){ return mix( ColorIn, vec3( 1.0 ) - ColorIn, Fac ); }
+
+vec3 rgb( int c ){
+    return vec3(
+        float( ( c >> 16 ) & 0xff ) * 0.00392156863,
+        float( ( c >> 8 ) & 0xff ) * 0.00392156863,
+        float( c & 0xff ) * 0.00392156863
+    );
+}
+
+vec3 color_step_ramp( vec3[5] color, float[5] wgt, float t, float feather, int i ){
+	for( i; i > 0; i-- ){
+		if( ( wgt[ i ] - feather ) <= t ){
+            return mix( 
+			    color[ i-1 ], 
+			    color[ i ],
+			    smoothstep( wgt[ i ] - feather, wgt[ i ] + feather, t )
+            );
+		}
+	}
+	return color[ 0 ];
+}
+
+
+//##########################################################################
+
+vec3 komikaze_aqua( vec3 vpos ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec3 water              = rgb( 0x17DAD0 );
+    vec3 reflection         = rgb( 0xE6FFF0 );
+    float speed             = 0.796;
+    float patternScale      = 0.270;
+    float reflectionRange   = -6.680;
+    float reflectionOpacity = 1.0;
+    float rimRange          = 0.545;
+    float rimOpacity        = 1.0;
+    float waveScale         = 2.0;
+    float wavePattern       = 1.4;
+    float waveVSpeed        = 1.2;
+    float waveHSpeed        = 1.0;
+    float waveOpacity       = 0.2;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // WAVE MASK
+
+    float vScl = waveVSpeed * 1.050 + vpos.y;
+    float hScl = waveHSpeed * 1.050 + vpos.x;
+
+    vec3 NColor = vec3( 0.0 );
+    float NFac  = 0.0;
+    node_noise_texture( vec3(hScl), wavePattern, 0.0, 0.5, 0.0, NFac, NColor );
+
+    vec3 tmp = mix( vec3(vScl), NColor, 0.325 );        // Node uses color
+    //vec3 tmp = mix( vec3(vScl), vec3(NFac), 0.325 );    // Trying out with just the gradient, Color is better
+    node_noise_texture( tmp, waveScale, 0.0, 0.5, 0.0, NFac, NColor );
+
+    float waveMask = 1.0 - step( NFac, 0.460 );
+
+    return vec3( waveMask );
+}
+
+
+//-------------------------
+
+const vec3 light_pos = vec3( 8.0, 10.0, 8.0 );
+
+
+
+void main( void ){
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec3 norm 			= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+    vec3 dir_light		= normalize( light_pos - frag_wpos );	// Direction of light from fragment
+    vec3 dir_frag_cam	= normalize( global.camera_pos - frag_wpos );	
+
+    out_color.a = 1.0;
+    out_color.rgb = komikaze_aqua( frag_wpos );
+
+    /*
+    vec3 NColor = vec3( 0.0 );
+    float NFac  = 0.0;
+
+    // Shader does not like Negative Inputs, shift things out of neg zone
+    vec3 NInput = frag_wpos;// + 100.0; 
+    
+    node_noise_texture( NInput, 5.0, 2.0, 0.5, 0.0, NFac, NColor );
+    node_wave_texture( WAVE_BANDS,
+                          WAVE_DIR_D,
+                          WAVE_DIR_D,
+                          WAVE_PRO_SINE,
+                          5.0,
+                          0.0,
+                          2.0,
+                          1.0,
+                          0.5,
+                          0.0,
+                          NInput,
+                          NFac,
+                          NColor );
+
+    //NFac = NFac * 0.3 + 0.5; // Extra processing gets it much closer to Visual Look from Blender
+
+    out_color.rgb = vec3( NFac );
+    out_color.a   = 1.0;
+    //out_color.rgb = vec3( perlin( frag_wpos.x*10.0, frag_wpos.y*10.0, frag_wpos.z*10.0 ) );
+
+    //out_color.rgb = normalize( random_vector3_offset( 1.0 ) ); //vec3( hashFloat( 1.0, 2.0 ) );
+    //out_color.rgb = vec3( simplexnoise3( frag_wpos.x*5.0, frag_wpos.y*5.0, frag_wpos.z*5.0, 0 ) );
+    */
+}`;
+
+// NoiseTexture 3D
+// Input : Vector, Scale, Roughness 0.5 :: Maybe Detail and Distortion
+
+// WaveTexture
+// WaveType : Bands, BandDirection: Diagonal, WaveProfile: Sine
+// Input : Vector, Scale, Detail Roughness :: Maybe Distortion, Detail, Detail Scale, Phase Offset
+
+// Texture Coordinate - Camera
+// Layer Weight, Input : Blend, Out : Facing
+
+// https://github.com/blender/blender/tree/master/intern/cycles/kernel/shaders
+// https://github.com/blender/blender/tree/master/source/blender/gpu/shaders/material
+// https://github.com/wdas/brdf/tree/main/src/brdfs
+// https://github.com/dfelinto/blender/blob/master/source/blender/blenlib/intern/noise.c
+
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/tree/master/src/liboslnoise
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h  (HashNoise)
+// https://github.com/OpenImageIO/oiio/blob/master/src/include/OpenImageIO/hash.h
+
+/*
+hashnoise(x) gives the same result as cellnoise( floor(x) )
+
+hashFloat( seed, x ){
+
+}
+
+hashFloat (ListT... floatList) const {
+    return bits_to_01(inthash(DerivedT::transformToUint(floatList)...));
+}
+
+	inthash (const unsigned int k0, const unsigned int k1) {
+		// now hash the data!
+		unsigned int start_val = 0xdeadbeef + (2 << 2) + 13;
+
+		unsigned int a = start_val + k0;
+		unsigned int b = start_val + k1;
+		unsigned int c = OIIO::bjhash::bjfinal(a, b, start_val);
+		return c;
+	}
+
+// convert a 32 bit integer into a floating point number in [0,1]
+inline OSL_HOSTDEVICE float bits_to_01 (unsigned int bits) {
+    // divide by 2^32-1
+	// Calculate inverse constant with double precision to avoid
+	//     warning: implicit conversion from 'unsigned int' to 'float' changes value from 4294967295 to 4294967296
+    constexpr float convertFactor = static_cast<float>(static_cast<double>(1.0) / static_cast<double>(std::numeric_limits<unsigned int>::max()));
+    return bits * convertFactor;
+}
+
+OSL_FORCEINLINE int4
+bjfinal (const int4& a_, const int4& b_, const int4& c_)
+{
+    using OIIO::simd::rotl32;
+    int4 a(a_), b(b_), c(c_);
+    c ^= b; c -= rotl32(b,14);
+    a ^= c; a -= rotl32(c,11);
+    b ^= a; b -= rotl32(a,25);
+    c ^= b; c -= rotl32(b,16);
+    a ^= c; a -= rotl32(c,4);
+    b ^= a; b -= rotl32(a,14);
+    c ^= b; c -= rotl32(b,24);
+    return c;
+}
+
+IO_FORCEINLINE vint4 rotl(const vint4& x, int s) {
+#if OIIO_SIMD_AVX >= 512 && OIIO_AVX512VL_ENABLED
+    // return _mm_rol_epi32 (x, s);
+    // We want to do this ^^^ but this intrinsic only takes an *immediate*
+    // argument for s, and there isn't a way to express in C++ that a
+    // parameter must be an immediate/literal value from the caller.
+    return (x<<s) | srl(x,32-s); //int ( (unsigned int)(a[i]) >> bits)
+#else
+    return (x<<s) | srl(x,32-s);
+#endif
+
+ OIIO_FORCEINLINE vint8 srl (const vint8& a, const unsigned int bits) {
+ 5194 #if OIIO_SIMD_AVX >= 2
+ 5195     return _mm256_srli_epi32 (a, bits);
+ 5196 #else
+ 5197     SIMD_RETURN (vint8, int ((unsigned int)(a[i]) >> bits));
+ 5198 #endif
+ 5199 }
+
+*/
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
+
+<!--
+https://twitter.com/alexanderameye/status/1229730976697376769?s=03
+https://halisavakis.com/my-take-on-shaders-cel-shading/
+https://alvarber.gitlab.io/toon-shader-survey.html
+https://www.gamedev.net/articles/programming/graphics/toon-shader-using-unity-r5095/
+https://www.blendernation.com/2018/12/17/how-to-make-a-realtime-toon-shader-and-outline-with-blender-2-8-eevee/
+https://www.youtube.com/watch?v=t91X4eukZY4&feature=emb_rel_pause
+https://www.youtube.com/watch?v=J4cuuNGid7g&feature=emb_rel_pause
+https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
+https://threejs.org/examples/#webgl_materials_variations_toon
+https://webgl-shaders.com/toon-example.html
+http://www.mclelun.com/2016/11/blender3d-toon-shader.html
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+
+https://webgl-shaders.com/dots-example.html
+https://webgl-shaders.com/pencil-example.html
+
+https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/
+-->
