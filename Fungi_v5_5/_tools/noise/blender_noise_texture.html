@@ -1,0 +1,411 @@
+<!DOCTYPE html><script type="module">
+
+import App, { Colour }		from "../../fungi/App.js";
+import Quad 				from "../../fungi/geo/Quad.js";
+import UVSphere				from "../../fungi/geo/UVSphere.js";
+import Cube					from "../../fungi/geo/Cube.js";
+
+import PropPanel	    	from "../../sage.ui/PropPanelv2.js";
+
+//#####################################################
+App
+    .init()
+    .set_camera( 0, 5, 3.5, 0, 0.6, 0 )
+    .task( init )
+    .then();
+
+//#####################################################
+let MAT;
+
+async function init( x ){
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Shader
+    init_shader();
+
+    MAT = App.shader.new_material( "TESTER", { 
+    
+    } ).set_cullface( false );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Load Mesh  
+    Quad( "quad", MAT ).node.set_pos( 0, 0.6, 0 );
+    UVSphere( "sphere", MAT ).node.set_pos( -1.3, 0.6, 0 );
+    Cube( "cube", MAT ).node.set_pos( 1.5, 0.6, 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    initUI();
+    //App.render_by( 1, on_render );
+    return true;
+}
+
+//#####################################################
+
+function init_shader(){
+    App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"UScale", type:"float", value:5, },
+        { name:"UDistortion", type:"float", value:0, },
+        { name:"UDetail", type:"float", value:2, },
+        { name:"URoughness", type:"float", value:0.5, },
+
+        { name:"UStepMin", type:"float", value:0, },
+        { name:"UStepMax", type:"float", value:1, },
+        { name:"URemap", type:"int", value:1, },
+        { name:"UInvert", type:"int", value:0, },
+
+    ], App.ubo.get_array( "Global", "Model" ) );
+}
+
+const VERT_SRC = `#version 300 es
+layout( location=0 ) in vec3 a_pos;
+layout( location=1 ) in vec3 a_norm;
+layout( location=2 ) in vec2 a_uv;
+
+//-------------------------
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+uniform vec2 scale;
+
+//-------------------------
+
+out vec3 frag_wpos;
+out vec3 frag_norm;
+out vec2 frag_uv;
+
+//-------------------------
+
+void main( void ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec4 world_pos = model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_uv		= a_uv * scale;
+    frag_wpos	= world_pos.xyz;
+    frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position	= global.proj_view * world_pos;
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+uniform float UScale;
+uniform float UDistortion;     //= 0.0;
+uniform float UDetail;         //= 2.0;
+uniform float URoughness;    //= 0.5;
+uniform float UPhase;          //= 0.0;
+
+uniform float UStepMin;
+uniform float UStepMax;
+uniform int   URemap;
+uniform int   UInvert;
+
+out vec4 out_color;
+
+//-------------------------
+
+in vec3 frag_wpos;
+in vec3 frag_norm;
+in vec2 frag_uv;
+
+//-------------------------
+
+//const float M_PI = 3.14159265358979323846;      /* pi */
+//const float M_2PI = 6.28318530717958647692;     /* 2*pi */
+//const float M_PI_2 = 1.57079632679489661923;    /* pi/2 */
+//const float M_1_PI = 0.318309886183790671538;   /* 1/pi */
+//const float M_1_2PI = 0.159154943091895335768;  /* 1/(2*pi) */
+//const float M_1_PI2 = 0.101321183642337771443;  /* 1/(pi^2) */
+//const float M_SQRT2 = 1.41421356237309504880;   /* sqrt(2) */
+//const float M_SQRT1_2 = 0.70710678118654752440; /* 1/sqrt(2) */
+//const float FLT_MAX = 3.402823e+38;
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_hash.glsl
+
+#define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
+#define final(a, b, c) \
+  { \
+    c ^= b; \
+    c -= rot(b, 14); \
+    a ^= c; \
+    a -= rot(c, 11); \
+    b ^= a; \
+    b -= rot(a, 25); \
+    c ^= b; \
+    c -= rot(b, 16); \
+    a ^= c; \
+    a -= rot(c, 4); \
+    b ^= a; \
+    b -= rot(a, 14); \
+    c ^= b; \
+    c -= rot(b, 24); \
+  }
+
+uint hash_uint2(uint kx, uint ky){
+  uint a, b, c;
+  a = b = c = 0xdeadbeefu + (2u << 2u) + 13u;
+
+  b += ky;
+  a += kx;
+  final(a, b, c);
+
+  return c;
+}
+
+uint hash_uint3(uint kx, uint ky, uint kz){
+  uint a, b, c;
+  a = b = c = 0xdeadbeefu + (3u << 2u) + 13u;
+  c += kz;
+  b += ky;
+  a += kx;
+  final(a, b, c);
+  return c;
+}
+
+float hash_uint2_to_float(uint kx, uint ky){ return float(hash_uint2(kx, ky)) / float(0xFFFFFFFFu); }
+float hash_vec2_to_float(vec2 k){ return hash_uint2_to_float(floatBitsToUint(k.x), floatBitsToUint(k.y)); }
+uint hash_int3(int kx, int ky, int kz){ return hash_uint3(uint(kx), uint(ky), uint(kz)); }
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_noise.glsl
+#define FLOORFRAC(x, x_int, x_fract) { float x_floor = floor(x); x_int = int(x_floor); x_fract = x - x_floor; }
+
+float fade(float t){ return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+float negate_if(float value, uint condition){ return (condition != 0u) ? -value : value; }
+
+float noise_grad(uint hash, float x, float y, float z){
+  uint h = hash & 15u;
+  float u = h < 8u ? x : y;
+  float vt = ((h == 12u) || (h == 14u)) ? x : z;
+  float v = h < 4u ? y : vt;
+  return negate_if(u, h & 1u) + negate_if(v, h & 2u);
+}
+
+float tri_mix(float v0,
+              float v1,
+              float v2,
+              float v3,
+              float v4,
+              float v5,
+              float v6,
+              float v7,
+              float x,
+              float y,
+              float z)
+{
+  float x1 = 1.0 - x;
+  float y1 = 1.0 - y;
+  float z1 = 1.0 - z;
+  return z1 * (y1 * (v0 * x1 + v1 * x) + y * (v2 * x1 + v3 * x)) +
+         z * (y1 * (v4 * x1 + v5 * x) + y * (v6 * x1 + v7 * x));
+}
+
+
+float noise_perlin(vec3 vec){
+  int X, Y, Z;
+  float fx, fy, fz;
+
+  FLOORFRAC(vec.x, X, fx);
+  FLOORFRAC(vec.y, Y, fy);
+  FLOORFRAC(vec.z, Z, fz);
+
+  float u = fade(fx);
+  float v = fade(fy);
+  float w = fade(fz);
+  float r = tri_mix(noise_grad(hash_int3(X, Y, Z), fx, fy, fz),
+                    noise_grad(hash_int3(X + 1, Y, Z), fx - 1.0, fy, fz),
+                    noise_grad(hash_int3(X, Y + 1, Z), fx, fy - 1.0, fz),
+                    noise_grad(hash_int3(X + 1, Y + 1, Z), fx - 1.0, fy - 1.0, fz),
+                    noise_grad(hash_int3(X, Y, Z + 1), fx, fy, fz - 1.0),
+                    noise_grad(hash_int3(X + 1, Y, Z + 1), fx - 1.0, fy, fz - 1.0),
+                    noise_grad(hash_int3(X, Y + 1, Z + 1), fx, fy - 1.0, fz - 1.0),
+                    noise_grad(hash_int3(X + 1, Y + 1, Z + 1), fx - 1.0, fy - 1.0, fz - 1.0),
+                    u,
+                    v,
+                    w);
+  return r;
+}
+
+float noise_scale3(float result){ return 0.9820 * result; }
+float snoise(vec3 p){ float r = noise_perlin(p); return (isinf(r)) ? 0.0 : noise_scale3(r); }
+float noise(vec3 p){ return 0.5 * snoise(p) + 0.5; }
+
+//https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_fractal_noise.glsl
+/* The fractal_noise functions are all exactly the same except for the input type. */
+float fractal_noise(vec3 p, float octaves, float roughness)
+{
+  float fscale = 1.0;
+  float amp = 1.0;
+  float maxamp = 0.0;
+  float sum = 0.0;
+  octaves = clamp(octaves, 0.0, 16.0);
+  int n = int(octaves);
+  for (int i = 0; i <= n; i++) {
+    float t = noise(fscale * p);
+    sum += t * amp;
+    maxamp += amp;
+    amp *= clamp(roughness, 0.0, 1.0);
+    fscale *= 2.0;
+  }
+  float rmd = octaves - floor(octaves);
+  if (rmd != 0.0) {
+    float t = noise(fscale * p);
+    float sum2 = sum + t * amp;
+    sum /= maxamp;
+    sum2 /= maxamp + amp;
+    return (1.0 - rmd) * sum + rmd * sum2;
+  }
+  else {
+    return sum / maxamp;
+  }
+}
+
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_tex_noise.glsl
+vec3 random_vec3_offset(float seed){
+  return vec3(100.0 + hash_vec2_to_float(vec2(seed, 0.0)) * 100.0,
+              100.0 + hash_vec2_to_float(vec2(seed, 1.0)) * 100.0,
+              100.0 + hash_vec2_to_float(vec2(seed, 2.0)) * 100.0);
+}
+
+void node_noise_texture_3d(vec3 co,
+                           float w,
+                           float scale,
+                           float detail,
+                           float roughness,
+                           float distortion,
+                           out float value,
+                           out vec4 color)
+{
+  vec3 p = co * scale;
+  if (distortion != 0.0) {
+    p += vec3(snoise(p + random_vec3_offset(0.0)) * distortion,
+              snoise(p + random_vec3_offset(1.0)) * distortion,
+              snoise(p + random_vec3_offset(2.0)) * distortion);
+  }
+
+  value = fractal_noise(p, detail, roughness);
+  color = vec4(value,
+               fractal_noise(p + random_vec3_offset(3.0), detail, roughness),
+               fractal_noise(p + random_vec3_offset(4.0), detail, roughness),
+               1.0);
+}
+
+
+//-------------------------
+
+float lerpStep( float a, float b, float n ){ return clamp( ( n-a ) / ( b-a ), 0.0, 1.0 ); }
+
+void main(void){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    float fac   = 1.0;
+    vec4 color  = vec4( 0.0 );
+
+    node_noise_texture_3d( frag_wpos,
+                           0.0,
+                           UScale,
+                           UDetail,
+                           URoughness,
+                           UDistortion,
+                           fac,
+                           color );
+
+    if( URemap == 1 )   fac = fac * 0.5 + 0.5;  // Remap -1:1 to 0:1
+    if( UInvert == 1 )  fac = 1.0 - fac;
+
+    fac = lerpStep( UStepMin, UStepMax, fac );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    out_color = vec4( vec3( fac ), 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // DEBUGGING
+    //if( fac < 0.0 ) out_color.rgb = vec3( 1.0, 0.0, 0.0 );
+}`;
+
+//#####################################################
+
+function initUI(){
+    onBatchInput( updateMaterial, "UScale", "UDistortion", "UDetail", "URoughness" );
+    onInput( "UStep", updateMaterial );
+    onInput( "URemap", updateMaterial );
+    onInput( "UInvert", updateMaterial );
+}
+
+function onBatchInput( fn, ...arg ){
+    for( let a of arg ) onInput( a, fn );
+}
+function onInput( name, fn ){ document.getElementById( name ).addEventListener( "input", fn ); }
+function updateMaterial( e ){
+    let uniform = e.srcElement.id;
+
+    switch( uniform ){
+        case "URemap": MAT.set( uniform, e.detail.value? 1 : 0 ); break;
+        case "UInvert": MAT.set( uniform, e.detail.value? 1 : 0 ); break;
+        case "UStep" :
+            MAT.set( "UStepMin", e.detail.min );
+            MAT.set( "UStepMax", e.detail.max );
+        break;
+        default: 
+            MAT.set( uniform, ( e.detail )? e.detail.value : e.srcElement.value );
+        break;
+    }
+
+    App.render();
+}
+
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="350px">
+        <prop-panel label="Blender Noise Texture Node" foot="Shader Options">
+            <prop-group label="Parameters">
+                <prop-row label="Scale"><slide-input id="UScale" min="0.1" max="30" value="5"></slide-input></prop-row>
+                <prop-row label="Distortion"><slide-input id="UDistortion" min="-100" max="100" value="0.0"></slide-input></prop-row>
+                <prop-row label="Detail"><slide-input id="UDetail" min="0" max="16" value="2.0"></slide-input></prop-row>
+                <prop-row label="Roughness"><slide-input id="URoughness" min="0" max="1" value="0.5"></slide-input></prop-row>
+            </prop-group> 
+            <prop-group label="Extra">
+                <prop-row label="Step"><range-input id="UStep" min="0" max="1" minValue="0" maxValue="1"></range-input></prop-row>
+                <prop-row label="Remap01"><check-button id="URemap" class="onoff" on="true"></check-button></prop-row>
+                <prop-row label="Invert"><check-button id="UInvert" class="yesno" on="false"></check-button></prop-row>
+            </prop-group>        
+        </prop-panel>
+    </prop-panel-btncont>
+
+</body></html>
+
+<!--
+
+
+
+
+
+
+
+
+
+-->

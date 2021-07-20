@@ -65,6 +65,30 @@ class Maths{
 
 		static dec2bin(dec){ return ( dec >>> 0 ).toString( 2 ); }// Remove Negitive Bit, then output binary
 		  
+		static uuid(){
+			let dt = new Date().getTime();
+			if( window.performance && typeof window.performance.now === "function" ) dt += performance.now(); //use high-precision timer if available
+			
+			let id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+				var r = (dt + Math.random()*16)%16 | 0;
+				dt = Math.floor(dt/16);
+				return (c=='x' ? r : (r&0x3|0x8)).toString(16);
+			});
+			return id;
+		}
+
+		static nanoid( t=21 ){
+			let n,
+				e = "",
+				r = crypto.getRandomValues( new Uint8Array( t ) );
+			for( ;t--; ){
+				n  = 63 & r[ t ];
+				e += ( n < 36 )? n.toString(36) : 
+					 ( n < 62 )? ( n - 26 ).toString( 36 ).toUpperCase() : 
+					 ( n < 63 )? "_" : "-";
+			}
+			return e;
+		}
 
 	////////////////////////////////////////////////////////////////////
 	// TRIG

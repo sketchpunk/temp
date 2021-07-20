@@ -12,6 +12,7 @@ class Renderer{
 		// UBOs for Updating
 		this.ubo_model			= App.ubo.get( "Model" );
 		this.ubo_global			= App.ubo.get( "Global" );
+		this.ubo_globalext		= App.ubo.get( "GlobalExt" );
 
 		// GL Option states
 		this.options	= {
@@ -62,6 +63,9 @@ class Renderer{
 			.set( "screen_size", [ App.gl.width, App.gl.height ] );
 
 		App.ubo.update( this.ubo_global );
+
+		this.ubo_globalext.set( "proj_matrix", App.cam_com.proj );
+		App.ubo.update( this.ubo_globalext );
 	}
 
 	end_frame(){

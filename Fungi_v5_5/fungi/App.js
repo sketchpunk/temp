@@ -131,6 +131,10 @@ class Launcher{
 			{ name:"screen_size",	type:"vec2" },
 			{ name:"clock",			type:"float" },
 		]);
+
+		App.ubo.new( "GlobalExt", 2, [
+			{ name:"proj_matrix",	type:"mat4" },
+		]);
 		
 		App.ubo.new( "Model", 1, [
 			{ name:"view_matrix", type:"mat4" },

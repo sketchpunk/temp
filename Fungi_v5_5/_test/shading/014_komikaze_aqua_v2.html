@@ -1,0 +1,726 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour }  from "../../fungi/App.js";
+import Quad	            from "../../fungi/geo/Quad.js";
+
+import GltfUtil         from "../../fungi/lib/GltfUtil.js";
+import XhrQueue         from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 20, 3, 0, 0.7, 0 )
+	.task( init )
+	.then();
+
+let gPnt, gUbo;
+
+//#####################################################
+//C:\Users\vor\Desktop\blender-master\source\blender\gpu\shaders\material
+function on_render( dt, ss ){
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.6, 0 );
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    e = Quad( "Quad", mat );
+    e.node.set_pos( 1.5, 0.6, 0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//on_render( 0, 0 );
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+		//{ name:"base_color", type:"rgba", value:"#DB00FFFF" },
+		//{ name:"other_color", type:"rgba", value:"#86F0FFFF" },
+		//{ name:"specular_color", type:"rgb", value:"#ffffff" },
+	], App.ubo.get_array( "Global", "Model", "GlobalExt" ) );
+}
+
+const VERT_SRC = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+	layout(location=1) in vec3 a_norm;
+
+	uniform Global{ 
+		mediump mat4 proj_view; 
+		mediump mat4 camera_matrix;
+		mediump vec3 camera_pos;
+		mediump float delta_time;
+		mediump vec2 screen_size;
+		mediump float clock;
+    } global;
+    
+	uniform GlobalExt{ mediump mat4 proj_matrix; } globalExt;
+
+	uniform Model{ 
+		mat4 view_matrix;
+	} model;
+
+	out vec3 frag_norm;
+	out vec3 frag_wpos;
+	out vec3 frag_lpos;
+
+	void main(void){
+		vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		frag_lpos 		= a_pos.xyz;
+		frag_wpos		= wpos.xyz;
+		frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		gl_Position = global.proj_view * wpos;
+
+	}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+//precision highp uint;
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+uniform GlobalExt{ mediump mat4 proj_matrix; } globalExt;
+
+out vec4 out_color;
+
+//-------------------------
+
+uniform vec4 base_color;
+uniform vec4 other_color;
+uniform vec3 specular_color;
+
+in vec3 frag_norm;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//##########################################################################
+
+const float M_PI = 3.14159265358979323846;      /* pi */
+const float M_PI_2 = 1.57079632679489661923;    /* pi/2 */
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_hash.glsl
+
+#define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
+#define final(a, b, c) \
+  { \
+    c ^= b; \
+    c -= rot(b, 14); \
+    a ^= c; \
+    a -= rot(c, 11); \
+    b ^= a; \
+    b -= rot(a, 25); \
+    c ^= b; \
+    c -= rot(b, 16); \
+    a ^= c; \
+    a -= rot(c, 4); \
+    b ^= a; \
+    b -= rot(a, 14); \
+    c ^= b; \
+    c -= rot(b, 24); \
+  }
+
+uint hash_uint2(uint kx, uint ky){
+  uint a, b, c;
+  a = b = c = 0xdeadbeefu + (2u << 2u) + 13u;
+
+  b += ky;
+  a += kx;
+  final(a, b, c);
+
+  return c;
+}
+
+uint hash_uint3(uint kx, uint ky, uint kz){
+  uint a, b, c;
+  a = b = c = 0xdeadbeefu + (3u << 2u) + 13u;
+  c += kz;
+  b += ky;
+  a += kx;
+  final(a, b, c);
+  return c;
+}
+
+float hash_uint2_to_float(uint kx, uint ky){ return float(hash_uint2(kx, ky)) / float(0xFFFFFFFFu); }
+float hash_vec2_to_float(vec2 k){ return hash_uint2_to_float(floatBitsToUint(k.x), floatBitsToUint(k.y)); }
+uint hash_int3(int kx, int ky, int kz){ return hash_uint3(uint(kx), uint(ky), uint(kz)); }
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_noise.glsl
+#define FLOORFRAC(x, x_int, x_fract) { float x_floor = floor(x); x_int = int(x_floor); x_fract = x - x_floor; }
+
+float fade(float t){ return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+float negate_if(float value, uint condition){ return (condition != 0u) ? -value : value; }
+
+float noise_grad(uint hash, float x, float y, float z){
+  uint h = hash & 15u;
+  float u = h < 8u ? x : y;
+  float vt = ((h == 12u) || (h == 14u)) ? x : z;
+  float v = h < 4u ? y : vt;
+  return negate_if(u, h & 1u) + negate_if(v, h & 2u);
+}
+
+float tri_mix(float v0,
+              float v1,
+              float v2,
+              float v3,
+              float v4,
+              float v5,
+              float v6,
+              float v7,
+              float x,
+              float y,
+              float z)
+{
+  float x1 = 1.0 - x;
+  float y1 = 1.0 - y;
+  float z1 = 1.0 - z;
+  return z1 * (y1 * (v0 * x1 + v1 * x) + y * (v2 * x1 + v3 * x)) +
+         z * (y1 * (v4 * x1 + v5 * x) + y * (v6 * x1 + v7 * x));
+}
+
+
+float noise_perlin(vec3 vec){
+  int X, Y, Z;
+  float fx, fy, fz;
+
+  FLOORFRAC(vec.x, X, fx);
+  FLOORFRAC(vec.y, Y, fy);
+  FLOORFRAC(vec.z, Z, fz);
+
+  float u = fade(fx);
+  float v = fade(fy);
+  float w = fade(fz);
+  float r = tri_mix(noise_grad(hash_int3(X, Y, Z), fx, fy, fz),
+                    noise_grad(hash_int3(X + 1, Y, Z), fx - 1.0, fy, fz),
+                    noise_grad(hash_int3(X, Y + 1, Z), fx, fy - 1.0, fz),
+                    noise_grad(hash_int3(X + 1, Y + 1, Z), fx - 1.0, fy - 1.0, fz),
+                    noise_grad(hash_int3(X, Y, Z + 1), fx, fy, fz - 1.0),
+                    noise_grad(hash_int3(X + 1, Y, Z + 1), fx - 1.0, fy, fz - 1.0),
+                    noise_grad(hash_int3(X, Y + 1, Z + 1), fx, fy - 1.0, fz - 1.0),
+                    noise_grad(hash_int3(X + 1, Y + 1, Z + 1), fx - 1.0, fy - 1.0, fz - 1.0),
+                    u,
+                    v,
+                    w);
+  return r;
+}
+
+float noise_scale3(float result){ return 0.9820 * result; }
+float snoise(vec3 p){ float r = noise_perlin(p); return (isinf(r)) ? 0.0 : noise_scale3(r); }
+float noise(vec3 p){ return 0.5 * snoise(p) + 0.5; }
+
+//https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_fractal_noise.glsl
+/* The fractal_noise functions are all exactly the same except for the input type. */
+float fractal_noise(vec3 p, float octaves, float roughness)
+{
+  float fscale = 1.0;
+  float amp = 1.0;
+  float maxamp = 0.0;
+  float sum = 0.0;
+  octaves = clamp(octaves, 0.0, 16.0);
+  int n = int(octaves);
+  for (int i = 0; i <= n; i++) {
+    float t = noise(fscale * p);
+    sum += t * amp;
+    maxamp += amp;
+    amp *= clamp(roughness, 0.0, 1.0);
+    fscale *= 2.0;
+  }
+  float rmd = octaves - floor(octaves);
+  if (rmd != 0.0) {
+    float t = noise(fscale * p);
+    float sum2 = sum + t * amp;
+    sum /= maxamp;
+    sum2 /= maxamp + amp;
+    return (1.0 - rmd) * sum + rmd * sum2;
+  }
+  else {
+    return sum / maxamp;
+  }
+}
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_tex_noise.glsl
+vec3 random_vec3_offset(float seed){
+  return vec3(100.0 + hash_vec2_to_float(vec2(seed, 0.0)) * 100.0,
+              100.0 + hash_vec2_to_float(vec2(seed, 1.0)) * 100.0,
+              100.0 + hash_vec2_to_float(vec2(seed, 2.0)) * 100.0);
+}
+
+void node_noise_texture_3d(vec3 co,
+                           float scale,
+                           float detail,
+                           float roughness,
+                           float distortion,
+                           out float value,
+                           out vec4 color)
+{
+  vec3 p = co * scale;
+  if (distortion != 0.0) {
+    p += vec3(snoise(p + random_vec3_offset(0.0)) * distortion,
+              snoise(p + random_vec3_offset(1.0)) * distortion,
+              snoise(p + random_vec3_offset(2.0)) * distortion);
+  }
+
+  value = fractal_noise(p, detail, roughness);
+  color = vec4(value,
+               fractal_noise(p + random_vec3_offset(3.0), detail, roughness),
+               fractal_noise(p + random_vec3_offset(4.0), detail, roughness),
+               1.0);
+}
+
+
+void node_layer_weight(float blend, vec3 N, vec3 I, out float facing){ //out float fresnel, 
+  N = normalize(N);
+
+  /* fresnel  */
+  //float eta = max(1.0 - blend, 0.00001);
+  vec3 I_view = (globalExt.proj_matrix[3][3] == 0.0) ? normalize(I) : vec3(0.0, 0.0, -1.0);
+  
+  //fresnel = fresnel_dielectric(I_view, N, (gl_FrontFacing) ? 1.0 / eta : eta);
+
+
+  /* facing */
+  facing = abs(dot(I_view, N));
+  if (blend != 0.5) {
+    blend = clamp(blend, 0.0, 0.99999);
+    blend = (blend < 0.5) ? 2.0 * blend : 0.5 / (1.0 - blend);
+    facing = pow( facing, blend );
+  }
+  facing = 1.0 - facing;
+}
+
+vec4 mix_linear( float fac, vec4 col1, vec4 col2 ){
+  fac = clamp( fac, 0.0, 1.0 );
+  return col1 + fac * (2.0 * (col2 - vec4(0.5)));
+}
+
+vec4 mix_screen(float fac, vec4 col1, vec4 col2 ){
+  fac = clamp(fac, 0.0, 1.0);
+  float facm = 1.0 - fac;
+
+  vec4 outcol = vec4(1.0) - (vec4(facm) + fac * (vec4(1.0) - col2)) * (vec4(1.0) - col1);
+  outcol.a = col1.a;
+  return outcol;
+}
+
+
+// https://github.com/blender/blender/blob/master/source/blender/gpu/shaders/material/gpu_shader_material_tex_wave.glsl
+
+float calc_wave(vec3 p,
+                float distortion,
+                float detail,
+                float detail_scale,
+                float detail_roughness,
+                float phase,
+                int wave_type,
+                int bands_dir,
+                int rings_dir,
+                int wave_profile)
+{
+  /* Prevent precision issues on unit coordinates. */
+  p = (p + 0.000001) * 0.999999;
+
+  float n;
+
+  if (wave_type == 0) {   /* type bands */
+    if (bands_dir == 0) { /* X axis */
+      n = p.x * 20.0;
+    }
+    else if (bands_dir == 1) { /* Y axis */
+      n = p.y * 20.0;
+    }
+    else if (bands_dir == 2) { /* Z axis */
+      n = p.z * 20.0;
+    }
+    else { /* Diagonal axis */
+      n = (p.x + p.y + p.z) * 10.0;
+    }
+  }
+  else { /* type rings */
+    vec3 rp = p;
+    if (rings_dir == 0) { /* X axis */
+      rp *= vec3(0.0, 1.0, 1.0);
+    }
+    else if (rings_dir == 1) { /* Y axis */
+      rp *= vec3(1.0, 0.0, 1.0);
+    }
+    else if (rings_dir == 2) { /* Z axis */
+      rp *= vec3(1.0, 1.0, 0.0);
+    }
+    /* else: Spherical */
+
+    n = length(rp) * 20.0;
+  }
+
+  n += phase;
+
+  if (distortion != 0.0) {
+    n += distortion * (fractal_noise(p * detail_scale, detail, detail_roughness) * 2.0 - 1.0);
+  }
+
+  if (wave_profile == 0) { /* profile sin */
+    return 0.5 + 0.5 * sin(n - M_PI_2);
+  }
+  else if (wave_profile == 1) { /* profile saw */
+    n /= 2.0 * M_PI;
+    return n - floor(n);
+  }
+  else { /* profile tri */
+    n /= 2.0 * M_PI;
+    return abs(n - floor(n + 0.5)) * 2.0;
+  }
+}
+
+void node_tex_wave(vec3 co,
+                   float scale,
+                   float distortion,
+                   float detail,
+                   float detail_scale,
+                   float detail_roughness,
+                   float phase,
+                   int wave_type,
+                   int bands_dir,
+                   int rings_dir,
+                   int wave_profile,
+                   out vec4 color,
+                   out float fac)
+{
+  float f;
+  f = calc_wave(co * scale,
+                distortion,
+                detail,
+                detail_scale,
+                detail_roughness,
+                phase,
+                wave_type,
+                bands_dir,
+                rings_dir,
+                wave_profile);
+
+  color = vec4(f, f, f, 1.0);
+  fac = f;
+}
+
+const int WAVE_BANDS = 0;
+const int WAVE_RINGS = 1;
+
+const int WAVE_DIR_X = 0;
+const int WAVE_DIR_Y = 1;
+const int WAVE_DIR_Z = 2;
+const int WAVE_DIR_D = 3;
+
+const int WAVE_PRO_SINE = 0;
+const int WAVE_PRO_SAW = 1;
+const int WAVE_PRO_TRI = 2;
+
+
+//##########################################################################
+
+// Node math - https://github.com/blender/blender/blob/master/intern/cycles/kernel/shaders/node_math.osl
+// GreaterThan functions the same as STEP in glsl.
+
+// Node Mix - https://github.com/blender/blender/blob/master/intern/cycles/kernel/shaders/node_mix.osl
+// Mix Functions the same as mix, just normal lerp between two values
+// Add = mix( a, a+b, t );
+// Mul = mix( a, a*b, t );
+
+// fac = 1.0. colorIn = 0.8
+vec3 node_invert( float Fac, vec3 ColorIn ){ return mix( ColorIn, vec3( 1.0 ) - ColorIn, Fac ); }
+
+vec3 rgb( int c ){
+    return vec3(
+        float( ( c >> 16 ) & 0xff ) * 0.00392156863,
+        float( ( c >> 8 ) & 0xff ) * 0.00392156863,
+        float( c & 0xff ) * 0.00392156863
+    );
+}
+
+vec3 color_step_ramp( vec3[5] color, float[5] wgt, float t, float feather, int i ){
+	for( i; i > 0; i-- ){
+		if( ( wgt[ i ] - feather ) <= t ){
+            return mix( 
+			    color[ i-1 ], 
+			    color[ i ],
+			    smoothstep( wgt[ i ] - feather, wgt[ i ] + feather, t )
+            );
+		}
+	}
+	return color[ 0 ];
+}
+
+
+//##########################################################################
+
+const vec3 light_pos = vec3( 8.0, 10.0, 8.0 );
+
+float diffuseLight(){
+    vec3 norm = normalize( frag_norm );
+    vec3 toLit = normalize( light_pos - frag_wpos );
+    return clamp( dot( norm, toLit ), 0.0, 1.0 );
+}
+
+/*
+float rgbtobw( vec3 color) {
+  vec3 factors = vec3(0.2126, 0.7152, 0.0722);
+  return dot( color.rgb, factors);
+}
+*/
+
+
+
+vec3 komikaze_aqua( vec3 vpos ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec3 water              = rgb( 0x17DAD0 );
+    vec3 reflection         = rgb( 0xE6FFF0 );
+    float speed             = 0.796;
+    float patternScale      = 0.270;
+    float reflectionRange   = 0.65;
+    float reflectionOpacity = 1.0;
+    float rimRange          = 0.545;
+    float rimOpacity        = 1.0;
+    float waveScale         = 2.0;
+    float wavePattern       = 1.4;
+    float waveVSpeed        = 1.2;
+    float waveHSpeed        = 1.0;
+    float waveOpacity       = 0.4;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // WAVE MASK
+
+    float vScl = waveVSpeed * 1.050 + vpos.y;
+    float hScl = waveHSpeed * 1.050 + vpos.x;
+
+    vec4 NColor = vec4( 0.0 );
+    float NFac  = 0.0;
+    node_noise_texture_3d( vec3(hScl), wavePattern, 0.0, 0.5, 0.0, NFac, NColor );
+
+    vec3 tmp = mix( vec3(vScl), NColor.rgb, 0.325 );        // Node uses color
+    //vec3 tmp = mix( vec3(vScl), vec3(NFac), 0.325 );    // Trying out with just the gradient, Color is better
+    node_noise_texture_3d( tmp, waveScale, 0.0, 0.5, 0.0, NFac, NColor );
+
+    float waveMask = 1.0 - step( NFac, 0.460 );
+
+    //return vec3( waveMask );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // RIM
+    float facing = 0.0;
+    node_layer_weight( rimRange, frag_norm, global.camera_pos, facing );
+    facing = facing * 0.5 + 0.5; // Remapping it make it look more like how it does in blender when rending the results
+    
+    float fRimPos = 1.59 * speed + frag_wpos.z;
+    node_noise_texture_3d( vec3(fRimPos), 3.04 * patternScale, 0.0, 0.5, 0.0, NFac, NColor );
+
+    float rimMask = mix( facing, NFac, 0.474 );
+    rimMask = step( 0.58, rimMask );
+    
+    //return vec3( rimMask );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // HIGHLIGHTS
+    //float diffMask = smoothstep( 0.0, 1.0, diffuseLight() );
+    float diffMask  = diffuseLight();
+    vec3 toCam      = global.camera_pos - frag_wpos;
+    vec4 AWColor     = vec4( 0.0 );
+    vec4 BWColor     = vec4( 0.0 );
+
+    node_tex_wave( vec3( toCam.x ), patternScale, 0.0, 2.0, 1.0, 0.5, 1.571, WAVE_BANDS, WAVE_DIR_D, WAVE_DIR_D, WAVE_PRO_SINE, AWColor, NFac );
+    node_tex_wave( vec3( 1.59 * speed + toCam.y ), patternScale, 0.0, 2.0, 1.0, 0.5, 1.571, WAVE_BANDS, WAVE_DIR_D, WAVE_DIR_D, WAVE_PRO_SINE, BWColor, NFac );
+
+    vec4 highMask = mix( AWColor, BWColor, 0.5 );
+    highMask = mix_linear( 1.0, highMask, vec4( diffMask ) );
+    highMask *= 1.414;
+    highMask = step( vec4( 0.590 + reflectionRange ),  highMask ); //
+    
+    //return vec3( highMask.rgb );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // FINAL MIX
+
+    float patternOpacity = mix( 0.0, highMask.x, reflectionOpacity );
+    vec4 wave = mix_screen( waveOpacity, vec4(patternOpacity), vec4( waveMask ) );
+    wave = mix_screen( rimOpacity, wave, vec4( rimMask ) );
+
+    vec3 final = mix( water, reflection, wave.x );
+
+    return vec3( final.rgb );
+}
+
+
+//-------------------------
+
+void main( void ){
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec3 norm 			= normalize( frag_norm );				// Must normalized, Since it has been interpolated
+    vec3 dir_light		= normalize( light_pos - frag_wpos );	// Direction of light from fragment
+    vec3 dir_frag_cam	= normalize( global.camera_pos - frag_wpos );	
+
+    out_color.a = 1.0;
+    out_color.rgb = komikaze_aqua( frag_wpos );
+
+    /*
+    vec3 NColor = vec3( 0.0 );
+    float NFac  = 0.0;
+
+    // Shader does not like Negative Inputs, shift things out of neg zone
+    vec3 NInput = frag_wpos;// + 100.0; 
+    
+    node_noise_texture( NInput, 5.0, 2.0, 0.5, 0.0, NFac, NColor );
+    node_wave_texture( WAVE_BANDS,
+                          WAVE_DIR_D,
+                          WAVE_DIR_D,
+                          WAVE_PRO_SINE,
+                          5.0,
+                          0.0,
+                          2.0,
+                          1.0,
+                          0.5,
+                          0.0,
+                          NInput,
+                          NFac,
+                          NColor );
+
+    //NFac = NFac * 0.3 + 0.5; // Extra processing gets it much closer to Visual Look from Blender
+
+    out_color.rgb = vec3( NFac );
+    out_color.a   = 1.0;
+    //out_color.rgb = vec3( perlin( frag_wpos.x*10.0, frag_wpos.y*10.0, frag_wpos.z*10.0 ) );
+
+    //out_color.rgb = normalize( random_vector3_offset( 1.0 ) ); //vec3( hashFloat( 1.0, 2.0 ) );
+    //out_color.rgb = vec3( simplexnoise3( frag_wpos.x*5.0, frag_wpos.y*5.0, frag_wpos.z*5.0, 0 ) );
+    */
+}`;
+
+// NoiseTexture 3D
+// Input : Vector, Scale, Roughness 0.5 :: Maybe Detail and Distortion
+
+// WaveTexture
+// WaveType : Bands, BandDirection: Diagonal, WaveProfile: Sine
+// Input : Vector, Scale, Detail Roughness :: Maybe Distortion, Detail, Detail Scale, Phase Offset
+
+// Texture Coordinate - Camera
+// Layer Weight, Input : Blend, Out : Facing
+
+// https://github.com/blender/blender/tree/master/intern/cycles/kernel/shaders
+// https://github.com/blender/blender/tree/master/source/blender/gpu/shaders/material
+// https://github.com/wdas/brdf/tree/main/src/brdfs
+// https://github.com/dfelinto/blender/blob/master/source/blender/blenlib/intern/noise.c
+
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/tree/master/src/liboslnoise
+// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h  (HashNoise)
+// https://github.com/OpenImageIO/oiio/blob/master/src/include/OpenImageIO/hash.h
+
+/*
+hashnoise(x) gives the same result as cellnoise( floor(x) )
+
+hashFloat( seed, x ){
+
+}
+
+hashFloat (ListT... floatList) const {
+    return bits_to_01(inthash(DerivedT::transformToUint(floatList)...));
+}
+
+	inthash (const unsigned int k0, const unsigned int k1) {
+		// now hash the data!
+		unsigned int start_val = 0xdeadbeef + (2 << 2) + 13;
+
+		unsigned int a = start_val + k0;
+		unsigned int b = start_val + k1;
+		unsigned int c = OIIO::bjhash::bjfinal(a, b, start_val);
+		return c;
+	}
+
+// convert a 32 bit integer into a floating point number in [0,1]
+inline OSL_HOSTDEVICE float bits_to_01 (unsigned int bits) {
+    // divide by 2^32-1
+	// Calculate inverse constant with double precision to avoid
+	//     warning: implicit conversion from 'unsigned int' to 'float' changes value from 4294967295 to 4294967296
+    constexpr float convertFactor = static_cast<float>(static_cast<double>(1.0) / static_cast<double>(std::numeric_limits<unsigned int>::max()));
+    return bits * convertFactor;
+}
+
+OSL_FORCEINLINE int4
+bjfinal (const int4& a_, const int4& b_, const int4& c_)
+{
+    using OIIO::simd::rotl32;
+    int4 a(a_), b(b_), c(c_);
+    c ^= b; c -= rotl32(b,14);
+    a ^= c; a -= rotl32(c,11);
+    b ^= a; b -= rotl32(a,25);
+    c ^= b; c -= rotl32(b,16);
+    a ^= c; a -= rotl32(c,4);
+    b ^= a; b -= rotl32(a,14);
+    c ^= b; c -= rotl32(b,24);
+    return c;
+}
+
+IO_FORCEINLINE vint4 rotl(const vint4& x, int s) {
+#if OIIO_SIMD_AVX >= 512 && OIIO_AVX512VL_ENABLED
+    // return _mm_rol_epi32 (x, s);
+    // We want to do this ^^^ but this intrinsic only takes an *immediate*
+    // argument for s, and there isn't a way to express in C++ that a
+    // parameter must be an immediate/literal value from the caller.
+    return (x<<s) | srl(x,32-s); //int ( (unsigned int)(a[i]) >> bits)
+#else
+    return (x<<s) | srl(x,32-s);
+#endif
+
+ OIIO_FORCEINLINE vint8 srl (const vint8& a, const unsigned int bits) {
+ 5194 #if OIIO_SIMD_AVX >= 2
+ 5195     return _mm256_srli_epi32 (a, bits);
+ 5196 #else
+ 5197     SIMD_RETURN (vint8, int ((unsigned int)(a[i]) >> bits));
+ 5198 #endif
+ 5199 }
+
+*/
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
+
+<!--
+https://twitter.com/alexanderameye/status/1229730976697376769?s=03
+https://halisavakis.com/my-take-on-shaders-cel-shading/
+https://alvarber.gitlab.io/toon-shader-survey.html
+https://www.gamedev.net/articles/programming/graphics/toon-shader-using-unity-r5095/
+https://www.blendernation.com/2018/12/17/how-to-make-a-realtime-toon-shader-and-outline-with-blender-2-8-eevee/
+https://www.youtube.com/watch?v=t91X4eukZY4&feature=emb_rel_pause
+https://www.youtube.com/watch?v=J4cuuNGid7g&feature=emb_rel_pause
+https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
+https://threejs.org/examples/#webgl_materials_variations_toon
+https://webgl-shaders.com/toon-example.html
+http://www.mclelun.com/2016/11/blender3d-toon-shader.html
+https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
+
+https://webgl-shaders.com/dots-example.html
+https://webgl-shaders.com/pencil-example.html
+
+https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/
+-->
