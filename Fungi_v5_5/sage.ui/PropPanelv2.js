@@ -459,6 +459,7 @@ class SlideInput extends HTMLElement{
 
     // #region GETTER / SETTERS
     get value(){ return this._value; }
+    set value( v ){ this.set_thumb_value( v ); }
 
     set_thumb_value( v ){
         let t = (v - this.min_value) / this.range;

@@ -28,6 +28,11 @@ class Camera{
 		this.ratio	= ratio;
 		return this;
 	}
+
+	update_proj(){
+		this.proj.from_perspective( this.fov, this.ratio, this.near, this.far );
+		this.proj_inv.from_invert( this.proj );
+	}
 	// #endregion ///////////////////////////////////////////////////////////////////////
 }
 

@@ -1,0 +1,490 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import Vec4         from "../../fungi/maths/Vec4.js";
+import PropPanel    from "../../sage.ui/PropPanelv2.js";
+
+//#####################################################
+App
+	.init( true )
+	//.load_shaders( "LowPoly.js", "BaseColor.js" )
+	//.use_debug()
+	.set_camera( 0, -10, 2, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+// https://www.gamasutra.com/blogs/ConorDickinson/20130925/200990/Stunning_Procedural_Skies_in_WebGL__Part_2.php
+
+// http://www.wuhao.co/webgl-fft-ocean.html
+// https://github.com/wuhao1117/WebGL-Ocean-FFT/blob/master/src/WebContent/index.html#L784
+// https://github.com/wuhao1117/WebGL-Ocean-FFT/blob/master/src/WebContent/skyshader.js#L88
+
+let gMat;
+
+const CONFIG = {
+    density              : 0.99,
+    clarity              : 0.2,
+    pollution            : 0.03,
+    planet_scale         : 1.0,
+    atmosphere_scale     : 1.0,
+    brightness           : 10.0,
+    sun_disk_radius      : 0.1,      // Size of the Sun/Moon
+    sun_disk_intensity   : 0.01,      // How Solid it is, 0 makes it very blurry
+    earth_atmo_thickness : 100000,
+    earth_radius         : 6.371e6,
+    
+    sun_lat              : 180,
+    sun_lng              : 30,
+    sun_pos              : new Vec3().from_polar( 180, 30 ),
+
+    params1              : new Vec4(),
+    params2              : new Vec4(),
+    params3              : new Vec4(),
+    params4              : new Vec4(),
+    params5              : new Vec4(),
+    params6              : new Vec4(),
+};
+
+function updateParams(){
+    const c = CONFIG;
+
+    let sky_lambda              = new Vec3( 680e-9, 550e-9, 450e-9 );
+    let sky_k                   = new Vec3( 0.686, 0.678, 0.666 );
+    let clarity                 = 1 + c.clarity;
+    let two_pi                  = 2 * Math.PI;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    c.sun_pos.from_polar( c.sun_lat, c.sun_lng );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // compute betaR
+    let factor   = 1.86e-31 / ( clarity * Math.max( c.density, 0.001 ) );
+    c.params2[0] = factor / sky_lambda.x**4;
+    c.params2[1] = factor / sky_lambda.y**4;
+    c.params2[2] = factor / sky_lambda.z**4;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // compute betaM
+    factor       = 1.36e-19 * Math.max( c.pollution, 0.001 );
+    c.params3[0] = factor * sky_k.x * (two_pi / sky_lambda.x)**2;
+    c.params3[1] = factor * sky_k.y * (two_pi / sky_lambda.y)**2;
+    c.params3[2] = factor * sky_k.z * (two_pi / sky_lambda.z)**2;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // betaR + betaM, -(betaR + betaM), betaR / (betaR + betaM), betaM / (betaR + betaM)
+    c.params1.from_add( c.params2, c.params3 );
+    c.params6.from_add( c.params2, c.params3 ).scale( -1 );
+    c.params2.from_div( c.params2, c.params1 );
+    c.params3.from_div( c.params3, c.params1 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // mie scattering phase constants
+    let g = (1 - c.pollution) * 0.2 + 0.75;
+    c.params1[3] = (1 - g)**2 / ( 4 * Math.PI );
+    c.params2[3] = -2 * g;
+    c.params3[3] = 1 + g**2;
+
+    let planet_radius   = c.earth_radius * c.planet_scale;
+    let atmo_radius     = planet_radius + c.earth_atmo_thickness * c.atmosphere_scale;
+    c.params4[0] = planet_radius;
+    c.params4[1] = atmo_radius * atmo_radius;
+    c.params4[2] = 0.15 + 0.75 *(0.5);
+    c.params4[3] = atmo_radius * atmo_radius - planet_radius * planet_radius;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // sun disk cutoff
+    c.params1[1]  = -(1 - 0.015 * c.sun_disk_radius);
+    c.params1[0]  = 1 / (1 + c.params1[1]);
+    c.params1[1] *= c.params1[0];
+
+    c.params5.set( c.brightness, c.brightness, c.brightness, c.sun_disk_intensity );
+
+    c.params6[3] = clarity * 3 / (16 * Math.PI);
+}
+
+async function init(){
+	//App.find_entity_com( "GridFloor", "Draw" ).priority = 0;
+    //App.Debug.set_depth_test( true ).set_priority( 0 );
+    
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    init_shader();
+    gMat = App.shader.new_material( "TESTER" );
+
+    let e = SkyDome.mesh( "sd", gMat, 10, 18, 25 );
+    
+    updateParams();
+    updateMaterial();
+    
+    
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    initUI();
+    return true;
+}
+
+//#####################################################
+
+class SkyDome {
+    static mesh( name, mat, radius=5, latSteps= 18, lngSteps=25 ){
+        let g = this.geo( radius, latSteps, lngSteps );
+        let m = App.mesh.from_data( name, 
+            new Float32Array( g.vertices ), 3, 
+            new Uint16Array( g.indices ), null, 
+            new Float32Array( g.texcoord )
+        );
+        return App.mesh_entity( name, m, mat, App.mesh.TRI );
+    }
+
+    static geo( radius = 5, latSteps = 18, lngSteps = 25 ){
+        const latRng = Math.PI * 2;
+        const lngRng = Math.PI;
+
+        let s_lat, c_lat, s_lng, c_lng, x, y, z, i, j, len, tj, ti;
+        let lon     = 0;
+        let lat     = 0;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        const rtn = {
+            vertices    : [],
+            indices     : [],
+            texcoord    : [],
+        };
+
+        this.gridIndices( rtn.indices, lngSteps + 1, latSteps + 1, 0, false, true );
+        this.reverseWinding( rtn.indices );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Loop Around Hemisphere, Y Axis
+        for (j = 0; j <= latSteps; j++) {
+            tj      = j / latSteps;
+            lat     = latRng * tj;
+            s_lat   = Math.sin(lat);
+            c_lat   = Math.cos(lat);
+            // Loop from Pole to Pole
+            for (i = 0; i <= lngSteps; i++) {
+                ti = i / lngSteps;
+                //-----------------------------------
+                // 3D Position
+                lon     = lngRng * ti;
+                s_lng   = Math.sin(lon);
+                c_lng   = Math.cos(lon);
+                x       = radius * s_lng * c_lat;
+                z       = radius * s_lng * s_lat;
+                y       = radius * c_lng;
+                rtn.vertices.push( x, y, z );
+                
+                //-----------------------------------
+                // Normals
+                //len = 1 / Math.sqrt(x * x + y * y + z * z);
+                //rtn.normals.push(x * len, y * len, z * len);
+                //-----------------------------------
+                // UVs
+                rtn.texcoord.push(ti, 1.0 - tj);
+            }
+        }
+        return rtn;
+    }
+
+    static gridIndices(out, row_size, row_cnt, start_idx = 0, do_loop = false, rev_quad = false) {
+        const row_stop = (do_loop) ? row_cnt : row_cnt - 1, col_stop = row_size - 1;
+        let row_a, row_b, r, rr, a, b, c, d;
+        for (r = 0; r < row_stop; r++) {
+            // Figure out the starting Index for the Two Rows
+            // 2nd row might loop back to starting row when Looping.
+            row_a = start_idx + row_size * r;
+            row_b = start_idx + row_size * ((r + 1) % row_cnt);
+            for (rr = 0; rr < col_stop; rr++) {
+                // Defined the Vertex Index of a Quad
+                a = row_a + rr;
+                b = row_a + rr + 1;
+                d = row_b + rr;
+                c = row_b + rr + 1;
+                if (!rev_quad)
+                    out.push(a, b, c, c, d, a); // Counter ClockWise
+                else
+                    out.push(a, d, c, c, b, a); // ClockWise
+            }
+        }
+    }
+
+    static reverseWinding( iAry ){
+        let t, ii;
+        for (let i = 0; i < iAry.length; i += 3) {
+            ii = i + 2;
+            t = iAry[i];
+            iAry[i] = iAry[ii];
+            iAry[ii] = t;
+        }
+    }
+}
+
+//#####################################################
+
+let gUbo;
+function init_shader(){
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"sun_pos", type:"vec3", value:[0.0,0.3,-0.5] },
+
+        { name:"params1", type:"vec4", value:[0,0,0,0] },
+        { name:"params2", type:"vec4", value:[0,0,0,0] },
+        { name:"params3", type:"vec4", value:[0,0,0,0] },
+        { name:"params4", type:"vec4", value:[0,0,0,0] },
+        { name:"params5", type:"vec4", value:[0,0,0,0] },
+        { name:"params6", type:"vec4", value:[0,0,0,0] },
+    ], App.ubo.get_array( "Global", "Model" ) );
+    //.set_blend( true );
+}
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+uniform Model{ 
+	mat4 view_matrix;
+} model;
+
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+	vec4 wpos	    = model.view_matrix * vec4( a_pos, 1.0 );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	frag_lpos 		= a_pos.xyz;
+	frag_wpos		= wpos.xyz;
+	//frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
+out vec4 out_color;
+
+//-------------------------
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+uniform vec3 sun_pos;
+uniform vec4 params1;
+uniform vec4 params2;
+uniform vec4 params3;
+uniform vec4 params4;
+uniform vec4 params5;
+uniform vec4 params6;
+
+//-------------------------
+
+vec3 calcExtinction( float dist ){ return exp( dist * params6.xyz ); }
+
+vec3 calcScattering(float cos_theta) {
+    float r_phase   = (cos_theta * cos_theta) * params6.w + params6.w;
+    float m_phase   = params1.w * pow(params2.w * cos_theta + params3.w, -1.5);
+    return params2.xyz * r_phase + ( params3.xyz * m_phase );
+}
+
+float baseOpticalDepth(in vec3 ray) {
+    float a1 = params4.x * ray.y;
+    return sqrt( a1 * a1 + params4.w ) - a1;
+}
+
+float opticalDepth( vec3 pos, vec3 ray ){
+    // the incoming position is in a space with the origin on the surface of the planet
+    // convert to a space with the origin at the center of the planet
+    pos.y    += params4.x;
+
+    // ray-sphere intersection, assuming position is inside the sphere
+    float a0  = params4.y - dot(pos, pos);
+    float a1  = dot(pos, ray);
+    return sqrt( a1 * a1 + a0 ) - a1;
+}
+
+vec3 skyColor( vec3 sky_dir, vec3 sun_pos ){
+    vec3 sun_vector         = normalize( sun_pos );
+    float cos_theta         = dot( sky_dir, sun_vector );
+
+    //----------------------------------
+    // optical depth along view ray
+    float ray_dist          = baseOpticalDepth( sky_dir );
+
+    //----------------------------------
+    // extinction of light along view ray
+    vec3 extinction         = calcExtinction(ray_dist);
+
+    //----------------------------------
+    // optical depth for incoming light hitting the view ray
+    vec3 light_ray_pos      = sky_dir * ( ray_dist * params4.z );
+    float light_ray_dist    = opticalDepth( light_ray_pos, sun_vector );
+    
+    //----------------------------------
+    // optical depth for edge of atmosphere:
+    // this handles the case where the sun is low in the sky and
+    // the view is facing away from the sun; in this case the distance
+    // the light needs to travel is much greater
+    float light_ray_dist_full = opticalDepth( sky_dir * ray_dist, sun_vector );
+    light_ray_dist            = max( light_ray_dist, light_ray_dist_full );
+
+    //----------------------------------
+    // cast a ray towards the sun and calculate the incoming extincted light
+    vec3 incoming_light     = calcExtinction(light_ray_dist);
+    
+    //----------------------------------
+    // calculate the in-scattering
+    vec3 scattering         = calcScattering(cos_theta);
+    scattering             *= 1.0 - extinction;
+
+    //----------------------------------
+    // combine
+    vec3 in_scatter         = incoming_light * scattering;
+
+    //----------------------------------
+    // sun disk
+    float sun_strength      = clamp(cos_theta * params1.x + params1.y, 0.0, 1.0);
+    sun_strength           *= sun_strength;
+    vec3 sun_disk           = extinction * sun_strength;
+
+    //----------------------------------
+    return params5.xyz * ( params5.w * sun_disk + in_scatter );
+}
+
+void main( void ){
+    vec3 outcolor = skyColor( normalize( frag_wpos ), sun_pos );
+
+    //float gray = 0.299 * outcolor.r + 0.587 * outcolor.g + 0.114 * outcolor.b;
+    //outcolor = mix( vec3(1.0,0.0,0.0), vec3(0.0,1.0,1.0), gray );
+
+	out_color = vec4( outcolor, 1.0 );	
+}`;
+
+//#####################################################
+
+function initUI(){
+    //onBatchInput( updateMaterial, "UScale", "UWaveType", "UBandDir", "UProfile", "UDistortion", "UDetail", "UDetailScale", "UDetailRough", "UPhase" );
+    onBatchInput( updateParam, "density", "clarity", "pollution", "brightness", "sun_disk_radius", "sun_disk_intensity", "earth_atmo_thickness", "sun_lat", "sun_lng", );
+    //onInput( "URemap", updateMaterial );
+    //onInput( "UInvert", updateMaterial );
+
+    onClick( "btnNight", ()=>{
+        setValue( "density", 10 );
+        setValue( "clarity", 0 );
+        setValue( "pollution", 0.02 );
+        setValue( "brightness", 10 );
+        setValue( "earth_atmo_thickness", 100000 );
+        setValue( "sun_lat", 180 );
+        setValue( "sun_lng", 30 );
+        setValue( "sun_disk_radius", 0.07 );
+        setValue( "sun_disk_intensity", 0.5 );
+
+        updateParams();
+        updateMaterial();
+    });
+
+    onClick( "btnSuperSun", ()=>{
+        setValue( "density", 0.66 );
+        setValue( "clarity", -0.68 );
+        setValue( "pollution", 0.18 );
+        setValue( "brightness", 30 );
+        setValue( "earth_atmo_thickness", 57967.03 );
+        setValue( "sun_lat", 180 );
+        setValue( "sun_lng", 30 );
+        setValue( "sun_disk_radius", 2 );
+        setValue( "sun_disk_intensity", 0.37 );
+
+        updateParams();
+        updateMaterial();
+    });
+
+    onClick( "btnDusk", ()=>{
+        setValue( "density", 1.1 );
+        setValue( "clarity", -0.12);
+        setValue( "pollution", 0.04 );
+        setValue( "brightness", 19.73 );
+        setValue( "earth_atmo_thickness", 100000 );
+        setValue( "sun_lat", 180 );
+        setValue( "sun_lng", 0.33 );
+        setValue( "sun_disk_radius", 0.07 );
+        setValue( "sun_disk_intensity", 0.14 );
+
+        updateParams();
+        updateMaterial();
+    });
+}
+
+function onBatchInput( fn, ...arg ){ for( let a of arg ) onInput( a, fn ); }
+function onInput( name, fn ){ document.getElementById( name ).addEventListener( "input", fn ); }
+function onClick( name, fn){ document.getElementById( name ). addEventListener( "click", fn ); }
+function updateParam( e ){
+    let param = e.srcElement.id;
+    //console.log( param, e.detail.value );
+    CONFIG[ param ] = e.detail.value;
+    updateParams();
+    updateMaterial();
+}
+
+function setValue( name, val ){
+    document.getElementById( name ).value = val;
+    CONFIG[ name ] = val;
+}
+
+function updateMaterial( e ){
+    gMat.set( "params1", CONFIG.params1 );
+    gMat.set( "params2", CONFIG.params2 );
+    gMat.set( "params3", CONFIG.params3 );
+    gMat.set( "params4", CONFIG.params4 );
+    gMat.set( "params5", CONFIG.params5 );
+    gMat.set( "params6", CONFIG.params6 );
+    gMat.set( "sun_pos", CONFIG.sun_pos );
+    App.render();    
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="350px">
+        <prop-panel label="" foot="Shader Options">
+            <prop-group label="Style">
+                <prop-row label="Density"><slide-input id="density" min="0" max="20" value="0.99"></slide-input></prop-row>
+                <prop-row label="Clarity"><slide-input id="clarity" min="-1" max="1" value="0.2"></slide-input></prop-row>
+                <prop-row label="Pollution"><slide-input id="pollution" min="0" max="3" value="0.02"></slide-input></prop-row>
+                <prop-row label="Brightness"><slide-input id="brightness" min="0" max="30" value="10.0"></slide-input></prop-row>
+                <prop-row label="Atmosphere"><slide-input id="earth_atmo_thickness" min="10000" max="100000" value="100000"></slide-input></prop-row>
+            </prop-group>
+            <prop-group label="Sun">
+                <prop-row label="Latitude"><slide-input id="sun_lat" min="-180" max="180" value="180"></slide-input></prop-row>
+                <prop-row label="Longitude"><slide-input id="sun_lng" min="-90" max="90" value="30"></slide-input></prop-row>
+                <prop-row label="Radius"><slide-input id="sun_disk_radius" min="0" max="2" value="0.1"></slide-input></prop-row>
+                <prop-row label="Intensity"><slide-input id="sun_disk_intensity" min="0" max="2" value="0.01"></slide-input></prop-row>
+            </prop-group>
+            <prop-group label="Presets">
+                <button id="btnNight">Night</button>
+                <button id="btnSuperSun">Super Sun</button>
+                <button id="btnDusk">Dusk</button>
+            </prop-group>
+        </prop-panel>
+    </prop-panel-btncont>
+
+</body></html>

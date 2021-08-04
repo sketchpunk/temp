@@ -1,0 +1,315 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } 	from "../../fungi/App.js";
+import Points	        from "../../fungi/geo/Points.js";
+import ObjectPool       from "../../fungi/lib/ObjectPool.js";
+
+import PropPanel	    from "../../sage.ui/PropPanelv2.js";
+import QuadTree         from "./lib/QuadTree.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "UvBorder.js" )
+	.set_camera( 0, 20, 10, 5, 0.0, 5 )
+	.task( init )
+	.then();
+
+//#####################################################
+let QTree, TMan, Target, Node;
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    QTree   = new QuadTree( 10, onNewNode );
+    TMan    = new TileManager();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Target  = Points.new_entity( "Target" );
+    Target.points.add( [0,0,0], "green", 0.8, 3 );
+    Target.node.set_pos( [ 2, 0.5, 1.5 ] );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    initUI();
+    runProcess();
+	return true;
+}
+
+function moveTarget( scl, dir ){
+    let v = Vec3.scale( dir, scl );
+    Target.node.add_pos( v );
+
+    //if( Node ){
+    //    let isIn = inNodeBounds( Node, Target.node.local.pos );
+    //    if( !isIn ) runProcess();
+    //}else 
+        runProcess();
+}
+
+window.addEventListener( "keydown", (e)=>{
+	switch( e.keyCode ){
+		case 38: moveTarget( -0.1, Vec3.FORWARD );	break;	// UP
+		case 40: moveTarget( 0.1, Vec3.FORWARD );	break;	// Down
+		case 37: moveTarget( -0.1, Vec3.LEFT );		break;	// Left
+		case 39: moveTarget( 0.1, Vec3.LEFT );		break;	// Right
+	}
+});
+
+//#####################################################
+const TUP       = 0.05;      // Y Position of Tiles
+const MLVL      = 4;         // MAX LEVEL TO PROCESS DOWN
+let   RNG_RATIO = 0.3;       // How much if a Tile's Size to use for Range Testing
+let   USE_RANGE = true;
+
+function runProcess(){
+    //console.log( "RUN", Node?.id );
+    let nodes = ( USE_RANGE )?
+        qtDivideByRange( QTree, Target.node.local.pos ) :
+        qtDivideByPos( QTree, Target.node.local.pos );
+
+    renderQuadTree( nodes );
+}
+
+// Process Quadtree just by using using in boundary Testing
+function qtDivideByPos( qt, pos ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Check if position is outside of quadtree root boundary
+    Node = null;        // Reset the Selected Node
+    //qt.disableAll();    // Reset all Available Nodes to be Disabled.
+    recycleNodes();
+
+    if( !inNodeBounds( qt.root, pos ) ){ 
+        return [ qt.root ];
+    }
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let n, stack = [ qt.root ];
+    let leaf = [];
+    let isIn;
+
+    while( stack.length > 0 ){
+        n       = stack.pop();
+        isIn    = inNodeBounds( n, pos );
+
+        if( !isIn || n.level >= MLVL ){
+            leaf.push( n );
+            if( isIn ) Node = n;
+            continue;
+        }
+
+        if( qt.expandNode( n ) ) stack.push( ...n.nodes );
+    }
+
+    return leaf;
+}
+
+// Process both Boundary Plus Range, so even if not in boundardy, being close enough causes subdivision.
+function qtDivideByRange( qt, pos ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Check if position is outside of quadtree root boundary
+    Node = null;        // Reset the Selected Node
+    recycleNodes();
+
+    if( !inNodeBounds( qt.root, pos ) ){ 
+        return [ qt.root ];
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let n, stack = [ ...qt.root.nodes ];
+    let leaf = [];
+    let isIn;
+    let delta;
+    let range;
+
+    while( stack.length > 0 ){
+        n       = stack.pop();
+        isIn    = inNodeBounds( n, pos );
+        
+        // Distance from Center of Node, works OK-ish, using Len Squared to avoid using SQRT
+        //delta   = Vec3.len_sqr( pos, n.midPoint );
+        //range   = ( n.size * RNG_RATIO )**2;
+
+        // SDF Distance Works much better along with the Right Range Ratio
+        delta = sdBox( pos, n.midPoint, n.size*0.5 ); //Need to send HALF size because thats how the SDF Function works.
+        range = ( n.size * RNG_RATIO );
+
+        // SubDivide if In the Node OR the Node is within Range WHILE not going over Max Level
+        if( ( isIn || delta <= range ) && n.level < MLVL ){
+            if( qt.expandNode( n ) ) stack.push( ...n.nodes );
+        }else{
+            leaf.push( n );
+            if( isIn ) Node = n;
+        }
+    }
+
+    return leaf;
+}
+
+// Render squares based on the QuadTree Node Array
+function renderQuadTree( nodes ){
+    let n, e;
+    for( n of nodes ){
+        e = TMan.get();
+        e.node.set_scl( n.size );
+        e.node.local.pos
+            .set( n.minBound[ 0 ], TUP, n.minBound[ 2 ] );
+
+        e.draw.items[ 0 ].material = TMan.mat;
+        n.userData.entity = e;
+    }
+
+    // Highlight the Node the Target is over
+    if( Node ) Node.userData.entity.draw.items[ 0 ].material = TMan.mats;
+}
+
+// Reset Nodes Plus Recycle Entities back to Tile Pool
+function recycleNodes(){
+    QTree.forEach( (n)=>{
+        n.enabled = false;
+        if( n.userData.entity ){
+            TMan.recycle( n.userData.entity );
+            n.userData.entity = null;
+        }
+    });
+}
+
+// What to do when a new Node is created in QuadTree
+function onNewNode( n ){ n.userData = { entity : null }; }
+
+// Test if position is inside the node's min/max boundary
+function inNodeBounds( n, pos ){
+    return ( 
+        n.minBound[ 0 ] <= pos[0] && pos[0] <= n.maxBound[0] &&
+        n.minBound[ 2 ] <= pos[2] && pos[2] <= n.maxBound[2]
+    );
+}
+
+// Using SDF Box Length function to test for closest distance to a Quad Tree Node
+// https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+function sdBox( p, m, size ){
+    //sdBox( in vec2 p, in vec2 b ) // P: Vector Len of Point to center of Box, B: is Half Width/Height of Box
+    //vec2 d = abs(p)-b;
+    //return length(max(d,0.0)) + min(max(d.x,d.y),0.0);\
+
+    let dx  = Math.abs( p[0] - m[0] ) - size;
+    let dy  = Math.abs( p[2] - m[2] ) - size;
+    let len = Math.sqrt( Math.max( dx, 0 )**2 + Math.max( dy, 0 )**2 );
+    return len + Math.min( Math.max( dx, dy ), 0.0 );
+}
+
+//#####################################################
+
+class TileManager{
+    constructor(){
+        this.pool = new ObjectPool( this._createTile.bind( this ) );
+        this.mesh = this._createQuad();
+        this.mat  = App.shader.new_material( "UvBorder", null, { cullFace:false } );
+        this.mats = App.shader.new_material( "UvBorder", { color_a:"white", color_b:"white" }, { cullFace:false } );
+    }
+
+    get(){ 
+        let e = this.pool.get();
+        App.ecs.set_entity_active( e.id, true );
+        return e;
+    }
+
+    recycle( e ){
+        App.ecs.set_entity_active( e.id, false );
+        this.pool.recycle( e );
+    }
+
+    _createTile(){
+        const e = App.mesh_entity( "Tile", this.mesh, this.mat, App.mesh.TRI );
+        console.log( "New Tile", e.id );
+        return e;
+    }
+
+    _createQuad(){
+        let buf_idx		= App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
+        let buf_vert	= App.buffer.new_array( new Float32Array(
+          [ 0.0, 0.0, 0.0, 	0,1,0,	0,0,	// Ground - Top Left Origin
+            0.0, 0.0, 1.0, 	0,1,0,	0,1,
+            1.0, 0.0, 1.0, 	0,1,0,	1,1, 
+            1.0, 0.0, 0.0, 	0,1,0,	1,0 ]
+        ));
+
+        return App.mesh.from_buffer_config([
+            { name: "indices", buffer: buf_idx },
+            { name: "quad", buffer: buf_vert, interleaved: [
+                { attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },
+                { attrib_loc:1, size:3, stride_len:8 * 4, offset:3 * 4 },
+                { attrib_loc:2, size:2, stride_len:8 * 4, offset:6 * 4 },
+            ]}
+        ], "FungiFloorQuadTL", 6 );
+    }
+
+}
+
+/*
+// Returns: INTERSECT : 0 
+//          INSIDE : 1 
+//          OUTSIDE : 2 
+int FrustumAABBIntersect(Plane *planes, Vector &mins, Vector &maxs) { 
+   int    ret = INSIDE; 
+   Vector vmin, vmax; 
+
+   for(int i = 0; i < 6; ++i) { 
+      // X axis 
+      if(planes.normal.x > 0) { 
+         vmin.x = mins.x; 
+         vmax.x = maxs.x; 
+      } else { 
+         vmin.x = maxs.x; 
+         vmax.x = mins.x; 
+      } 
+      // Y axis 
+      if(planes.normal.y > 0) { 
+         vmin.y = mins.y; 
+         vmax.y = maxs.y; 
+      } else { 
+         vmin.y = maxs.y; 
+         vmax.y = mins.y; 
+      } 
+      // Z axis 
+      if(planes.normal.z > 0) { 
+         vmin.z = mins.z; 
+         vmax.z = maxs.z; 
+      } else { 
+         vmin.z = maxs.z; 
+         vmax.z = mins.z; 
+      } 
+      if(Vector::DotProduct(planes.normal, vmin) + planes.d > 0) 
+         return OUTSIDE; 
+      if(Vector::DotProduct(planes.normal, vmax) + planes.d >= 0) 
+         ret = INTERSECT; 
+   } 
+   return ret;
+}
+*/
+
+function initUI(){
+    onInput( "chkRange", e=>{ USE_RANGE = e.detail.value; runProcess(); App.render(); });
+    onInput( "siRatio", e=>{ RNG_RATIO = e.detail.value; runProcess(); App.render(); });
+}
+
+function onInput( name, fn ){ document.getElementById( name ).addEventListener( "input", fn ); }
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+    p{text-align: justify; padding:0px; margin:0px; line-height:14px;}
+</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="300px">
+        <prop-panel label="" foot="Shader Options">
+            <prop-group label="Directions">
+                <p>Use Direction Arrows to Move the Target.</p>
+            </prop-group>
+            <prop-row label="Use Range"><check-button id="chkRange" class="yesno" on="true"></check-button></prop-row>
+            <prop-row label="Range Ratio"><slide-input id="siRatio" min="0.01" max="1.1" value="0.3"></slide-input></prop-row>
+        </prop-panel>
+    </prop-panel-btncont>
+
+</body></html>

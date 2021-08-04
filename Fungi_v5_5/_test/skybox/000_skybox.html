@@ -138,29 +138,27 @@ const VERT_SRC = `#version 300 es
 layout(location=0) in vec3 a_pos;
 
 uniform Global{ 
-	mat4 proj_view; 
-	mat4 camera_matrix;
-	vec3 camera_pos;
-	float delta_time;
-	vec2 screen_size;
-	float clock;
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
 } global;
 
 uniform Model{ 
 	mat4 view_matrix;
 } model;
 
-out vec3 frag_cam_pos;
 out vec3 frag_wpos;
 out vec3 frag_lpos;
 
 void main(void){
-	vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+	vec4 wpos	    = model.view_matrix * vec4( a_pos, 1.0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	frag_lpos 		= a_pos.xyz;
 	frag_wpos		= wpos.xyz;
-	frag_cam_pos	= global.camera_pos;
 	//frag_norm 	= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -170,12 +168,20 @@ void main(void){
 
 const FRAG_SRC = `#version 300 es
 precision mediump float;
-	
+
+uniform Global{ 
+	mediump mat4 proj_view; 
+	mediump mat4 camera_matrix;
+	mediump vec3 camera_pos;
+	mediump float delta_time;
+	mediump vec2 screen_size;
+	mediump float clock;
+} global;
+
 out vec4 out_color;
 
 //-------------------------
 
-in vec3 frag_cam_pos;
 in vec3 frag_wpos;
 in vec3 frag_lpos;
 

@@ -1,3 +1,7 @@
+http://www.wuhao.co/webgl-fft-ocean.html
+
+https://codepen.io/usenk_o/pen/JjbdmzB  NICE Looking Water
+
 https://martinrenou.github.io/threejs-caustics/
 https://github.com/martinRenou/threejs-caustics
 
@@ -6,3 +10,10 @@ https://www.youtube.com/watch?v=zD6GV6bZenM&feature=youtu.be
 https://halisavakis.com/my-take-on-shaders-stylized-water-shader/
 
 https://halisavakis.com/my-take-on-shaders-water-shader/
+
+https://github.com/gasgiant/FFT-Ocean
+
+https://gamedevelopment.tutsplus.com/tutorials/creating-toon-water-for-the-web-part-1--cms-30447
+
+https://danilw.github.io/GLSL-howto/ocean/ocean.html
+https://github.com/danilw/GLSL-howto/tree/master/ocean

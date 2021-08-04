@@ -1,0 +1,549 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3 } 	from "../../fungi/App.js";
+import Camera	        from "../../fungi/ecs/Camera.js";
+import Points	        from "../../fungi/geo/Points.js";
+import Lines	        from "../../fungi/geo/Lines.js";
+import ObjectPool       from "../../fungi/lib/ObjectPool.js";
+
+import PropPanel	    from "../../sage.ui/PropPanelv2.js";
+import QuadTree         from "./lib/QuadTree.js";
+
+//#####################################################
+App
+	.init()
+	.use_debug()
+	.load_shaders( "UvBorder.js" )
+	.set_camera( 180, 20, 10, 5, 0.0, 5 )
+	.task( init )
+	.then();
+
+//#####################################################
+let QTree, TMan, Target, SNode, GFrust
+
+async function init(){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    QTree   = new QuadTree( 10, onNewNode );
+    TMan    = new TileManager();
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Target  = Points.new_entity( "Target" );
+    Target.points.add( [0,0,0], "red", 0.1, 1 );
+    Target.node.set_pos( [ 4.9, 0.1, 0.1 ] );
+
+    GFrust = new Frustum();
+    GFrust.update_mesh();
+    GFrust.set_pos( Target.node.local.pos );//.set_rot_polar( -45, 0 );
+    GFrust.update_from_camera();
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    initUI();
+    runProcess();
+	return true;
+}
+
+//#####################################################
+// #region User Interaction
+function moveTarget( scl, dir ){
+    let v = Vec3.scale( dir, scl );
+    Target.node.add_pos( v );
+    //console.log( Target.node.local.pos );
+
+    //if( SNode ){
+    //    let isIn = inNodeBounds( SNode, Target.node.local.pos );
+    //    if( !isIn ) runProcess();
+    //}else 
+        runProcess();
+}
+
+function rotTarget( deg, axis ){
+    GFrust.rot_by( deg, axis );
+    runProcess();
+}
+
+function changeFar( f ){
+    GFrust.cam.far += f;
+    GFrust.update_mesh();
+    runProcess();
+}
+
+window.addEventListener( "keydown", (e)=>{
+	switch( e.keyCode ){
+		case 38: moveTarget( 0.1, Vec3.FORWARD );	break;	// UP
+		case 40: moveTarget( -0.1, Vec3.FORWARD );	break;	// Down
+		case 37: moveTarget( 0.1, Vec3.LEFT );		break;	// Left
+        case 39: moveTarget( -0.1, Vec3.LEFT );		break;	// Right
+        
+		case 87: rotTarget( 1, "x" );				break;	// w
+		case 83: rotTarget( -1, "x" );				break;	// S
+        case 65: rotTarget( 3, "y" );				break;	// A
+        case 68: rotTarget( -3, "y" );  			break;	// D
+
+        case 81: changeFar( 0.5 ); 				    break;	// Q
+		case 69: changeFar( -0.5 );					break;	// E
+	}
+});
+// #endregion
+
+//#####################################################
+// #region MAIN
+
+const TUP       = 0.05;      // Y Position of Tiles
+const MLVL      = 4;         // MAX LEVEL TO PROCESS DOWN
+let   RNG_RATIO = 0.3;       // How much if a Tile's Size to use for Range Testing
+let   USE_RANGE = true;
+
+function runProcess(){
+    //console.log( "RUN", Node?.id );
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    GFrust.set_pos( Target.node.local.pos );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let nodes = ( USE_RANGE )?
+        qtDivideByRange( QTree, Target.node.local.pos ) :
+        qtDivideByPos( QTree, Target.node.local.pos );
+    nodes = cullNodes( nodes );
+    renderQuadTree( nodes );
+}
+
+// Process Quadtree just by using using in boundary Testing
+function qtDivideByPos( qt, pos ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Check if position is outside of quadtree root boundary
+    SNode = null;        // Reset the Selected Node
+    //qt.disableAll();    // Reset all Available Nodes to be Disabled.
+    recycleNodes();
+
+    if( !inNodeBounds( qt.root, pos ) ){ 
+        return [ qt.root ];
+    }
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let n, stack = [ qt.root ];
+    let leaf = [];
+    let isIn;
+
+    while( stack.length > 0 ){
+        n       = stack.pop();
+        isIn    = inNodeBounds( n, pos );
+
+        if( !isIn || n.level >= MLVL ){
+            leaf.push( n );
+            if( isIn ) SNode = n;
+            continue;
+        }
+
+        if( qt.expandNode( n ) ) stack.push( ...n.nodes );
+    }
+
+    return leaf;
+}
+
+// Process both Boundary Plus Range, so even if not in boundardy, being close enough causes subdivision.
+function qtDivideByRange( qt, pos ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Check if position is outside of quadtree root boundary
+    SNode = null;        // Reset the Selected Node
+    recycleNodes();
+
+    if( !inNodeBounds( qt.root, pos ) ){ 
+        return [ qt.root ];
+    }
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    let n, stack = [ ...qt.root.nodes ];
+    let leaf = [];
+    let isIn;
+    let delta;
+    let range;
+
+    while( stack.length > 0 ){
+        n       = stack.pop();
+        isIn    = inNodeBounds( n, pos );
+        
+        // Distance from Center of Node, works OK-ish, using Len Squared to avoid using SQRT
+        //delta   = Vec3.len_sqr( pos, n.midPoint );
+        //range   = ( n.size * RNG_RATIO )**2;
+
+        // SDF Distance Works much better along with the Right Range Ratio
+        delta = sdBox( pos, n.midPoint, n.size*0.5 ); //Need to send HALF size because thats how the SDF Function works.
+        range = ( n.size * RNG_RATIO );
+
+        // SubDivide if In the Node OR the Node is within Range WHILE not going over Max Level
+        if( ( isIn || delta <= range ) && n.level < MLVL ){
+            if( qt.expandNode( n ) ) stack.push( ...n.nodes );
+        }else{
+            leaf.push( n );
+            if( isIn ) SNode = n;
+        }
+    }
+
+    return leaf;
+}
+
+// Render squares based on the QuadTree Node Array
+function renderQuadTree( nodes ){
+    let n, e;
+    for( n of nodes ){
+        e = TMan.get();
+        e.node.set_scl( n.size );
+        e.node.local.pos
+            .set( n.minBound[ 0 ], TUP, n.minBound[ 2 ] );
+
+        e.draw.items[ 0 ].material = TMan.mat;
+        n.userData.entity = e;
+    }
+
+    // Highlight the Node the Target is over
+    if( SNode && SNode.userData.entity ) SNode.userData.entity.draw.items[ 0 ].material = TMan.mats;
+}
+
+function cullNodes( nodes ){
+    App.Debug.reset();
+    GFrust.update_from_camera();
+
+    //for( let i=0; i < 4; i++ ){
+    //    App.Debug.pnt( GFrust.near_plane[ i ], "red", 0.1 );
+    //    App.Debug.pnt( GFrust.far_plane[ i ], "green", 0.5 );
+    //}
+
+    let n, inter, rtn = [];
+    for( n of nodes ){
+        if( n == SNode ) rtn.push( n );
+        else{
+            inter = GFrust.intersect_aabb( n.minBound, n.maxBound );
+            if( inter != -1 ) rtn.push( n );
+        }
+    }
+    return rtn;
+}
+
+// Reset Nodes Plus Recycle Entities back to Tile Pool
+function recycleNodes(){
+    QTree.forEach( (n)=>{
+        n.enabled = false;
+        if( n.userData.entity ){
+            TMan.recycle( n.userData.entity );
+            n.userData.entity = null;
+        }
+    });
+}
+
+// What to do when a new Node is created in QuadTree
+function onNewNode( n ){ n.userData = { entity : null }; }
+
+// Test if position is inside the node's min/max boundary
+function inNodeBounds( n, pos ){
+    return ( 
+        n.minBound[ 0 ] <= pos[0] && pos[0] <= n.maxBound[0] &&
+        n.minBound[ 2 ] <= pos[2] && pos[2] <= n.maxBound[2]
+    );
+}
+
+// Using SDF Box Length function to test for closest distance to a Quad Tree Node
+// https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+function sdBox( p, m, size ){
+    //sdBox( in vec2 p, in vec2 b ) // P: Vector Len of Point to center of Box, B: is Half Width/Height of Box
+    //vec2 d = abs(p)-b;
+    //return length(max(d,0.0)) + min(max(d.x,d.y),0.0);\
+
+    let dx  = Math.abs( p[0] - m[0] ) - size;
+    let dy  = Math.abs( p[2] - m[2] ) - size;
+    let len = Math.sqrt( Math.max( dx, 0 )**2 + Math.max( dy, 0 )**2 );
+    return len + Math.min( Math.max( dx, dy ), 0.0 );
+}
+
+// #endregion
+
+//#####################################################
+
+class TileManager{
+    constructor(){
+        this.pool = new ObjectPool( this._createTile.bind( this ) );
+        this.mesh = this._createQuad();
+        this.mat  = App.shader.new_material( "UvBorder", null, { cullFace:false } );
+        this.mats = App.shader.new_material( "UvBorder", { color_a:"white", color_b:"white" }, { cullFace:false } );
+    }
+
+    get(){ 
+        let e = this.pool.get();
+        App.ecs.set_entity_active( e.id, true );
+        return e;
+    }
+
+    recycle( e ){
+        App.ecs.set_entity_active( e.id, false );
+        this.pool.recycle( e );
+    }
+
+    _createTile(){
+        const e = App.mesh_entity( "Tile", this.mesh, this.mat, App.mesh.TRI );
+        //console.log( "New Tile", e.id );
+        return e;
+    }
+
+    _createQuad(){
+        let buf_idx		= App.buffer.new_element( new Uint16Array( [ 0,1,2, 2,3,0 ] ) );
+        let buf_vert	= App.buffer.new_array( new Float32Array(
+          [ 0.0, 0.0, 0.0, 	0,1,0,	0,0,	// Ground - Top Left Origin
+            0.0, 0.0, 1.0, 	0,1,0,	0,1,
+            1.0, 0.0, 1.0, 	0,1,0,	1,1, 
+            1.0, 0.0, 0.0, 	0,1,0,	1,0 ]
+        ));
+
+        return App.mesh.from_buffer_config([
+            { name: "indices", buffer: buf_idx },
+            { name: "quad", buffer: buf_vert, interleaved: [
+                { attrib_loc:0, size:3, stride_len:8 * 4, offset:0 * 4 },
+                { attrib_loc:1, size:3, stride_len:8 * 4, offset:3 * 4 },
+                { attrib_loc:2, size:2, stride_len:8 * 4, offset:6 * 4 },
+            ]}
+        ], "FungiFloorQuadTL", 6 );
+    }
+
+}
+
+//#####################################################
+
+class Plane{
+    constructor(){
+        this.pos        = new Vec3();
+        this.norm       = new Vec3();
+        this.d          = 0; // constant term: d = -(a*x0 + b*y0 + c*z0)
+    }
+
+    set( pos, norm ){
+        this.pos.copy( pos );
+        this.norm.copy( norm );
+        this.d = -Vec3.dot( norm, pos );
+        return this;
+    }
+}
+
+class Frustum{
+    constructor(){
+        this.entity = App.mesh_entity( "Frustum" );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.cam = new Camera().set_perspective( 45, 0.1, 8.0, 256, 256 );
+		App.ecs.add_com( this.entity.id, this.cam );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.ln = new Lines();
+        this.ln.default_color = "green";
+        App.ecs.add_com( this.entity.id, this.ln );
+        this.entity.draw.items.push( this.ln.get_draw_item() );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.near_plane     = [ new Vec3(), new Vec3(), new Vec3(), new Vec3() ]; // LT, LB, RB, RT
+        this.far_plane      = [ new Vec3(), new Vec3(), new Vec3(), new Vec3() ];
+        this.planes         = [ new Plane(), new Plane(), new Plane(), new Plane(), new Plane(), new Plane() ]; // 4:near, 5:far
+    }
+
+    // #region SETTERS
+    set_pos( v ){ this.entity.node.set_pos( v ); return this; }
+    set_rot_polar( lat, lng ){ this.entity.node.local.rot.from_polar( lat, lng ); this.entity.node.updated = true; return this; }
+    rot_by( n, axis ){ this.entity.node.rot_by( n, axis ); return this; }
+    // #endregion //////////////////////////////////////////////
+
+    // #region UPDATE
+    update_mesh(){
+        this.compute();
+        this._redraw();
+    }
+
+    update_from_camera(){
+        if( !this.entity.node.updated ) return;
+        this.compute( this.entity.node.local.pos, this.entity.node.local.rot );
+    }
+    // #endregion //////////////////////////////////////////////
+
+    
+    // #region MATH
+    // Compute the 8 Points of a Frustum based on the Camera Settings
+    compute( pos=[0,0,0], rot=[0,0,0,1] ){
+        const near  = this.cam.near;
+        const far   = this.cam.far;
+        const ratio = this.cam.ratio;
+        const fov   = this.cam.fov;
+
+        const FWD   = Vec3.transform_quat( Vec3.FORWARD, rot );
+        const LFT   = Vec3.transform_quat( Vec3.LEFT, rot );
+        const UP    = Vec3.transform_quat( Vec3.UP, rot );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        const lft   = new Vec3();
+        const up    = new Vec3();
+        const v     = new Vec3();
+
+        const nf_ang = 2 * Math.tan( fov / 2 );
+        const near_h = nf_ang * near;
+        const near_w = near_h * ratio;
+        const far_h  = nf_ang * far;
+        const far_w  = far_h * ratio;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // NEAR PLANE
+        up.from_scale( UP, near_h / 2 );
+        lft.from_scale( LFT, near_w / 2 );
+
+        //this.near_center.from_scale( Vec3.FORWARD, near ).copy_to( v );
+        v.from_scale( FWD, near ).add( pos );
+        this.near_plane[ 0 ].from_add( v, up ).sub( lft );  // tl = ncenter + (up * Hnear/2) - (right * Wnear/2)
+        this.near_plane[ 1 ].from_sub( v, up ).sub( lft );  // bl = ncenter - (up * Hnear/2) - (right * Wnear/2)
+        this.near_plane[ 2 ].from_sub( v, up ).add( lft );  // br = ncenter - (up * Hnear/2) + (right * Wnear/2)
+        this.near_plane[ 3 ].from_add( v, up ).add( lft );  // tr = ncenter + (up * Hnear/2) + (right * Wnear/2)
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // FAR PLANE
+        up.from_scale( UP, far_h / 2 );
+        lft.from_scale( LFT, far_w / 2 );
+
+        //this.far_center.from_scale( Vec3.FORWARD, far ).copy_to( v );
+        v.from_scale( FWD, far ).add( pos );
+        this.far_plane[ 0 ].from_add( v, up ).sub( lft );  // ftl = fc + (up * Hfar/2) - (right * Wfar/2)
+        this.far_plane[ 1 ].from_sub( v, up ).sub( lft );  // fbl = fc - (up * Hfar/2) - (right * Wfar/2)
+        this.far_plane[ 2 ].from_sub( v, up ).add( lft );  // fbr = fc - (up * Hfar/2) + (right * Wfar/2)
+        this.far_plane[ 3 ].from_add( v, up ).add( lft );  // ftr = fc + (up * Hfar/2) + (right * Wfar/2)
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // PLANE NORMALS
+        const fp = this.far_plane;
+        const np = this.near_plane;
+        let ii, i;
+        let mid = new Vec3();
+        let a   = new Vec3();
+        let b   = new Vec3();
+        let n   = new Vec3();
+        let fn = ( lt, lb, rb, rt )=>{
+            mid .from_add( lt, lb )
+                .add( rb )
+                .add( rt )
+                .scale( 0.25 );
+
+            // outward normals
+            a.from_sub( rt, lt )
+            b.from_sub( lb, lt );
+            n.from_cross( b, a ).norm();
+            return n;
+        };
+
+        // Top, Bottom, Left, Right
+        for( i=0; i < 4; i++ ){
+            ii = (i+1) % 4;
+            fn( np[i], np[ii], fp[ii], fp[i] ); // Compute Mid Point and Plane Normal
+            this.planes[ i ].set( mid, n );     // Save 
+
+            //App.Debug.pnt( mid, "cyan", 0.1 );
+            //App.Debug.ln( mid, n.scale( 0.4 ).add( mid ), "cyan" );
+        }
+
+        // Near
+        fn( np[3], np[2], np[1], np[0] );
+        this.planes[ 4 ].set( mid, n );
+
+        //App.Debug.pnt( mid, "cyan", 0.1 );
+        //App.Debug.ln( mid, n.scale( 0.4 ).add(mid), "cyan" );
+        
+        // Far
+        fn( fp[0], fp[1], fp[2], fp[3] );
+        this.planes[ 5 ].set( mid, n );
+
+        //App.Debug.pnt( mid, "cyan", 0.1 );
+        //App.Debug.ln( mid, n.scale( 0.4 ).add(mid), "cyan" );
+    }
+
+    // inside 1, intersect 0, outside -1
+    // https://gist.github.com/Kinwailo/d9a07f98d8511206182e50acda4fbc9b
+    // Consider Figure out how to use : https://gist.github.com/podgorskiy/e698d18879588ada9014768e3e82a644
+    intersect_aabb( min, max ){
+        let vmin = new Vec3();
+        let vmax = new Vec3();
+        let rtn  = 1;
+        let p, n, i;
+
+        for( p of this.planes ){
+            n = p.norm;
+
+            // Find the Min / Max based off Normal Direction
+            for( i=0; i < 3; i++ ){
+                if( n[i] > 0 ){ vmin[ i ] = min[ i ];  vmax[ i ] = max[ i ]; }
+                else{           vmin[ i ] = max[ i ];  vmax[ i ] = min[ i ]; }
+            }
+
+            // Distance Test
+            if( Vec3.dot( n, vmin ) + p.d > 0 )   return -1;
+            if( Vec3.dot( n, vmax ) + p.d >= 0 )  rtn = 0;
+        }
+
+        return rtn;
+    }
+    // #endregion //////////////////////////////////////////////
+
+    // #region HELPERS
+    _redraw(){
+        this.ln.reset();
+
+        let ii;
+        for( let i=0; i < 4; i++ ){
+            ii = ( i + 1 ) % 4;
+            //console.log( i, ii, this.near_plane[i], this.near_plane[ii]);
+            this.ln.add( this.near_plane[ i ],  this.near_plane[ ii ] );
+            this.ln.add( this.far_plane[ i ],   this.far_plane[ ii ] );
+            this.ln.add( Vec3.ZERO,  this.far_plane[ i ] );
+        }
+
+        //this.ln.add( this.far_plane[ 0 ], this.far_plane[ 2 ], "gray", null, true );
+        //this.ln.add( this.far_plane[ 1 ], this.far_plane[ 3 ], "gray", null, true );
+
+        let v = Vec3.scale( Vec3.FORWARD, this.cam.far );
+        //this.ln.add( Vec3.ZERO, v, "gray", null, true );
+
+        let w = new Vec3();
+        v.from_lerp( this.near_plane[ 0 ], this.near_plane[ 1 ], 0.5 );
+        w.from_lerp( this.far_plane[ 0 ], this.far_plane[ 1 ], 0.5 );
+        this.ln.add( v, w, "red" );
+
+        v.from_lerp( this.near_plane[ 2 ], this.near_plane[ 3 ], 0.5 );
+        w.from_lerp( this.far_plane[ 2 ], this.far_plane[ 3 ], 0.5 );
+        this.ln.add( v, w, "red" );
+    }
+    // #endregion //////////////////////////////////////////////
+
+}
+
+//#####################################################
+
+
+
+//#####################################################
+
+function initUI(){
+    onInput( "chkRange", e=>{ USE_RANGE = e.detail.value; runProcess(); App.render(); });
+    onInput( "siRatio", e=>{ RNG_RATIO = e.detail.value; runProcess(); App.render(); });
+}
+
+function onInput( name, fn ){ document.getElementById( name ).addEventListener( "input", fn ); }
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+    p{text-align: justify; padding:0px; margin:0px; line-height:14px;}
+</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <prop-panel-btncont open="true" panelWidth="300px">
+        <prop-panel label="" foot="Shader Options">
+            <prop-group label="Directions">
+                <p>- Arrows to Move the Target.</p>
+                <p>- WASD to rotate frustum.</p>
+                <p>- QE frustum far distance.</p>
+            </prop-group>
+
+            <prop-row label="Use Range"><check-button id="chkRange" class="yesno" on="true"></check-button></prop-row>
+            <prop-row label="Range Ratio"><slide-input id="siRatio" min="0.01" max="1.1" value="0.3"></slide-input></prop-row>
+        </prop-panel>
+    </prop-panel-btncont>
+
+</body></html>

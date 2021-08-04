@@ -41,7 +41,7 @@ async function init( x ){
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	//on_render( 0, 0 );
-	//App.render_by( 1, on_render );
+	App.render_by( 1, on_render );
 	return true;
 }
 
@@ -496,7 +496,7 @@ vec3 komikaze_aqua( vec3 vpos ){
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     vec3 water              = rgb( 0x17DAD0 );
     vec3 reflection         = rgb( 0xE6FFF0 );
-    float speed             = 0.796;
+    float speed             = 0.5 * global.clock;
     float patternScale      = 0.270;
     float reflectionRange   = 0.65;
     float reflectionOpacity = 1.0;
@@ -504,13 +504,12 @@ vec3 komikaze_aqua( vec3 vpos ){
     float rimOpacity        = 1.0;
     float waveScale         = 2.0;
     float wavePattern       = 1.4;
-    float waveVSpeed        = 1.2;
-    float waveHSpeed        = 1.0;
+    float waveVSpeed        = 0.5 * global.clock;
+    float waveHSpeed        = 0.3 * global.clock;
     float waveOpacity       = 0.4;
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // WAVE MASK
-
     float vScl = waveVSpeed * 1.050 + vpos.y;
     float hScl = waveHSpeed * 1.050 + vpos.x;
 
@@ -536,7 +535,7 @@ vec3 komikaze_aqua( vec3 vpos ){
     node_noise_texture_3d( vec3(fRimPos), 3.04 * patternScale, 0.0, 0.5, 0.0, NFac, NColor );
 
     float rimMask = mix( facing, NFac, 0.474 );
-    rimMask = step( 0.58, rimMask );
+    rimMask = step( 0.62, rimMask );
     
     //return vec3( rimMask );
 
@@ -553,7 +552,7 @@ vec3 komikaze_aqua( vec3 vpos ){
 
     vec4 highMask = mix( AWColor, BWColor, 0.5 );
     highMask = mix_linear( 1.0, highMask, vec4( diffMask ) );
-    highMask *= 1.414;
+    highMask *= 1.214;
     highMask = step( vec4( 0.590 + reflectionRange ),  highMask ); //
     
     //return vec3( highMask.rgb );
@@ -582,145 +581,9 @@ void main( void ){
 
     out_color.a = 1.0;
     out_color.rgb = komikaze_aqua( frag_wpos );
-
-    /*
-    vec3 NColor = vec3( 0.0 );
-    float NFac  = 0.0;
-
-    // Shader does not like Negative Inputs, shift things out of neg zone
-    vec3 NInput = frag_wpos;// + 100.0; 
-    
-    node_noise_texture( NInput, 5.0, 2.0, 0.5, 0.0, NFac, NColor );
-    node_wave_texture( WAVE_BANDS,
-                          WAVE_DIR_D,
-                          WAVE_DIR_D,
-                          WAVE_PRO_SINE,
-                          5.0,
-                          0.0,
-                          2.0,
-                          1.0,
-                          0.5,
-                          0.0,
-                          NInput,
-                          NFac,
-                          NColor );
-
-    //NFac = NFac * 0.3 + 0.5; // Extra processing gets it much closer to Visual Look from Blender
-
-    out_color.rgb = vec3( NFac );
-    out_color.a   = 1.0;
-    //out_color.rgb = vec3( perlin( frag_wpos.x*10.0, frag_wpos.y*10.0, frag_wpos.z*10.0 ) );
-
-    //out_color.rgb = normalize( random_vector3_offset( 1.0 ) ); //vec3( hashFloat( 1.0, 2.0 ) );
-    //out_color.rgb = vec3( simplexnoise3( frag_wpos.x*5.0, frag_wpos.y*5.0, frag_wpos.z*5.0, 0 ) );
-    */
 }`;
 
-// NoiseTexture 3D
-// Input : Vector, Scale, Roughness 0.5 :: Maybe Detail and Distortion
-
-// WaveTexture
-// WaveType : Bands, BandDirection: Diagonal, WaveProfile: Sine
-// Input : Vector, Scale, Detail Roughness :: Maybe Distortion, Detail, Detail Scale, Phase Offset
-
-// Texture Coordinate - Camera
-// Layer Weight, Input : Blend, Out : Facing
-
-// https://github.com/blender/blender/tree/master/intern/cycles/kernel/shaders
-// https://github.com/blender/blender/tree/master/source/blender/gpu/shaders/material
-// https://github.com/wdas/brdf/tree/main/src/brdfs
-// https://github.com/dfelinto/blender/blob/master/source/blender/blenlib/intern/noise.c
-
-// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/tree/master/src/liboslnoise
-// https://github.com/AcademySoftwareFoundation/OpenShadingLanguage/blob/master/src/include/OSL/oslnoise.h  (HashNoise)
-// https://github.com/OpenImageIO/oiio/blob/master/src/include/OpenImageIO/hash.h
-
-/*
-hashnoise(x) gives the same result as cellnoise( floor(x) )
-
-hashFloat( seed, x ){
-
-}
-
-hashFloat (ListT... floatList) const {
-    return bits_to_01(inthash(DerivedT::transformToUint(floatList)...));
-}
-
-	inthash (const unsigned int k0, const unsigned int k1) {
-		// now hash the data!
-		unsigned int start_val = 0xdeadbeef + (2 << 2) + 13;
-
-		unsigned int a = start_val + k0;
-		unsigned int b = start_val + k1;
-		unsigned int c = OIIO::bjhash::bjfinal(a, b, start_val);
-		return c;
-	}
-
-// convert a 32 bit integer into a floating point number in [0,1]
-inline OSL_HOSTDEVICE float bits_to_01 (unsigned int bits) {
-    // divide by 2^32-1
-	// Calculate inverse constant with double precision to avoid
-	//     warning: implicit conversion from 'unsigned int' to 'float' changes value from 4294967295 to 4294967296
-    constexpr float convertFactor = static_cast<float>(static_cast<double>(1.0) / static_cast<double>(std::numeric_limits<unsigned int>::max()));
-    return bits * convertFactor;
-}
-
-OSL_FORCEINLINE int4
-bjfinal (const int4& a_, const int4& b_, const int4& c_)
-{
-    using OIIO::simd::rotl32;
-    int4 a(a_), b(b_), c(c_);
-    c ^= b; c -= rotl32(b,14);
-    a ^= c; a -= rotl32(c,11);
-    b ^= a; b -= rotl32(a,25);
-    c ^= b; c -= rotl32(b,16);
-    a ^= c; a -= rotl32(c,4);
-    b ^= a; b -= rotl32(a,14);
-    c ^= b; c -= rotl32(b,24);
-    return c;
-}
-
-IO_FORCEINLINE vint4 rotl(const vint4& x, int s) {
-#if OIIO_SIMD_AVX >= 512 && OIIO_AVX512VL_ENABLED
-    // return _mm_rol_epi32 (x, s);
-    // We want to do this ^^^ but this intrinsic only takes an *immediate*
-    // argument for s, and there isn't a way to express in C++ that a
-    // parameter must be an immediate/literal value from the caller.
-    return (x<<s) | srl(x,32-s); //int ( (unsigned int)(a[i]) >> bits)
-#else
-    return (x<<s) | srl(x,32-s);
-#endif
-
- OIIO_FORCEINLINE vint8 srl (const vint8& a, const unsigned int bits) {
- 5194 #if OIIO_SIMD_AVX >= 2
- 5195     return _mm256_srli_epi32 (a, bits);
- 5196 #else
- 5197     SIMD_RETURN (vint8, int ((unsigned int)(a[i]) >> bits));
- 5198 #endif
- 5199 }
-
-*/
 
 </script>
 <html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
 </head><body><canvas id="pg_canvas"></canvas></body></html>
-
-<!--
-https://twitter.com/alexanderameye/status/1229730976697376769?s=03
-https://halisavakis.com/my-take-on-shaders-cel-shading/
-https://alvarber.gitlab.io/toon-shader-survey.html
-https://www.gamedev.net/articles/programming/graphics/toon-shader-using-unity-r5095/
-https://www.blendernation.com/2018/12/17/how-to-make-a-realtime-toon-shader-and-outline-with-blender-2-8-eevee/
-https://www.youtube.com/watch?v=t91X4eukZY4&feature=emb_rel_pause
-https://www.youtube.com/watch?v=J4cuuNGid7g&feature=emb_rel_pause
-https://www.ronja-tutorials.com/2018/10/27/improved-toon.html
-https://threejs.org/examples/#webgl_materials_variations_toon
-https://webgl-shaders.com/toon-example.html
-http://www.mclelun.com/2016/11/blender3d-toon-shader.html
-https://blenderartists.org/t/experiments-with-npr-toon-shading-in-eevee/1139213
-
-https://webgl-shaders.com/dots-example.html
-https://webgl-shaders.com/pencil-example.html
-
-https://www.reddit.com/r/blender/comments/a28mvo/the_new_shader_to_rgb_node_in_28_is_amazing_for/
--->
