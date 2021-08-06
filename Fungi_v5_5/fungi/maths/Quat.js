@@ -169,6 +169,28 @@ class Quat extends Float32Array{
 			return out;
 		}
 
+
+		get_euler_y( in_deg=false ){ //order="YZX"
+			//http://bediyap.com/programming/convert-Quat-to-euler-rotations/
+			//http://schteppe.github.io/cannon.js/docs/files/src_math_Quat.js.html
+			let x		= this[ 0 ],
+				y		= this[ 1 ],
+				z		= this[ 2 ],
+				w		= this[ 3 ],
+				test	= x*y + z*w,
+				pitch;
+
+			//..............................
+			if(test > 0.499)		pitch	=  2 * Math.atan2( x, w );		// singularity at north pole
+			else if(test < -0.499)	pitch	= -2 * Math.atan2( x, w );		// singularity at south pole
+
+			//..............................
+            if( isNaN( pitch ) )    pitch   = Math.atan2( 2*y*w - 2*x*z , 1 - 2*y*y - 2*z*z ); // Heading
+            
+			//..............................
+			return ( in_deg )? pitch * 180 / Math.PI : pitch;
+		}
+
 		len_sqr( v ){ return this[0]**2 + this[1]**2 + this[2]**2 + this[3]**2; }
 		
 		is_zero(){ return ( this[0] == 0 && this[1] == 0 && this[2] == 0 && this[3] == 0 ); }
@@ -659,6 +681,8 @@ class Quat extends Float32Array{
 			if( Quat.dot( this, q ) < 0 ) this.negate();
 			return this;
 		}
+
+		slerp( b, t ){ Quat.slerp( this, b, t, this ); return this; }
 
 		conjugate(){
   			this[0] = -this[0];

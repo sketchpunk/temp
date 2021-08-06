@@ -1,0 +1,260 @@
+<!DOCTYPE html><script type="module">
+import App, { Maths, Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import FacedCube from "../../fungi/geo/FacedCube.js";
+import Cylinder  from "../../fungi/geo/Cylinder.js";
+
+//#####################################################
+App
+	.init( true )
+    .load_shaders( "LowPoly.js" )
+    
+	.use_debug()
+	.set_camera( 180, 20, 5, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+
+//#####################################################
+let Vehicle, Body, WheelLeft, WheelRight;
+
+function on_render( dt, ss ){
+    Controller.update( dt, ss );
+    /*
+    if( App.input.arrowUp ){
+        Vehicle.node.local.pos.z += 0.1;
+        Vehicle.node.updated = true;
+    }
+
+    if( App.input.arrowDown ){
+        Vehicle.node.local.pos.z -= 0.1;
+        Vehicle.node.updated = true;
+    }
+
+    if( App.input.arrowRight ){
+        Vehicle.node.local.pos.x -= 0.1;
+        Vehicle.node.updated = true;
+    }
+
+    if( App.input.arrowLeft ){
+        Vehicle.node.local.pos.x += 0.1;
+        Vehicle.node.updated = true;
+    }
+    */
+}
+
+async function init(){
+    buildVehicle();
+
+    App.render_by( 1, on_render );
+    return true;
+}
+
+function buildVehicle(){
+    let e;
+
+    //----------------------------------
+    Vehicle = App.node_entity();
+
+    //----------------------------------
+    Body = FacedCube();
+    Body.node.set_scl( 1, 0.5, 1.2 ).set_pos( 0, 0.6, 0 );
+    Vehicle.node.add_child( Body.node );
+
+    //----------------------------------
+    let wheelMesh = Cylinder.mesh( "wheel", 0.3, 0.3, 12, "x" );
+
+    WheelLeft = App.mesh_entity( "WheelLeft", wheelMesh, "LowPoly" );
+    WheelLeft.node.set_pos( 0.7, 0.3, 0.6 );
+    Vehicle.node.add_child( WheelLeft.node );
+
+    WheelRight = App.mesh_entity( "WheelRight", wheelMesh, "LowPoly" );
+    WheelRight.node.set_pos( -0.7, 0.3, 0.6 );
+    Vehicle.node.add_child( WheelRight.node );
+
+    e = App.mesh_entity( "WheelRightB", wheelMesh, "LowPoly" );
+    e.node.set_pos( -0.7, 0.3, -0.6 );
+    Vehicle.node.add_child( e.node );
+
+    e = App.mesh_entity( "WheelLeftB", wheelMesh, "LowPoly" );
+    e.node.set_pos( 0.7, 0.3, -0.6 );
+    Vehicle.node.add_child( e.node );
+}
+
+//#####################################################
+
+class Controller{
+    static acceleration     = 30; // Not Really Accel, Its just MAX Speed.
+    static steering         = 80;
+
+    static speed            = 0;    // Just whats the Current Max Speed to use
+    static speedTarget      = 0;    // Current Speed really
+
+    static rotate           = 0;    // Current Max Rotation to Do
+    static rotateTarget     = 0;    // Current Rotation Angle
+
+    static update( dt ){
+        let q = new Quat();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Acceleration    
+        this.speed = 0;
+        if( App.input.arrowUp )     this.speed =  this.acceleration;
+        if( App.input.arrowDown )   this.speed = -this.acceleration;
+
+        this.speedTarget = SmoothStep( this.speedTarget, this.speed, dt * 12 );
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Steering
+        this.rotate = 0;
+        if( App.input.arrowLeft )   this.rotate   = this.steering;
+        if( App.input.arrowRight )  this.rotate  = -this.steering;
+
+        this.rotateTarget = Maths.lerp( this.rotateTarget, this.rotate, dt * 4 );
+        
+        // Add Rotation to the current Y Rot
+        let yRot = Vehicle.node.local.rot.get_euler_y( true );
+		Vehicle.node.local.rot.slerp( q.from_euler( 0, yRot + this.rotateTarget, 0 ), dt * 2.0 );
+        Vehicle.node.updated = true;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Tilting
+        // TODO, Do it differently. Have a Max Speed and Max tilt, Have Speed/MaxSpeed * MaxXTilt
+        q.from_euler( this.speedTarget * 0.25, 0, -this.rotateTarget / 6 );
+        Body.node.local.rot.slerp( q, dt * 4.0 );
+        Body.node.updated = true;
+
+        WheelLeft.node.local.rot.from_euler( 0, this.rotateTarget * 0.25, 0 );
+        WheelLeft.node.updated = true;
+
+        WheelRight.node.local.rot.from_euler( 0, this.rotateTarget * 0.25, 0 );
+        WheelRight.node.updated = true;
+
+        //body.localRotation = Quat.from_slerp( body.localRotation, Quat.Euler( this.speedTarget / 4, 0, this.rotateTarget / 6 ) ), dt * 4.0 );
+
+
+        //console.log( "SpeedTarget", this.speedTarget, "Speed", this.speed, "t", dt * 12 );
+
+
+        //console.log( dt );
+    }
+}
+
+class Fake{
+
+    /*
+    [Range(5.0f, 40.0f)] public float acceleration = 30f;
+	[Range(20.0f, 160.0f)] public float steering = 80f;
+	[Range(50.0f, 80.0f)] public float jumpForce = 60f;
+	[Range(0.0f, 20.0f)] public float gravity = 10f;
+    [Range(0.0f, 1.0f)] public float drift = 1f;
+    */
+
+    static speed = 0;
+    static speedTarget = 0;
+    static rotate = 0;
+    static rotateTarget = 0;
+
+    /*
+    update( dt ){
+        let tran = GCube.node.local;
+
+        // Acceleration    
+        this.speedTarget = SmoothStep( this.speedTarget, this.speed, dt * 12 );
+        this.speed       = 0;
+
+        //if(Input.GetKey(accelerate)){ ControlAccelerate(); }  speed = acceleration;
+        //if(Input.GetKey(brake)){ ControlBrake(); } speed = -acceleration;
+        
+		// Steering
+		
+        this.rotateTarget = Maths.lerp( this.rotateTarget, this.rotate, dt * 4 );
+        this.rotate = 0;
+		
+		//if(Input.GetKey(steerLeft)) { ControlSteer(-1); }  ControlSteer(int direction){ if(nearGround || steerInAir){ rotate = steering * direction; }
+        //if(Input.GetKey(steerRight)){ ControlSteer( 1); }
+        
+        let euler = tran.rot.get_euler();
+		transform.rotation = Quat.from_slerp( tran.rot, Quat.from_euler( 0, euler.y + this.rotateTarget, 0), dt * 2.0 );
+		
+		// Jump
+		
+		//if(Input.GetKeyDown(jump)){ ControlJump(); }
+		
+		// Wheel and body tilt
+		// Rotate Wheel in the Direction the car is kind of moving too.
+		if(wheelFrontLeft != null){  wheelFrontLeft.localRotation  = Quaternion.Euler(0, rotateTarget / 2, 0); }
+		if(wheelFrontRight != null){ wheelFrontRight.localRotation = Quaternion.Euler(0, rotateTarget / 2, 0); }
+		
+		//body.localRotation = Quat.from_slerp( body.localRotation, Quat.Euler( this.speedTarget / 4, 0, this.rotateTarget / 6 ) ), dt * 4.0 );
+		
+		// Vehicle tilt
+		
+		let tilt = 0.0; //if(motorcycleTilt){ tilt = -rotateTarget / 1.5f; }
+        
+        //containerBase == Starting Position
+		container.localPosition = containerBase + new Vector3( 0, Mathf.Abs(tilt) / 2000, 0 );
+		container.localRotation = Quaternion.Slerp( container.localRotation, Quaternion.Euler(0, rotateTarget / 8, tilt), dt * 10.0 );
+		
+		// Stops vehicle from floating around when standing still
+		
+		if( speed == 0 && sphere.velocity.magnitude < 4){
+            sphere.velocity = Vector3.Lerp( sphere.velocity, Vec3.ZERO, dt * 2.0 );
+        }
+    }
+
+
+    FixedUpdate(){
+		
+		//RaycastHit hitOn;
+		//RaycastHit hitNear;
+		//onGround   = Physics.Raycast(transform.position, Vector3.down, out hitOn, 1.1f);
+		//nearGround = Physics.Raycast(transform.position, Vector3.down, out hitNear, 2.0f);
+		
+		// Normal - Make sure car looks like its driving on slanted surfaces
+        
+		//vehicleModel.up = Vec.lerp( vehicleModel.up, hitNear.normal, dt * 8.0f );
+		//vehicleModel.Rotate( 0, transform.eulerAngles.y, 0 );
+
+		// Movement
+		
+		if(nearGround){
+			
+			sphere.AddForce(vehicleModel.forward * speedTarget, ForceMode.Acceleration);
+			
+		}else{
+			
+			sphere.AddForce(vehicleModel.forward * (speedTarget / 10), ForceMode.Acceleration); //	Add a continuous acceleration to the rigidbody, ignoring its mass.
+			// Simulated gravity
+			sphere.AddForce(Vector3.down * gravity, ForceMode.Acceleration);
+			
+		}
+		
+		transform.position = sphere.transform.position + new Vector3(0, 0.35, 0);
+		
+		// Simulated drag on ground thanks to Adam Hunt
+        // Adding Friction on X movement with Drift value, Then rotating it
+        // back to World Space Location.
+		Vector3 localVelocity = transform.InverseTransformVector( sphere.velocity ); // World to Local
+		localVelocity.x *= 0.9 + (drift / 10);
+		
+		if(nearGround){
+			sphere.velocity = transform.TransformVector( localVelocity ); // Local to World Space
+		}
+		
+	}
+	
+    */
+}
+
+// https://github.com/Unity-Technologies/UnityCsReference/blob/master/Runtime/Export/Math/Mathf.cs#L255
+// Interpolates between /min/ and /max/ with smoothing at the limits.
+function SmoothStep( from, to, t ){
+    t = Maths.clamp( t, 0, 1 );
+    t = -2.0 * t * t * t + 3.0 * t * t;
+    return to * t + from * (1 - t);
+}
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

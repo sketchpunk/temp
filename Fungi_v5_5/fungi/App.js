@@ -68,6 +68,12 @@ let App = {
 		return { id, node, draw };
 	},
 
+	node_entity : ( name )=>{
+		let id 		= App.ecs.new_entity( name );
+		let node	= App.ecs.add_com( id, "Node" );
+		return { id, node };
+	},
+
 	render_by : ( m, fn=null )=>{
 		if( fn ) App.on_render = fn;
 
