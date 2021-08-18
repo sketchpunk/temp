@@ -1,0 +1,68 @@
+// https://github.com/skypjack/entt
+// https://leudz.github.io/shipyard/guide/0.5.0/going-further/sparse-set.html
+
+How to Link Entities with Components
+-- How would a Component Know its entity?
+-- How would an entity know all its Components?
+-- Can have repeated components? ( SparseSet won't allow this )
+
+Known
+-- Every Entity will have a Node.
+-- Most Entities will have some sort of Drawing, But Node Entities can be used as Parent Containers.
+
+
+###########################################################################################
+CODE IDEAS
+###########################################################################################
+
+
+ComponentItem<T>{
+    entityID    : number,
+    id          : number,
+    data        : T,
+}
+
+ComponentStack<T>{
+    comRef  : T,
+    stack   : Array< ComponentItem<T> >
+    avail   : Array< Number Index >
+    typeID  : number
+}
+
+Components{
+    sets    : Map< TypeID, ComponentStack >
+    list    : Map< ComName, TypeID >
+}
+
+
+
+Entity{
+    id      : number,
+    name    : string,
+    com     : CompSets,
+}
+
+CompSets{
+    list    : Array< { name, id } >
+    mask    : bitset
+}
+
+Entities{
+    items   : Array< Entity >
+}
+
+
+World{
+    entities    : Entities
+    components  : Components
+    systems     : Systems
+}
+
+SparseSet<T>{
+    entity : Array< number >  // Each Entity that exists gets an Element in here. Can use Paging instead to limit how much space is used up
+                              // The value is the Index to Dense/Data
+
+    dense  : Array< number >  // 1 to 1 mapping with data, dense points to Entity ID
+    data   : Array<T>         // Array of Valid Data
+    boundary : number         // Max Index of currently used components
+}

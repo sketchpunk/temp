@@ -9,7 +9,7 @@ App
     .load_shaders( "LowPoly.js" )
     
 	.use_debug()
-	.set_camera( 180, 20, 5, 0, 0.5, 0 )
+	.set_camera( 180, 60, 20, 0, 0.5, 0 )
 	.task( init )
 	.then();
 
@@ -83,6 +83,7 @@ function buildVehicle(){
 //#####################################################
 
 class Controller{
+    static drift            = 1;
     static acceleration     = 30; // Not Really Accel, Its just MAX Speed.
     static steering         = 80;
 
@@ -91,6 +92,8 @@ class Controller{
 
     static rotate           = 0;    // Current Max Rotation to Do
     static rotateTarget     = 0;    // Current Rotation Angle
+
+    static velocity         = new Vec3();
 
     static update( dt ){
         let q = new Quat();
@@ -101,7 +104,7 @@ class Controller{
         if( App.input.arrowUp )     this.speed =  this.acceleration;
         if( App.input.arrowDown )   this.speed = -this.acceleration;
 
-        this.speedTarget = SmoothStep( this.speedTarget, this.speed, dt * 12 );
+        this.speedTarget = SmoothStep( this.speedTarget, this.speed, dt * 5 );
         
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		// Steering
@@ -120,7 +123,7 @@ class Controller{
         // Tilting
         // TODO, Do it differently. Have a Max Speed and Max tilt, Have Speed/MaxSpeed * MaxXTilt
         q.from_euler( this.speedTarget * 0.25, 0, -this.rotateTarget / 6 );
-        Body.node.local.rot.slerp( q, dt * 4.0 );
+        Body.node.local.rot.slerp( q, dt * 8.0 );
         Body.node.updated = true;
 
         WheelLeft.node.local.rot.from_euler( 0, this.rotateTarget * 0.25, 0 );
@@ -129,13 +132,34 @@ class Controller{
         WheelRight.node.local.rot.from_euler( 0, this.rotateTarget * 0.25, 0 );
         WheelRight.node.updated = true;
 
-        //body.localRotation = Quat.from_slerp( body.localRotation, Quat.Euler( this.speedTarget / 4, 0, this.rotateTarget / 6 ) ), dt * 4.0 );
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let mpos = Vec3.add( Body.node.local.pos, Vehicle.node.local.pos );
+        let fwd = new Vec3().from_quat( Vehicle.node.local.rot, Vec3.FORWARD );
+        let v = new Vec3();
+        
+        App.Debug.reset();
+        App.Debug.ln( mpos, Vec3.add( mpos, fwd ), "green" );
+
+        let force = new Vec3();
+        force.add( v.from_scale( fwd, this.speedTarget ) ); // Forward/Reverse Motion at Rotation FWD.
+        force.scale( dt );
+
+        let friction = ( this.speed == 0 )? 6 : 3; // Less Friction increases Drifting :)
+        this.velocity
+            .add( v.from_scale( this.velocity, friction * dt ).invert() )
+            .add( force );
+		
+		// Simulated drag on ground thanks to Adam Hunt
+        // Adding Friction on X movement with Drift value, Then rotating it back to World Space Location.
+		//Vector3 localVelocity = transform.InverseTransformVector( sphere.velocity ); // World to Local
+		//localVelocity.x *= 0.9 + (drift / 10);
+		
+		//if(nearGround){
+		//	sphere.velocity = transform.TransformVector( localVelocity ); // Local to World Space
+		//}
 
 
-        //console.log( "SpeedTarget", this.speedTarget, "Speed", this.speed, "t", dt * 12 );
-
-
-        //console.log( dt );
+        Vehicle.node.add_pos( v.from_scale( this.velocity, dt ) );
     }
 }
 
@@ -148,7 +172,6 @@ class Fake{
 	[Range(0.0f, 20.0f)] public float gravity = 10f;
     [Range(0.0f, 1.0f)] public float drift = 1f;
     */
-
     static speed = 0;
     static speedTarget = 0;
     static rotate = 0;

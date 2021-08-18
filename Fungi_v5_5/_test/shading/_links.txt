@@ -1,3 +1,7 @@
+https://www.patreon.com/posts/42255564 TOON GLASS
+https://www.patreon.com/posts/52073394 3D Glass Bottles to use Toon Glass Shader
+https://www.patreon.com/posts/13059579 TOON SPECULAR SHADER
+
 https://github.com/blender/blender/tree/master/intern/cycles/kernel/shaders
 https://github.com/blender/blender/tree/master/source/blender/gpu/shaders/material
 https://github.com/wdas/brdf/blob/main/src/brdfs/disney.brdf

@@ -1,5 +1,12 @@
 https://github.com/mrdoob/three.js/tree/master/src/renderers/shaders/ShaderLib
 
+https://www.patreon.com/posts/stylized-lava-32245619 TOON LAVA
+https://www.patreon.com/posts/51125313                  TOON SPARKLE SHADER
+https://www.patreon.com/posts/42255564                  TOON GLASS
+https://www.patreon.com/posts/43026766                  TOON GLASS GRAPH VERSION
+https://www.patreon.com/posts/13059579                  TOON SPECULAR
+https://www.patreon.com/posts/52073394                  FREE POTIONS
+https://www.patreon.com/posts/lit-toon-shader-54740865  
 
 How Babylon's GridMaterial Shader works. Has Extra things in there that might be useful to learn.
 https://github.com/BabylonJS/Babylon.js/tree/master/materialsLibrary/src/grid
@@ -12,14 +19,19 @@ https://github.com/CaptainProton42/FlexibleToonShaderGD
 https://twitter.com/CaptainProton42/status/1362187872086933506?s=20
 
 
+https://www.patreon.com/posts/forward-decals-49100194
+
 Cool looking Cel Shader
 https://halisavakis.com/my-take-on-shaders-cel-shading/
 
 Fog
 https://webglfundamentals.org/webgl/lessons/webgl-fog.html
 
-toon lighting
+toon lighting, VERY VERY GOOD, ALSO HAS HALF TONES
 https://www.patreon.com/posts/toon-lighting-41620461
+
+// NIce TOON GRADIENTS _ SHADOWS
+https://shaderfrog.com/app/view/5391
 
 
 https://twitter.com/csims314/status/1315360156780199936?s=20 // Really nice simple toon

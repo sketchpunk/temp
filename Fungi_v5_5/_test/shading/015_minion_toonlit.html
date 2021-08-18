@@ -1,0 +1,168 @@
+<!DOCTYPE html><script type="module">
+import App, { Colour } from "../../fungi/App.js";
+import Capsule	from "../../fungi/geo/Capsule.js";
+import Points 	from "../../fungi/geo/Points.js";
+import Motion 	from "../../fungi.test/Motion.js";
+import GltfUtil from "../../fungi/lib/GltfUtil.js";
+import XhrQueue	from "../../fungi/lib/XhrQueue.js";
+
+//#####################################################
+App
+	.init()
+	.set_camera( 0, 10, 2, 0, 0.5, 0 )
+	.task( init )
+	.then();
+
+let gMotion;
+
+//#####################################################
+
+function on_render( dt, ss ){
+	if( dt ) gMotion( dt );
+}
+
+async function init( x ){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Shader
+	init_shader();
+	let mat = App.shader.new_material( "TESTER" );
+	let e;
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Load Mesh  
+	let [ json, bin ] = await XhrQueue.url( "../../files/models/" )
+        .add( "suzanne_hpoly.gltf" ).add( "suzanne_hpoly.bin" )
+		.then();
+
+	e 	= GltfUtil.get_entity( "Test", json, bin, mat );
+	e.node.set_pos( 0, 0.6, 0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Motion Closure for Point
+    //gMotion = Motion.rot_by( e, 30, "y" );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	//App.render_by( 1, on_render );
+	return true;
+}
+
+//#####################################################
+
+function init_shader(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	App.shader.new( "TESTER", VERT_SRC, FRAG_SRC, [
+        { name:"color", type:"rgba", value:"#a0a0a0ff" },
+	], App.ubo.get_array( "Global", "Model" ) );
+}
+
+// https://www.patreon.com/posts/lit-toon-shader-54740865
+// https://imgur.com/oRxVN7T
+// https://pastebin.com/grL2nccg
+
+const VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_norm;
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+uniform Model{ 
+    mat4 view_matrix;
+} model;
+
+out vec3 frag_norm;
+out vec3 frag_wpos;
+out vec3 frag_lpos;
+
+void main(void){
+    vec4 wpos	= model.view_matrix * vec4( a_pos, 1.0 );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    frag_lpos 		= a_pos.xyz;
+    frag_wpos		= wpos.xyz;
+    frag_norm 		= mat3( transpose( inverse( model.view_matrix ) ) ) * a_norm; // Need to Rotate and Scale Normal, do on CPU
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    gl_Position = global.proj_view * wpos;
+
+}`;
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+
+uniform Global{ 
+    mediump mat4 proj_view; 
+    mediump mat4 camera_matrix;
+    mediump vec3 camera_pos;
+    mediump float delta_time;
+    mediump vec2 screen_size;
+    mediump float clock;
+} global;
+
+out vec4 out_color;
+
+//-------------------------
+uniform vec4 color;     // Base Color
+
+in vec3 frag_norm;
+in vec3 frag_wpos;
+in vec3 frag_lpos;
+
+//-------------------------
+
+//https://docs.unity3d.com/Packages/com.unity.shadergraph@6.9/manual/Fresnel-Effect-Node.html
+float Unity_FresnelEffect( vec3 Normal, vec3 ViewDir, float Power ){
+    return pow((1.0 - clamp( 0.0, 1.0, dot(normalize(Normal), normalize(ViewDir)))), Power);
+}
+
+const vec4  Base_Color              = vec4( 0.5, 0.5, 0.5, 1.0 );
+
+const float Toon_Ramp_Smoothness    = 0.05; // 0 - 0.5;
+const vec4  Toon_Ramp_Tint          = vec4( 0.0, 1.0, 1.0, 1.0 );
+const float Toon_Ramp_Offset        = 0.3;
+
+const float Rim_Power               = 5.0; // 0->10
+const float Rim_Brightness          = 2.0; // 0.0 -> 5.0;
+
+const vec3 light_color = vec3( 1.0 );
+const vec3 light_pos   = vec3( 5.0, 10.0, 2.0 );
+
+//-------------------------
+
+void main( void ){
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    vec3 norm               = normalize( frag_norm ); // Mesh's World Space Normal
+    vec3 light_dir          = light_pos - frag_wpos;
+    vec3 view_dir           = normalize( global.camera_pos - frag_wpos );
+
+    float dot_norm_lit      = dot( norm, light_dir );
+    float dot_norm_lit_01   = dot_norm_lit * 0.5 + 0.5;
+
+    vec3 main_color         = Base_Color.rgb; // Texture.rgb * Base_Color.rgb;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // TOON SHADING
+    float toon_ramp      = smoothstep( Toon_Ramp_Offset, Toon_Ramp_Offset + Toon_Ramp_Smoothness, dot_norm_lit_01 );
+    vec3  toon_color     = light_color * ( toon_ramp + Toon_Ramp_Tint.rgb ); // add in lights and extra tinting
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // RIM LIGHT
+    float rim       = dot_norm_lit * Unity_FresnelEffect( norm, view_dir, Rim_Power ); // Rim facing only Light
+    rim             = step( 0.5, rim ) * Rim_Brightness;
+    vec3 rim_color  = main_color * rim;
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    out_color.rgb   = ( rim_color * toon_color ) + ( main_color * toon_color );
+    out_color.a     = 1.0;
+
+}`;
+
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>
