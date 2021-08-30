@@ -1,2 +1,181 @@
 - Every Mesh needs to hold Min/Max Bounding Box info, to make Ray Testing much easier. 
+- Every Node Have a Pivot point, can be be used to control rotations better in the shader.
 - Create an Ecs Component or Tag that makes an Entity Ray Cast Selectable.
+
+- Make It easier to Handle Different Render Styles, On Mouse, On Loop, On FPS Limit Loop, Maybe a way to call
+an event when a certain Frame Count has been Reached.
+- Ik, Try to simplify Solvers, Come up with a better way to manage EndEffector Position and Direction Styles
+
+- System or Component Dependence checks and auto loads would be nice.
+
+////////////////////////////////////////////////////////////////////////////////
+// Abstract 
+
+- Shader/Pipeline
+- Buffer
+- Ubo
+- Vao ( Only WebGL2 )
+- FrameBuffer
+- Texture
+
+class Buffer{
+    data            : Raw Array ( Have TypeArray Conversion done Automatically )
+    dataType        : float, uint16, uint32
+    bufferType      : Uniform, Array, Element, Etc.
+    componentCount  : How many Elements makes up One Component
+
+    interleaved     : null
+    
+    byteSize      : How Many Bytes Uploaded to GPU
+    byteCapacity  : Max Total Size of Buffer on GPU, Incase updating with less Data
+
+    gpu : null
+}
+
+class Geometry{
+    vertices
+    normals
+    texcoords
+    indices
+
+    joints
+    weights
+
+    colors
+    tangents
+
+    minBound
+    maxBound
+
+    gpu         : null  // Can be VAO created from Geometry, but then its bound to Attributes of a mesh
+    gpuOnly / keepData  // When passed to GPU, Release Data
+}
+
+class Mesh{
+    attributes // Buffers Linked to Attribute Layouts
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// RENDERER
+class GLState{
+    blend 					= { state : false,	id : App.gl.ctx.BLEND };
+    sampleAlphaCoverage 	= { state : false,	id : App.gl.ctx.SAMPLE_ALPHA_TO_COVERAGE };
+    depthTest				= { state : true,	id : App.gl.ctx.DEPTH_TEST };
+    depthMask				= { state : true };
+    cullFace				= { state : true,	id : App.gl.ctx.CULL_FACE };
+    cullDir					= { state : App.gl.ctx.BACK };
+    blendMode				= { state : App.gl.BLEND_ALPHA };
+    //winding   = CCW
+    material                = null;
+    shader                  = null;
+    vao                     = null;
+    mesh                    = null; // What Mesh Is currently Active
+    entityID                = null; // Current Entity Maybe
+
+    uboList                 = new Map(); // Do I need this, Its already Cached?
+
+    useMaterial(){}
+    useShader(){}
+    useVao(){}
+    draw(){}
+}
+
+class UBOHandler{
+    ubo = null;
+    update( GLState ){}
+}
+
+ // Main Camera, DT / ET, ScreenSize, Proj, View, ProjView Matrix
+class UBOGlobal{}   // System Before Render Can Update this
+
+class UBOModel{}    // Update Model, Normal Matrix, Pivot Position
+class UBOArmature{} // Update Bones from Entity.Armature
+class UBOLighting{} // Update Light Positions, System before Render Can Update This.
+
+Renderer Modes
+class Forward{
+    /*
+    BEGIN FRAME
+        Update Global UBO
+        Update GlobalExt UBO
+        Update Lighting UBO
+
+    LOOP ITEMS
+        Load Material
+        -- Load Shader
+        -- Load Options
+
+        Update Model UBO
+        ** Update Armature UBO
+        Load VAO
+        Draw()
+
+    END FRAME
+        Clear VBO
+        Clear Shader Program
+    */
+}
+
+class ForwardPost{
+    /*
+    INIT
+        CREATE MULTISAMPLE COLOR/DEPTH FBO
+        CREATE BLITZ COLOR/DEPTH TEX FBO
+        CREATE COLOR_A FBO ( FOR PING PONG USE IN POST EFFECTS )
+        CREATE COLOR_B FBO
+
+    BEGIN FRAME
+        Update Global UBO
+        Update GlobalExt UBO
+        Update Lighting UBO
+        BIND FBO
+
+    LOOP ITEMS
+        Load Material
+        -- Load Shader
+        -- Load Options
+
+        Update Model UBO
+        ** Update Armature UBO
+        Load VAO
+        Draw()
+
+    POST
+        Unbind FBO
+        Blitz Color + Depth Buffer to Textures
+
+        RUN POST EFFECT PING PONG
+        UNBIND ALL FBO
+        FINAL RENDER
+
+    END FRAME
+        Clear VBO
+        Clear Shader Program
+    */
+}
+
+class DrawType{
+    mesh        = null;
+    material    = null;
+    draw_mode   = 4;
+
+    // IF Armature, Updates Armature UBO
+    preRender(){}
+    postRender(){}
+}
+
+/*
+Stages
+- 1 : Loop Start ( Handle Input, Like Camera Controller )
+
+- 700 : Begin Transform Updating
+-- Update Nodes ( WS Matrix )
+
+- 701 : Transform Depended Data
+-- Update Armature
+-- Update Bone Preview
+
+- 800 : Pre Render
+- 850 : Render
+- 900 : Post Render
+*/

@@ -16,7 +16,7 @@ App
 //#####################################################
 
 async function init(){
-    let mname = "ligerZero"; //tina
+    let mname = "Nabba"; //tina
 
     let [ json, bin ] = await XhrQueue.url( "../../files/models/"+mname+"/", mname+".gltf", mname+".bin" );
     let e  = GltfUtil.get_skin_view_entity( "Test", json, bin, "LowPolySkin" );
@@ -33,26 +33,26 @@ async function init(){
     let fl_axis = tp.get_alt_axis( bmap.foot_l );
     let fr_axis = tp.get_alt_axis( bmap.foot_r );
     
-    let hl_axis = tp.get_alt_axis( bmap.hand_l );
-    let hr_axis = tp.get_alt_axis( bmap.hand_r );
+    //let hl_axis = tp.get_alt_axis( bmap.hand_l );
+    //let hr_axis = tp.get_alt_axis( bmap.hand_r );
 
     //------------------------------
     // ARMS
-    //tp.align_chain( [ bmap.upperarm_l, bmap.forearm_l, bmap.hand_l ], Vec3.LEFT );
-    //tp.align_chain( [ bmap.upperarm_r, bmap.forearm_r, bmap.hand_r ], Vec3.RIGHT );
+    tp.align_chain( [ bmap.upperarm_l, bmap.forearm_l, bmap.hand_l ], Vec3.LEFT );
+    tp.align_chain( [ bmap.upperarm_r, bmap.forearm_r, bmap.hand_r ], Vec3.RIGHT );
 
-    tp.align_chain( [ bmap.upperarm_l, bmap.forearm_l ], Vec3.DOWN );
-    tp.align_chain( [ bmap.upperarm_r, bmap.forearm_r ], Vec3.DOWN );
-    tp.align_alt_axis( bmap.hand_l, hl_axis );
-    tp.align_alt_axis( bmap.hand_r, hr_axis );
+    //tp.align_chain( [ bmap.upperarm_l, bmap.forearm_l ], Vec3.DOWN );
+    //tp.align_chain( [ bmap.upperarm_r, bmap.forearm_r ], Vec3.DOWN );
+    //tp.align_alt_axis( bmap.hand_l, hl_axis );
+    //tp.align_alt_axis( bmap.hand_r, hr_axis );
 
     //------------------------------
     // LEG - FEET
-    tp.align_chain( [ bmap.thigh_l, bmap.shin_l, "meta_l" ], Vec3.DOWN );
+    tp.align_chain( [ bmap.thigh_l, bmap.shin_l ], Vec3.DOWN );
     tp.align_alt_axis( bmap.foot_l, fl_axis );
     //tp.align_alt_axis( "toe.L", fl_axis );
 
-    tp.align_chain( [ bmap.thigh_r, bmap.shin_r, "meta_r" ], Vec3.DOWN );
+    tp.align_chain( [ bmap.thigh_r, bmap.shin_r ], Vec3.DOWN );
     tp.align_alt_axis( bmap.foot_r, fr_axis );
     //tp.align_alt_axis( "toe.R", fr_axis );
     
@@ -60,12 +60,12 @@ async function init(){
     // EXTRA
     //tp.rotl_bone( "jawup", [1,0,0], 10 );
     //tp.rotl_bone( "jawdown", [1,0,0], -10 );
-    tp.align_chain( tp.find_bones( "tail" ), Vec3.BACK );
+    //tp.align_chain( tp.find_bones( "tail" ), Vec3.BACK );
 
-    tp.rotw_bone( "thigh_l", [0,1,0], -6 );
-    tp.rotw_bone( "thigh_r", [0,1,0], 6 );
-    tp.rotw_bone( "upperarm_l", [0,1,0], -6 );
-    tp.rotw_bone( "upperarm_r", [0,1,0], 6 );
+    tp.rotw_bone( bmap.thigh_l, [0,1,0], -11 );
+    tp.rotw_bone( bmap.thigh_r, [0,1,0], 11 );
+    //tp.rotw_bone( "upperarm_l", [0,1,0], -6 );
+    //tp.rotw_bone( "upperarm_r", [0,1,0], 6 );
 
     //------------------------------
     tp.apply();
@@ -76,10 +76,10 @@ async function init(){
     tp.serialize_bones([
         bmap.thigh_l, bmap.shin_l, bmap.foot_l,
         bmap.thigh_r, bmap.shin_r, bmap.foot_r,
-        bmap.upperarm_l, bmap.forearm_l, bmap.hand_l,
-        bmap.upperarm_r, bmap.forearm_r, bmap.hand_r,
-        "meta_l","meta_r",
-        ...tp.find_bones( "tail" )
+        bmap.upperarm_l, bmap.forearm_l, //bmap.hand_l,
+        bmap.upperarm_r, bmap.forearm_r, //bmap.hand_r,
+        //"meta_l","meta_r",
+        //...tp.find_bones( "tail" )
     ]);
     
     

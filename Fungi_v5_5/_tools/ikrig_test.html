@@ -10,7 +10,8 @@ import MixamoAnimator	from "../fungi.test/MixamoAnimator.js";
 //import CharRig			from "../fungi.test/rigs/SCKCasualRig.js";
 //import CharRig			from "../fungi.test/rigs/CherubBotRig.js";
 //import CharRig			from "../fungi.test/rigs/TRex.js";
-import CharRig			from "../fungi.test/rigs/LigerZero.js";
+//import CharRig			from "../fungi.test/rigs/LigerZero.js";
+import CharRig			from "../fungi.test/rigs/Nabba.js";
 
 //#####################################################
 App
@@ -34,8 +35,8 @@ function on_render( dt, ss ){
 			.apply_pose();						// Apply Pose to Src Armature
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	//gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
-	gIKPose.apply_quadraped_rig( gRig.rig );
+	gIKPose.apply_rig( gRig.rig );			// Apply IK Pose to Rig's Working Pose
+	//gIKPose.apply_quadraped_rig( gRig.rig );
 	gRig.rig.apply_pose();					// Apply Working Pose to Bone Entities
 }
 
@@ -51,11 +52,11 @@ async function init(){
 	gRig = new CharRig();
 	await gRig.load( null, { 
 		see_bones  : false,
-		use_tex    : true,
-		use_spring : true,
+		use_tex    : false,
+		use_spring : false,
 	});
 
-	gRig.node.set_pos( [0.0,0,-1.4] );
+	gRig.node.set_pos( [1.4,0,0] );
 	//gRig.node.set_scl( 0.9 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

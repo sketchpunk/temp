@@ -24,7 +24,8 @@ async function init(){
     //let [ json, bin ] = await XhrQueue.url( "../files/models/sck_casual", "sck_casual.gltf", "sck_casual.bin" );
     //let [ json, bin ] = await XhrQueue.url( "../files/models/CherubBotPM1", "CherubBotPM1.gltf", "CherubBotPM1.bin" );
     //let [ json, bin ] = await XhrQueue.url( "../files/models/trex", "trex.gltf", "trex.bin" );
-    let [ json, bin ] = await XhrQueue.url( "../files/models/ligerZero", "ligerZero.gltf", "ligerZero.bin" );
+    //let [ json, bin ] = await XhrQueue.url( "../files/models/ligerZero", "ligerZero.gltf", "ligerZero.bin" );
+    let [ json, bin ] = await XhrQueue.url( "../files/models/Nabba", "Nabba.gltf", "Nabba.bin" );
     let e = GltfUtil.get_skin_view_entity( "Test", json, bin, "LowPolySkin" );
     //let e = GltfUtil.get_entity( "Test", json, bin, "LowPoly" );
     
@@ -32,9 +33,9 @@ async function init(){
     console.log( "Bone Count: ", e.arm.bones.length );
     debug_node_tree( e.arm.nodes[0] );
 
-    e.arm.get_node( "thigh_l" ).rot_by( 35, "x" );
-    e.arm.get_node( "thigh_r" ).rot_by( 35, "x" );
-    e.arm.get_node( "head" ).rot_by( -35, "x" );
+    e.arm.get_node( "Thigh_L" ).rot_by( 35, "x" );
+    e.arm.get_node( "Thigh_R" ).rot_by( 35, "x" );
+    e.arm.get_node( "Head" ).rot_by( -35, "x" );
     //e.arm.get_node( "hips" ).set_pos( 0,0.6,-2 );
     
     /*
