@@ -61,6 +61,8 @@ class GizmoMove{
 		// Function Binding
 		this.move_bind		= this.drag_move.bind( this );
 		this.end_bind		= this.drag_end.bind( this );
+
+		this.on_drag_state  = null;
 	}
 
 	init( inc_plane=false ){
@@ -119,6 +121,8 @@ class GizmoMove{
 		// Write up events to handle dragging
 		App.gl.canvas.addEventListener( "mousemove",	this.move_bind );
 		App.gl.canvas.addEventListener( "mouseup",		this.end_bind );
+
+		if( this.on_drag_state ) this.on_drag_state( 1 );
 	}
 
 	drag_move( e ){
@@ -141,6 +145,8 @@ class GizmoMove{
 		App.gl.canvas.removeEventListener( "mousemove",	this.move_bind );
 		App.gl.canvas.removeEventListener( "mouseup",	this.end_bind );
 		//this.line.Lines.reset();
+
+		if( this.on_drag_state ) this.on_drag_state( 0 );
 	}
 	// #endregion //////////////////////////////////////////////////////////////
 }

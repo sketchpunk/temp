@@ -16,7 +16,7 @@ function init( size=null, init_func=null ){
 }
 
 function on_click( e ){
-	if( e.button != 2 ) return;	//if Not right click exit
+	if( e.button != 0 ) return;	//if Not left click exit
 	e.preventDefault(); e.stopPropagation();
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1,7 +1,7 @@
 import App, { Vec3, Quat } from "../fungi/App.js";
 
 class ArmFactory{
-	static chain( len_ary, name_ary=null ){
+	static chain( len_ary, name_ary=null, anchor_root=true ){
 		let e	= App.mesh_entity( "Chain" );
 		let arm	= App.ecs.add_com( e.id, "Armature" );
 
@@ -17,7 +17,8 @@ class ArmFactory{
 			len	= i;
 			n++;
 		}
-		arm.ready().anchor_root_bones( e.node );
+		arm.ready();
+		if( anchor_root ) arm.anchor_root_bones( e.node );
 		e.arm = arm;
 
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

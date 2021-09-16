@@ -1,0 +1,505 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Maths } from "../../fungi/App.js";
+import ArmFactory	from "../../fungi.armature/ArmFactory.js";
+import DragPoints	from "../../fungi.misc/DragPoints.js";
+import FrameRunner  from "../../fungi.misc/FrameRunner.js";
+
+import Chain        from "../../fungi.ik/Chain.js";
+import Target       from "../../fungi.ik/Target.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_pkg( { name:"fungi.armature", bone_view:true, mat:false } )
+	.use_events()
+	.use_debug()
+	.set_camera( 90, 0, 6, 0, 0.5, -2 )
+	.task( init )
+	.then();
+
+//#####################################################
+
+let $offset     = [ 0, 0, 0.2 ];
+let $Animate    = false;
+let $frame_run;
+
+async function init(){
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Execute a Function Every n Time
+    $frame_run = new FrameRunner();
+    $frame_run.onTime( "ik", 0.20, ()=>{ Demo.step(); } );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Drag Points
+    DragPoints.init()
+        .set_move_handler( on_pnt_move )
+        .set_drag_state( on_drag_state );
+
+    DragPoints.pnt( $offset, null, "cyan", 1, 0.06 );
+    
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Bone Chains to run IK on
+    Demo.newChain( null, [0,0,0] );
+    Demo.newChain( KFactorCircle.fromChainLen( 1, 1.8 ), [0,0,-1] );
+    Demo.newChain( new KFactorArcSqr( 0.2, 0.5 ), [0,0,-2] );
+    Demo.newChain( new KFactorArc( 0.3, 0.7 ), [0,0,-3] );
+    Demo.newChain( new KFactorOther( 1.8 ), [0,0,-4] );
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.render_by( 1, on_render );
+    setTimeout( ()=>{ $Animate = true; }, 800 ); // Delay start of animation
+	return true;
+}
+
+function on_render( dt, et ){
+    if( $Animate ) $frame_run.update( dt );
+}
+
+function on_pnt_move( idx, pos ){
+	switch( idx ){
+        case 0: 
+            let i,v;
+            for( [i,v] of Demo.effector.entries() ){
+                v.from_add( Demo.initPos[i], pos );
+            }
+        break;
+    }
+}
+
+function on_drag_state( s ){
+    $Animate = ( s == 0 ); // Animate when not dragging.
+}
+
+class Demo{
+    static chains       = new Array();
+    static effector     = new Array();
+    static initPos      = new Array();
+
+    static newChain( kFactor=null, pos=null ){
+        let name_ary	= new Array();
+        let b_ary		= [ 0.3, 0.3, 0.3, 0.3, 0.3, 0.3 ];
+        let ent         = ArmFactory.chain( b_ary, name_ary, false );
+        let tpose	    = ent.arm.new_pose();
+        let pose	    = ent.arm.new_pose();
+        let chain       = new Chain().from_armature( ent.arm, name_ary );
+
+        if( pos ) ent.node.set_pos( pos );
+
+        this.chains.push({ ent, tpose, pose, chain, kFactor });
+        this.effector.push( new Vec3( pos ).add( $offset ) );
+        this.initPos.push( new Vec3( pos ) );
+    }
+
+    static step(){
+        let itm, i;
+        let pt = new Transform();
+        let ct = new Transform();
+        let ik = new Target();
+
+        App.Debug.reset();
+
+        for( [ i,itm ] of this.chains.entries() ){
+            itm.pose.get_parent_world( itm.chain.first(), pt, ct, itm.ent.node.local );
+            ik.from_pos( ct.pos, this.effector[ i ], [ 0,0,1 ] );
+            App.Debug.pnt( this.effector[ i ], "green", 0.1 );
+
+            NaturalCCDSolver.apply_chain( ik, itm.chain, itm.tpose, itm.pose, pt, itm.kFactor );
+            itm.pose.apply();
+        }
+
+    }
+}
+
+//##########################################################################
+
+class KFactorCircle{
+    constructor( c, r ){
+        this.k = Maths.clamp( c / r, 0, 1 ); // K = Constant / Radius 
+    }
+
+    static fromChainLen( c, chainLen ){
+        // Radius = ( 180 + ArcLength ) / ( PI * ArcAngle )
+        let r = ( 180 * chainLen ) / ( Math.PI * Math.PI * 2 );
+        return new KFactorCircle( c, r );
+    }
+
+    static fromChain( c, chain ){
+        // Radius = ( 180 + ArcLength ) / ( PI * ArcAngle )
+        let r = ( 180 * chain.len ) / ( Math.PI * Math.PI * 2 );
+        return new KFactorCircle( c, r );
+    }
+
+    reset(){} // No State to reset
+
+    apply( bone, effDir, tarDir, out ){
+        out.from_lerp( effDir, tarDir, this.k ).norm();
+    }
+}
+
+class KFactorArcSqr{
+    constructor( c, offset ){
+        this.c      = c;
+        this.arcLen = 0;
+        this.offset = offset;
+    }
+
+    reset(){
+        this.arcLen = 0;
+    }
+
+    apply( bone, effDir, tarDir, out ){
+        // Notes, Can do the inverse of pass in chain's length so chain.len - this.arcLen
+        // This causes the beginning of the chain to move more and the tail less.
+        this.arcLen += bone.len;   //Accumulate the Arc length for each bone
+        
+        let k = this.c / Math.sqrt( this.arcLen + this.offset );  // k = Constant / sqrt( CurrentArcLen )
+        
+        out.from_lerp( effDir, tarDir, k ).norm();
+    }
+}
+
+class KFactorArc{
+    constructor( c, offset ){
+        this.c      = c;
+        this.arcLen = 0;
+        this.offset = offset;
+    }
+
+    reset(){
+        this.arcLen = 0;
+    }
+
+    apply( bone, effDir, tarDir, out ){
+        // Notes, Can do the inverse of pass in chain's length so chain.len - this.arcLen
+        // This causes the beginning of the chain to move more and the tail less.
+        this.arcLen += bone.len;   //Accumulate the Arc length for each bone
+        
+        let k = this.c / ( this.arcLen + this.offset );  // k = Constant / CurrentArcLen
+        
+        out.from_lerp( effDir, tarDir, k ).norm();
+    }
+}
+
+class KFactorOther{
+    constructor( chainLen ){
+        this.chainLen   = chainLen;
+        this.arcLen     = 0;
+        this.offset     = 0.1;
+        this.scalar     = 1.3;
+    }
+
+    reset(){ this.arcLen = 0; }
+
+    apply( bone, effDir, tarDir, out ){
+        // Just messing around with numbers to see if there is ways to alter the movement of the chain
+        this.arcLen += bone.len;
+        let k = ( ( this.chainLen - this.arcLen + this.offset ) / ( this.chainLen*this.scalar ) )**2;
+        out.from_lerp( effDir, tarDir, k ).norm();
+    }
+}
+
+//##########################################################################
+
+class Joint{
+    constructor( pw, cl, idx, len ){
+        this.bIndex = idx;
+        this.local  = new Transform( cl );
+        this.world  = Transform.add( pw, cl );
+        this.len    = len;
+    }
+
+    update_world( pw ){ this.world.from_add( pw, this.local ); }
+    copy_local(){ this.world.copy( this.local ); }
+}
+
+class NaturalCCDSolver{
+
+    // Create a Copy of the Chain Transform to use for Iterative Processing
+    static iter_chain( chain, pose, p_wt ){
+        const cbones = chain.bones;
+        const pbones = pose.bones;
+        let i, b, idx, ichain = new Array( chain.count + 1 ); // Extra Transform for End Effector
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Initial Bone is an Extension of a Base Transform
+        idx         = cbones[ 0 ].idx;
+        b           = pbones[ idx ];
+        ichain[ 0 ] = new Joint( p_wt, b.local, idx, cbones[ 0 ].len );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Build up the World Space Transform of the remaining bones.
+        for( i=1; i < chain.count; i++ ){
+            idx         = cbones[ i ].idx;
+            b           = pbones[ idx ];
+            ichain[ i ] = new Joint( ichain[ i-1 ].world, b.local, idx, cbones[ i ].len );
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Create the End Effector Transform
+        let t = new Transform(
+            [ 0, 0, 0, 1 ],         // Quat Identity, No rotation 
+            [ 0, b.len, 0 ],        // Tail Position of Final Bone
+            [ 1, 1, 1 ]             // No Scaling
+        )
+        ichain[ i ] = new Joint( ichain[ i-1 ].world, t, -1, 0 );
+
+        //for( i of ichain ) App.Debug.pnt( i.world.pos, "cyan" );
+        return ichain;
+    }
+
+    // Update the Iteration Chain, helps know the position of each joint & end effector ( Last point on the chain )
+    static update_iter( iter, startIdx, p_wt ){
+        let ii;
+        for( let i=startIdx; i < iter.length; i++ ){
+            ii = i-1;   // Parent Index
+            if( ii >= 0 ) iter[ i ].update_world( iter[ ii ].world );
+            else          iter[ i ].update_world( p_wt );
+        }
+    }
+
+    static apply_chain( ik, chain, tpose, pose, p_wt, kFactor ){
+        // Create a copy of the chain's ws tranforms for iterative processing
+        const iter      = this.iter_chain( chain, pose, p_wt );
+        const tries     = 20;                   // Max Iterations to reach end effector
+        const rng       = 0.001**2;             // Min Effector Range
+        let   step      = 0;                    // Current Interation Step.
+        let   endIdx    = iter.length - 2;      // Final Joint Doesn't Count, Its the End Effector
+        let   eff       = iter[ endIdx + 1 ];   // Reference to the End Effector Joint
+        let   i;
+        let   b;
+        let   diff;
+        let   effDir    = new Vec3();
+        let   tarDir    = new Vec3();
+        let   lerpDir   = new Vec3();
+        let   k;
+        let   tmp =  0;
+        let   q = new Quat();
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //for( step; step < tries; step++ ){
+            //console.log("-----------------");
+            if( kFactor ) kFactor.reset();
+            for( i=endIdx; i >= 0; i-- ){
+                b    = iter[ i ];
+                diff = Vec3.len_sqr( eff.world.pos, ik.end_pos );   // Distance Squared from End Effect to Target Position
+
+                if( diff <= rng ){ step = tries+1; break; } // Break out of Both Loops
+
+                //--------------------------------------
+                effDir.from_sub( eff.world.pos, b.world.pos ).norm();       // Direction from current joint to end effector
+                tarDir.from_sub( ik.end_pos, b.world.pos ).norm();          // Direction from current joint to target
+
+                if( kFactor ) kFactor.apply( b, effDir, tarDir, lerpDir );  // How Factor to Rotation Movement
+                else          lerpDir.copy( tarDir );
+
+                q   .from_unit_vecs( effDir, lerpDir )                      // Create Rotation toward target
+                    .mul( b.world.rot );                                    // Apply to current World rotation
+
+                if( i != 0 ) q.pmul_invert( iter[ i-1 ].world.rot );        // Convert to Local Space
+
+                b.local.rot.copy( q );                                      // Save back to bone
+
+                //--------------------------------------
+                this.update_iter( iter, i, p_wt );                          // Update Chain from this bone and up.
+
+                //if( i==2 ) break;
+            }
+        //}
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Save Results to Pose
+        for( i=0; i <= endIdx; i++ ){
+            pose.set_local_rot( iter[ i ].bIndex, iter[ i ].local.rot );
+        }
+    }
+
+}
+
+//##########################################################################
+
+/* [[[[ NOTES FROM NATURAL-CCD WHITE PAPER ]]]]
+// https://sci-hub.se/https://www.liebertpub.com/doi/abs/10.1089/soro.2017.0009?journalCode=soro
+- pe     : current end-effector position
+- pf     : desired end-effector position ( Target )
+- pc     : position of current joint
+
+- qi     : current joint
+- N      : number of joints
+- ANG    : rotation angle
+- d      : direction vector
+- k      : value to reduce rotation angle, 0 < k <= 1
+
+- ANGc   : angle between the current link to be moved and the previous one
+- AMGmax : Max angle upper bound
+
+
+while ( distance between (pe, pf) > precision )
+
+    for( qi = 1, qi <= N, qi = qi + 1 )
+        Calculate ( ANG, d )
+        Solve the abruptness in movements, ANG = k ANG
+        
+        if vectors ( pcpf , pcpe ) are parallel then 
+            manage the singularity 
+        end if
+        
+        if( ANGc >= ANGmax ) then 
+            ANG = ANGmax - ANGc
+        end if
+
+        Rotate qi using ( ANG, d )
+    end for
+    
+    Update distance ( pe, pf )
+end while
+
+
+pc = p( qi ) // Current position of joint
+pe = q( qi+1 ) // Current Position of the next joint
+pf = p( qi ) + ( p( qd,i+1 ) - p(qd,i) ) // Virtual Projection of the desitred joint position.
+
+////////////////////////////////////////
+K-Factor : Euclidean distance between the end-effector position and the desired position. 
+
+C : Positive Constant ( Can be e^b )
+s : Arc Length ( From the start of the curve to a Given Point )
+R : Radius
+
+C = rad^( 2/PI );   https://en.wikipedia.org/wiki/Golden_spiral
+C = ang^( 1/90 );
+
+k = C / ( N * |PePf| )
+
+Cesaro Equation : https://en.wikipedia.org/wiki/Ces%C3%A0ro_equation
+k = 0                   // Straight Line, CCD as is
+k = 1 / R               // Circle
+k = C / sqrt( s )       // Circular Involute
+k = C / s               // Logarithmic Spiral
+k = C * s               // Cornu Spiral
+k = a / ( s^2 + a^2 )   // Catenary
+
+Radius = ( 180 * ArcLen ) / ( PI * ArcAngle )
+
+*/
+
+
+
+/*
+public class CCDIKJoint : MonoBehaviour {
+  public Vector3 axis = Vector3.right;
+  public float maxAngle = 180;
+  Vector3 perpendicular; void Start() { perpendicular = axis.Perpendicular(); }
+
+  public void Evaluate(Transform ToolTip, Transform Target, bool rotateToDirection = false) {
+    //Rotate the assembly so the tooltip better matches the target position/direction
+    transform.rotation = (rotateToDirection ? Quaternion.FromToRotation(ToolTip.up, Target.forward) : Quaternion.FromToRotation(ToolTip.position - transform.position, Target.position - transform.position)) * transform.rotation;
+
+    //Enforce only rotating with the hinge
+    transform.rotation = Quaternion.FromToRotation(transform.rotation * axis, transform.parent.rotation * axis) * transform.rotation;
+
+    //Enforce Joint Limits
+    transform.rotation = Quaternion.FromToRotation(transform.rotation * perpendicular, (transform.rotation * perpendicular).ConstrainToNormal(transform.parent.rotation * perpendicular, maxAngle)) * transform.rotation;
+  }
+}
+*/
+
+
+// The Quaternion CCDIK Step
+  // An example of a cleaner implementation can be seen in the Unity code:
+  // https://github.com/zalo/MathUtilities/blob/master/Assets/IK/CCDIK/CCDIKJoint.cs
+  // https://codepen.io/zalo/pen/MLBKBv?editors=0010
+ let solveIK = function (targetPosition) {
+    var tooltipPosition = new THREE.Vector3();
+    var toolRotation = new THREE.Quaternion();
+    var fromToQuat = new THREE.Quaternion();
+    for (var i = this.IKJoints.length - 1; i >= 0; i--) {
+      this.IKJoints[i].updateMatrixWorld();
+      this.endEffector.getWorldPosition(tooltipPosition);
+
+      if (this.matchDirection) {
+        tooltipPosition.add(new THREE.Vector3(3.25, 0, 0));
+      }
+
+      // (Ideally this could be done entirely in worldspace (instead of local space
+      // (which require all of these terrible hacks that you see)))
+
+      // Decide whether to point _toward_ the target, or along the target's direction
+      if (this.matchDirection && (i > this.IKJoints.length - 3)) {
+        // Rotate to align with a direction
+        var toolDirection = new THREE.Vector3(1.0, 0, 0);
+        this.endEffector.getWorldQuaternion(toolRotation);
+        var invToolRotation = toolRotation.clone().inverse();
+        var targetDirection = toolDirection.clone().applyQuaternion(invToolRotation);
+        if (i == this.IKJoints.length - 2) {
+          toolDirection.applyQuaternion(this.IKJoints[this.IKJoints.length - 1].quaternion);
+          targetDirection.applyQuaternion(this.IKJoints[this.IKJoints.length - 1].quaternion);
+        }
+        fromToQuat.setFromUnitVectors(toolDirection, targetDirection);
+        this.IKJoints[i].quaternion.multiply(fromToQuat);
+      } else if (this.ccd) {
+        // Rotate towards the Target
+        var toolDirection = this.IKJoints[i].worldToLocal(tooltipPosition.clone()).normalize();
+        var targetDirection = this.IKJoints[i].worldToLocal(targetPosition.clone()).normalize();
+        fromToQuat.setFromUnitVectors(toolDirection, targetDirection);
+        this.IKJoints[i].quaternion.multiply(fromToQuat);
+      }
+
+      // Find the rotation from here to the parent, and rotate the axis by it...
+      // This ensures that were always rotating with the hinge
+      // (this can also be "done" by projecting the directions in the block above
+      // to the plane of the axis of rotation, but that allows for the joint's hinge 
+      // angle to drift due to floating point inaccuracy)
+      if (this.hinge) {
+        var invRot = this.IKJoints[i].quaternion.clone().inverse();
+        var parentAxis = this.IKJoints[i].axis.clone().applyQuaternion(invRot);
+        fromToQuat.setFromUnitVectors(this.IKJoints[i].axis, parentAxis);
+        this.IKJoints[i].quaternion.multiply(fromToQuat);
+      }
+
+      // Clamp to Joint Limits - Relies on sensical computation of these values... only works for x-axis here ¯\_(ツ)_/¯
+      // Seems like rotations range from -pi, pi... not the worst... but bad for clamps through there
+      if (this.limits) {
+        var clampedRot = this.IKJoints[i].rotation.toVector3().clampScalar(this.IKJoints[i].minLimit, this.IKJoints[i].maxLimit);
+        this.IKJoints[i].rotation.setFromVector3(clampedRot);
+      }
+
+      this.IKJoints[i].updateMatrixWorld();
+    }
+  }
+
+
+  //https://codepen.io/zalo/pen/MLBKBv?editors=0010
+  //Beautiful CCDIK
+  function solveIK2(targetPosition) {
+      var tooltipPosition = new THREE.Vector3();
+      for (var i = IKJoints.length - 1; i >= 0; i--) {
+        IKJoints[i].updateMatrixWorld();
+        endEffector.getWorldPosition(tooltipPosition);
+
+        //Rotate towards the Target
+        //(Ideally this could be done entirely in worldspace (instead of local space))
+        var toolDirection = IKJoints[i].worldToLocal(tooltipPosition.clone()).normalize();
+        var targetDirection = IKJoints[i].worldToLocal(targetPosition.clone()).normalize();
+        var fromToQuat = new THREE.Quaternion(0, 0, 0, 1).setFromUnitVectors(toolDirection, targetDirection);
+        IKJoints[i].quaternion.multiply(fromToQuat);
+
+        //Find the rotation from here to the parent, and rotate the axis by it...
+        //This ensures that you're always rotating with the hinge
+        var invRot = IKJoints[i].quaternion.clone().inverse();
+        var parentAxis = IKJoints[i].axis.clone().applyQuaternion(invRot);
+        fromToQuat.setFromUnitVectors(IKJoints[i].axis, parentAxis);
+        IKJoints[i].quaternion.multiply(fromToQuat);
+
+        //Clamp to Joint Limits - Devious and relies on sensical computation of these values...
+        //Seems like rotations range from -pi, pi... not the worst... but bad for clamps through there
+        var clampedRot = IKJoints[i].rotation.toVector3().clampScalar(IKJoints[i].minLimit, IKJoints[i].maxLimit);
+        IKJoints[i].rotation.setFromVector3(clampedRot);
+
+        IKJoints[i].updateMatrixWorld();
+      }
+    }
+
+
+//#####################################################
+</script>
+<html><head><style>html,body{ margin:0px; padding:0px; width:100%; height:100%; }</style>
+</head><body><canvas id="pg_canvas"></canvas></body></html>

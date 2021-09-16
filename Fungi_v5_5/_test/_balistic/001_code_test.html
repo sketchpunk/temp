@@ -1,0 +1,203 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+import FboFactory   from "../../fungi/core/Fbo.js";
+import Grid         from "../../fungi/geo/Grid.js";
+import Noise        from "../../lib/Noise.js";
+
+//#####################################################
+App
+	.init( true )
+	.set_camera( -210 , 12, 10, 0, 0.5, 0 )
+	.task( init )
+    .then();
+    
+//#####################################################
+
+async function init(){
+    App.fbo = new FboFactory( App.gl ); // Use Custom FrameBuffers
+    
+    let loop_size = 1; // Iteration Count
+
+    Demo.init().test_algorithm( loop_size );
+    return true;
+}
+
+//#####################################################
+
+class Demo{
+    // #region VARIABLES
+    static orbit_cam        = { cam:null, node:null };
+    static targ_cam         = { cam:null, node:null };
+    static cam_width        = 256;
+    static cam_height       = 256;
+    static debug_canvas     = null;
+    static debug_context    = null;
+    static shader           = null;
+    static fbo              = null;
+
+    static start_pos        = new Vec3( 3.5, 0.5, -4.5 );
+    static end_pos          = new Vec3( 6.5, 2.5, 0 );
+    static hit_pos          = new Vec3();
+    
+    static terrain          = null;
+    // #endregion ///////////////////////////////////////////////////////////////
+    
+
+    // #region MAIN
+    static init(){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.prepare_shader();  // Create Custom Shader that will save WorldSpace Location in the custom FBO's Color Buffer.
+        this.prepare_fbo();     // Create Custom Frame Buffer to hold WorldSpace coord data in the color buffer.
+        this.create_terrain();  // Create Terrain Mesh with Perlin Noise
+
+        return this;
+    }
+
+    static test_algorithm( loop_size=1 ){
+        let ctx     = App.gl.ctx;
+        let mesh    = this.terrain.mesh;    // Terrain for rendering and testing
+
+        let world_mat   = new Mat4();   // Camera's World Space Transform
+        let view_mat    = new Mat4();   // Camera's INVERTED World Space transform
+
+        // Projection Matrix
+        let ratio	    = this.cam_width / this.cam_height;
+        let proj_mat    = new Mat4().from_perspective( 45 * Math.PI / 180, ratio, 0.01, 1000.0 );
+
+        // Shader 
+        let proj_mat_loc = this.shader.uniforms.get( "proj_mat" ).loc;
+        let view_mat_loc = this.shader.uniforms.get( "view_mat" ).loc;
+
+        // Need to resize the Viewport and canvas to render correctly
+        App.gl.set_size( this.cam_width, this.cam_height );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // PRE LOAD
+        ctx.bindFramebuffer( ctx.FRAMEBUFFER, this.fbo.id );        // Bind Custom Frame Buffer
+        ctx.useProgram( this.shader.program );                      // Bind Shader
+        ctx.uniformMatrix4fv( proj_mat_loc, false, proj_mat );      // Push Projection to Sahder
+        ctx.bindVertexArray( mesh.vao.id );                         // Bind VAO Mesh
+        ctx.clearColor( 0, 0, 0, 0 );                               // Reset Default Pixel Color
+
+        //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // MAIN ALGORITHM - CAMERA IS STIPPED DOWN TO MAT4 OBJECTS, 
+        let dir_inv = new Vec3();
+        let origin  = new Vec3();
+        let rot     = new Quat();
+        let cx      = Math.round( this.cam_width / 2 );
+        let cy      = Math.round( this.cam_height / 2 );
+        let hit_pos = new Float32Array( 4 );
+
+        let dt_start = performance.now();
+        for( let i=0; i < loop_size; i++ ){
+            // Compute Camera Position and Rotation between start and end position
+            dir_inv.from_sub( this.end_pos, this.start_pos ).invert();  // ViewMatrix needs reverse direction for proper render
+            rot.from_look( dir_inv, Vec3.UP );                          // Set Camera Rotation looking at the Target's Direction.
+        
+            // Compute View Matrix - Post to Shader
+            world_mat.from_quat_tran_scale( rot, this.start_pos, [1,1,1] );
+            view_mat.from_invert( world_mat );
+            ctx.uniformMatrix4fv( view_mat_loc, false, view_mat );
+
+            // Clear Buffer
+            ctx.clear( ctx.COLOR_BUFFER_BIT | ctx.DEPTH_BUFFER_BIT );
+
+            // Draw Mesh
+            ctx.drawElements( App.mesh.TRI_STRIP, mesh.element_cnt, mesh.element_type, 0 ); 
+
+            // Read Center Pixel and save the WorldSpace Position of the pixel into a Vec3
+            ctx.readBuffer( ctx.COLOR_ATTACHMENT0 );
+            ctx.readPixels( cx, cy, 1, 1, ctx.RGBA, ctx.FLOAT, hit_pos );
+        }
+
+        let dt_end  = performance.now();
+        let dt_span = dt_end - dt_start;
+        console.log( "Time Lapse : ", dt_span * 0.001, " secs" ); // convert Milli To Sec
+        console.log( hit_pos );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        //this.hit_pos.copy( hit_pos );
+        //App.gl.ctx.bindFramebuffer( App.gl.ctx.FRAMEBUFFER, null ); 
+    }
+    // #endregion ///////////////////////////////////////////////////////////////
+
+    // #region SETUP
+    static prepare_shader(){
+        this.shader = App.shader.new( "WorldSpace", vert_src, frag_src, [
+            { name:"proj_mat", type:"mat4", value:null },
+            { name:"view_mat", type:"mat4", value:null },
+        ]);
+    }
+
+    static prepare_fbo(){
+        this.fbo = App.fbo.new( {
+            width   : App.gl.width,
+            height  : App.gl.height,
+            buffers : [
+                { attach:0, name:"color", type:"color", mode:"tex", pixel:"f32" },
+                //{ attach:1, name:"world", type:"color", mode:"tex", pixel:"f32" },
+                { type:"depth", mode:"tex" },
+            ]
+        } );
+    }
+
+    static create_terrain(){
+        const SIZE      = 20;
+        const CELLS     = 80;
+        const FREQ_SCL  = 0.2;
+        const MAX_H     = 2;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // CREATE FLAT GRID PLANE
+        let n, geo     = Grid.geo( SIZE, SIZE, CELLS, CELLS, true, "strip" );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // APPLY NOISE TO Y POSITION
+        for( let i=0; i < geo.vert.length; i+=3 ){
+            n = Noise.simplex2( geo.vert[ i+0] * FREQ_SCL, geo.vert[ i+2] * FREQ_SCL );
+            geo.vert[ i+1 ] = (n * 0.5 + 0.5 ) * MAX_H;
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let mesh = App.mesh.from_data( "Grid", geo.vert, 3, geo.idx );
+        this.terrain = { mesh };
+    }
+    // #endregion ///////////////////////////////////////////////////////////////
+}
+
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+
+    uniform mat4 proj_mat;
+    uniform mat4 view_mat;
+	out vec3 w_pos;
+
+	void main(void){        
+        w_pos		= a_pos;
+        gl_Position = proj_mat * view_mat * vec4( a_pos, 1.0 );
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+
+	in vec3 w_pos;
+    layout(location=0) out vec4 out_color;
+
+	void main(void){ 
+        out_color = vec4( w_pos, 1.0 );
+	}`;
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+</body></html>

@@ -10,6 +10,8 @@ const MODE_PAN_SCREEN	= 1;
 
 class OrbitCamera{
 	constructor(){
+		this.active			= true;
+
 		this.target_pos 	= new Vec3();
 		this.init_tar_pos 	= new Vec3();
 		this.init_cam_pos	= new Vec3();
@@ -29,6 +31,7 @@ class OrbitCamera{
 	}
 
 	run( ecs ){
+		if( !this.active ) return;
 		if( !this.handle_touch( App.cam_node ) ) this.handle_mouse( App.cam_node );
 	}
 

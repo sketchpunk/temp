@@ -1,11 +1,11 @@
 <!DOCTYPE html><script type="module">
 import App, { Vec3, Quat, Mat4, Transform, Maths } from "../../fungi/App.js";
-import ArmFactory	from "../../fungi.armature/ArmFactory.js";;
+import ArmFactory	from "../../fungi.armature/ArmFactory.js";
 import DragPoints	from "../../fungi.misc/DragPoints.js";
+import FrameRunner  from "../../fungi.misc/FrameRunner.js";
 
-import Chain			    from "../../fungi.ik/Chain.js";
-import Target			    from "../../fungi.ik/Target.js";
-import TriangulationSolver  from "../../fungi.ik/solvers/TriangulationSolver.js";
+import Chain        from "../../fungi.ik/Chain.js";
+import Target       from "../../fungi.ik/Target.js";
 
 //#####################################################
 App
@@ -25,6 +25,11 @@ let $end_effector	= new Vec3();
 let $pole_effector	= new Vec3();
 let $frame_run;
 
+let $KCircle;
+let $KArcSqr;
+let $KArc;
+let $KOther;
+
 
 async function init(){
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -32,7 +37,7 @@ async function init(){
     DragPoints.init().set_move_handler( on_pnt_move );
     $frame_run = new FrameRunner();
 
-    $frame_run.onTime( "ik", 1, apply_ik );
+    $frame_run.onTime( "ik", 0.1, apply_ik );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	// Armature
@@ -45,21 +50,25 @@ async function init(){
 	//$entity.node.set_pos( 0, 0.05, 0 );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	$chain = new Chain().from_armature( $entity.arm, name_ary );
+    $chain      = new Chain().from_armature( $entity.arm, name_ary );
+
+    $KCircle    = KFactorCircle.fromChain( 1, $chain );
+    $KArcSqr    = new KFactorArcSqr( 0.2, 0.5 );
+    $KArc       = new KFactorArc( 0.3, 0.7 );
+    $KOther     = new KFactorOther( $chain.len );
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
-	//let pos = [ 0.3, 0.7, 0.0 ];
+	let pos = [ 0.5, 0.5, 0.5 ];
     //let pos = [-0.10026335716247559, 0.6032965779304504, 0.51497308015823364 ];
     //let pos = [-0.0038986951112747192, 0.4035147428512573, 0.26106178760528564];
-    let pos = [ 0, 0, 0.1 ];
+    //let pos = [ 0, 0, 0.1 ];
 
 	// IK Targets
 	DragPoints.pnt( pos, null, "cyan", 1, 0.06 );
 	DragPoints.pnt( [0, 0.0, 0.4 ], null, "yellow", 3, 0.06 );
-
 	DragPoints.get_pos( 0, $end_effector );
     
-    //apply_ik();
+    apply_ik();
 
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
@@ -82,69 +91,22 @@ function on_pnt_move( idx, pos ){
 }
 
 function apply_ik(){
-	App.Debug.reset();
+    App.Debug.reset();
+
 	let pt = new Transform();
 	let ct = new Transform();
-	$pose.get_parent_world( $chain.first(), pt, ct, $entity.node.local );
+    $pose.get_parent_world( $chain.first(), pt, ct, $entity.node.local );
 
 	let pole_dir	= Vec3.sub( $pole_effector, ct.pos );
 	let ik			= new Target().from_pos( ct.pos, $end_effector, pole_dir );
 
-	NaturalCCDSolver.apply_chain( ik, $chain, $tpose, $pose, pt );
+	NaturalCCDSolver.apply_chain( ik, $chain, $tpose, $pose, pt, null );
     $pose.apply();
 }
 
 
-class FrameCount{
-    constructor( lmt, fn ){
-        this.current = 0;
-        this.limit   = lmt;
-        this.fn      = fn;
-    }
 
-    update( fr ){
-        this.current++;
-        if( this.current >= this.limit ){
-            this.current = 0;
-            this.fn();
-        }
-    }
-}
-
-class FrameTime{
-    constructor( lmt, fn ){
-        this.current = 0;
-        this.limit   = lmt;
-        this.fn      = fn;
-    }
-
-    update( fr ){
-        this.current += fr.deltaTime;
-        if( this.current >= this.limit ){
-            this.current = 0;
-            this.fn();
-        }
-    }
-}
-
-class FrameRunner{
-    constructor(){
-        this.deltaTime  = 0;
-        this.items      = new Map();
-    }
-
-    onFrame( name, cnt, fn ){ this.items.set( name, new FrameCount( cnt, fn ) ); return this; }
-    onTime( name, sec, fn ){ this.items.set( name, new FrameTime( sec, fn ) ); return this; }
-
-    update( dt ){
-        this.deltaTime = dt;
-        let k, v;
-        for ( [k,v] of this.items ) v.update( this );
-    }
-}
-
-
-/*
+/* [[[[ NOTES FROM NATURAL-CCD WHITE PAPER ]]]]
 - pe     : current end-effector position
 - pf     : desired end-effector position ( Target )
 - pc     : position of current joint
@@ -208,6 +170,87 @@ Radius = ( 180 * ArcLen ) / ( PI * ArcAngle )
 
 */
 
+class KFactorCircle{
+    constructor( c, r ){
+        this.k = Maths.clamp( c / r, 0, 1 ); // K = Constant / Radius 
+    }
+
+    static fromChain( c, chain ){
+        // Radius = ( 180 + ArcLength ) / ( PI * ArcAngle )
+        let r = ( 180 * chain.len ) / ( Math.PI * Math.PI * 2 );
+        return new KFactorCircle( c, r );
+    }
+
+    reset(){} // No State to reset
+
+    apply( bone, effDir, tarDir, out ){
+        out.from_lerp( effDir, tarDir, this.k ).norm();
+    }
+}
+
+class KFactorArcSqr{
+    constructor( c, offset ){
+        this.c      = c;
+        this.arcLen = 0;
+        this.offset = offset;
+    }
+
+    reset(){
+        this.arcLen = 0;
+    }
+
+    apply( bone, effDir, tarDir, out ){
+        // Notes, Can do the inverse of pass in chain's length so chain.len - this.arcLen
+        // This causes the beginning of the chain to move more and the tail less.
+        this.arcLen += bone.len;   //Accumulate the Arc length for each bone
+        
+        let k = this.c / Math.sqrt( this.arcLen + this.offset );  // k = Constant / sqrt( CurrentArcLen )
+        
+        out.from_lerp( effDir, tarDir, k ).norm();
+    }
+}
+
+class KFactorArc{
+    constructor( c, offset ){
+        this.c      = c;
+        this.arcLen = 0;
+        this.offset = offset;
+    }
+
+    reset(){
+        this.arcLen = 0;
+    }
+
+    apply( bone, effDir, tarDir, out ){
+        // Notes, Can do the inverse of pass in chain's length so chain.len - this.arcLen
+        // This causes the beginning of the chain to move more and the tail less.
+        this.arcLen += bone.len;   //Accumulate the Arc length for each bone
+        
+        let k = this.c / ( this.arcLen + this.offset );  // k = Constant / CurrentArcLen
+        
+        out.from_lerp( effDir, tarDir, k ).norm();
+    }
+}
+
+class KFactorOther{
+    constructor( chainLen ){
+        this.chainLen   = chainLen;
+        this.arcLen     = 0;
+        this.offset     = 0.1;
+        this.scalar     = 1.3;
+    }
+
+    reset(){ this.arcLen = 0; }
+
+    apply( bone, effDir, tarDir, out ){
+        // Just messing around with numbers to see if there is ways to alter the movement of the chain
+        this.arcLen += bone.len;
+        let k = ( ( this.chainLen - this.arcLen + this.offset ) / ( this.chainLen*this.scalar ) )**2;
+        out.from_lerp( effDir, tarDir, k ).norm();
+    }
+}
+
+
 class Joint{
     constructor( pw, cl, idx, len ){
         this.bIndex = idx;
@@ -251,7 +294,7 @@ class NaturalCCDSolver{
         ichain[ i ] = new Joint( ichain[ i-1 ].world, t, -1, 0 );
 
 
-        //for( i of ichain ) App.Debug.pnt( i.pos, "cyan" );
+        //for( i of ichain ) App.Debug.pnt( i.world.pos, "cyan" );
         return ichain;
     }
 
@@ -265,12 +308,12 @@ class NaturalCCDSolver{
         }
     }
 
-    static apply_chain( ik, chain, tpose, pose, p_wt ){
+    static apply_chain( ik, chain, tpose, pose, p_wt, kFactor ){
         // Create a copy of the chain's ws tranforms for iterative processing
         const iter      = this.iter_chain( chain, pose, p_wt );
         const tries     = 20;                   // Max Iterations to reach end effector
-        const rng       = 0.01**2;
-        let   step     = 0;                    // Current Interation Step.
+        const rng       = 0.001**2;             // Min Effector Range
+        let   step      = 0;                    // Current Interation Step.
         let   endIdx    = iter.length - 2;      // Final Joint Doesn't Count, Its the End Effector
         let   eff       = iter[ endIdx + 1 ];   // Reference to the End Effector Joint
         let   i;
@@ -281,37 +324,69 @@ class NaturalCCDSolver{
         let   lerpDir   = new Vec3();
         let   k;
         let   tmp =  0;
+        let   q = new Quat();
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         //for( step; step < tries; step++ ){
+            //console.log("-----------------");
+            if( kFactor ) kFactor.reset();
             for( i=endIdx; i >= 0; i-- ){
                 b    = iter[ i ];
                 diff = Vec3.len_sqr( eff.world.pos, ik.end_pos );   // Distance Squared from End Effect to Target Position
+                
+                //App.Debug.reset();
+                //App.Debug.pnt( b.world.pos, "cyan" );
+                //App.Debug.pnt( eff.world.pos, "green" );
+                //App.Debug.pnt( ik.end_pos, "red" );
 
                 //console.log( "TEST", step, i, "is", diff, "<=", rng, ( diff <= rng ) );
                 if( diff <= rng ){ step = tries+1; break; } // Break out of Both Loops
 
                 //--------------------------------------
-                effDir.from_sub( eff.world.pos, b.world.pos ).norm();
-                tarDir.from_sub( ik.end_pos, b.world.pos ).norm();
+                effDir.from_sub( eff.world.pos, b.world.pos ).norm();   // Direction from current joint to end effector
+                tarDir.from_sub( ik.end_pos, b.world.pos ).norm();      // Direction from current joint to target
 
+                //App.Debug.ln( b.world.pos, Vec3.add( effDir, b.world.pos ), "green" );
+                //App.Debug.ln( b.world.pos, Vec3.add( tarDir, b.world.pos ), "red" );
+
+                if( kFactor ) kFactor.apply( b, effDir, tarDir, lerpDir );
+                else          lerpDir.copy( tarDir );
 
                 //------------------
                 //k = 10 / ( (endIdx+1) * Math.sqrt( diff ) ); // C / ( n * len( Pe, Pt ) ) :: NO GOOD
                 //------------------
-                let r = (180 * chain.len) / ( Math.PI * Math.PI * 2 ) // Radius = ( 180 + ArcLength ) / ( PI * ArcAngle ) :: Works
-                k = 3 / r;  // Constant / Radius 
+                //let r = (180 * chain.len) / ( Math.PI * Math.PI * 2 ) // Radius = ( 180 + ArcLength ) / ( PI * ArcAngle ) :: Works
+                //k = 3 / r;  // Constant / Radius 
+                //------------------
+                //tmp += b.len;
+                //k = 0.2 / Math.sqrt( (chain.len - tmp + 0.4) );
+                //k = 0.2 / Math.sqrt( (tmp + 0.5) );
+                //k = 0.3 / (tmp + 0.7);
+                //k = ( ( chain.len - tmp + 0.1 ) / ( chain.len*1.3 ) )**2;
+                //k =   0.1 / ( tmp + 0.5 ) * 1.618033988749895;
                 //------------------
 
-                //console.log( k, Math.sqrt( diff ), chain.len );
+                //console.log( k,  );
 
-                k = Maths.clamp( k, 0, 1 );
+                //k = Maths.clamp( k, 0, 1 );
                 
-                lerpDir.from_lerp( effDir, tarDir, k ).norm();
 
-                b.local.rot.mul_unit_vecs( effDir, lerpDir );
+                //lerpDir.from_lerp( effDir, tarDir, k ).norm();
+                //lerpDir.copy( tarDir );
 
+                /**/
+                q   .from_unit_vecs( effDir, lerpDir )
+                    .mul( b.world.rot );
+
+                if( i != 0 ) q.pmul_invert( iter[ i-1 ].world.rot );
+
+                b.local.rot.copy( q );
+                
+
+                //b.local.rot.mul_unit_vecs( effDir, tarDir );
                 //--------------------------------------
                 this.update_iter( iter, i );
+
+                //if( i==4 ) break;
             }
         //}
 

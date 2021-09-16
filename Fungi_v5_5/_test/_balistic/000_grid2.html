@@ -1,0 +1,483 @@
+<!DOCTYPE html><script type="module">
+import App, { Vec3, Quat, Mat4, Transform, Colour } from "../../fungi/App.js";
+
+//import FboFactory from "../../fungi/core/Fbo.js";
+
+//import Wireframe    from "../../fungi/shaders/Wireframe.js";
+
+import Wireframe    from "../../fungi/shaders/Wireframe.js";
+import Grid         from "../../fungi/geo/Grid.js";
+
+import Noise        from "../../lib/Noise.js";
+
+//#####################################################
+App
+	.init( true )
+	.load_shaders( "LowPoly.js" )
+	.use_debug()
+	.set_camera( -210 , 12, 10, 0, 0.5, 0 )
+	.task( init )
+    .then();
+    
+/*
+1. Terrain with Origin and Target Positions.
+2. Create Camera that will render from origin aimed at target.
+3. Try to render the scene with a small view port.
+4. Copy View Port to small canvas, then draw full scene.
+5. Render small canvas to Custom Frame Buffer with custom shader that saves WS Pos to Color FB.
+6. Sample Center pixel and debug its WS position.
+*/
+
+//#####################################################
+
+async function init(){
+    App.Debug.set_depth_test( true );//.set_priority( 0 );
+    //App.ecs.systems.set_active( "OrbitCamera", false );
+    //App.ecs.systems.set_active( "DrawSys", false );
+    //App.fbo = new FboFactory( App.gl );
+
+    Demo.init();
+    return true;
+}
+
+async function initx(){
+
+    //App.Debug.set_depth_test( false );//.set_priority( 0 );
+    //App.ecs.systems.set_active( "OrbitCamera", false );
+
+
+
+    //let target_camera = new Camera().set_perspective( 45, 0.01, 1000.0 );
+
+    //let cam_com = new Camera().set_perspective( 45, 0.01, 1000.0 );
+	//let node = new Node();
+	//App.ecs.new_entity( "Camera", App.cam_node, App.cam_com );
+
+
+
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    let geo = Grid.geo( 20, 20, 80, 80, true );
+    let scl = 0.2;
+    let ymax = 2;
+    let n;
+    //simplex2:simplex2, simplex3:simplex3, perlin2:perlin2
+    for( let i=0; i < geo.vert.length; i+=3 ){
+        n = Noise.simplex2( geo.vert[ i+0] * scl, geo.vert[ i+2] * scl );
+        geo.vert[ i+1 ] = (n * 0.5 + 0.5 ) * ymax;
+    }
+
+    //Grid.debug_verts( geo.vert );
+
+    let mesh    = App.mesh.from_data( "Grid", geo.vert, 3, geo.idx );
+    let mat     = App.shader.new_material( "LowPoly", null, { cullFace:false } );
+    let e       = App.mesh_entity( "Grid", mesh, mat, App.mesh.TRI );
+
+
+    Wireframe.append_tri( e.draw, geo.idx, geo.vert, { line_color:"#ffffff55", face_color:"#00000000" } );
+
+    let start_pos   = new Vec3( 3.5,0.5,-4.5 );
+    let end_pos     = new Vec3( 6.5, 2.5, 0 );
+    let dir         = Vec3.sub( end_pos, start_pos ).invert(); // For Camera, need to invert direction because of ViewMatrix
+
+    App.Debug.pnt( start_pos, "green", 0.1, 1 );
+    App.Debug.pnt( end_pos, "red", 0.2, 1 );
+    App.Debug.ln( start_pos, end_pos, "yellow", null, false );
+
+
+    let cam_id = App.ecs.new_entity( "TraceCam" );
+
+    let node = App.ecs.add_com( cam_id, "Node" );
+    node
+        .set_pos( start_pos.add( Vec3.scale( dir, 0.05 ) ) )
+        .set_rot_look( dir, Vec3.UP );
+
+    let cam = App.ecs.add_com( cam_id, "Camera" );
+    cam.set_perspective( 45, 0.01, 1000.0 );
+
+    App.cam_com		= cam
+	App.cam_node	= node;
+
+    console.log( cam_id, cam, node );
+
+    //App.cam_ctrl.set_target( end_pos );
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	return true;
+}
+
+//#####################################################
+
+class Demo{
+    // #region VARIABLES
+    static orbit_cam        = { cam:null, node:null };
+    static targ_cam         = { cam:null, node:null };
+    static cam_width        = 256;
+    static cam_height       = 256;
+    static debug_canvas     = null;
+    static debug_context    = null;
+    static shader           = null;
+    static fbo              = null;
+
+    static start_pos        = new Vec3( 3.5, 0.5, -4.5 );
+    static end_pos          = new Vec3( 6.5, 2.5, 0 );
+    static hit_pos          = new Vec3();
+    
+    static terrain          = null;
+    //static renderer         = null;
+    // #endregion ///////////////////////////////////////////////////////////////
+    
+    // #region METHODS
+
+    static use_target_camera(){
+        App.cam_com     = this.targ_cam.cam;
+        App.cam_node    = this.targ_cam.node;
+
+        App.gl.set_size( this.cam_width, this.cam_height );
+        
+        //App.gl.ctx.viewport( 0, 0, this.cam_width, this.cam_height );
+    }
+
+    static reset_canvas(){
+        App.cam_com     = this.orbit_cam.cam;
+        App.cam_node    = this.orbit_cam.node;
+        App.gl.set_color( "#363636" ).fit_screen();
+    }
+
+    // #endregion ///////////////////////////////////////////////////////////////
+
+    // #region RENDERING
+    static renderOLD(){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.use_target_camera();
+        App.ecs.run(); // Need to run all the System to prepare Transform Data
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let r = this.renderer;
+        r.begin_frame();
+
+        let dt_start = performance.now();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Copy's Model Matrix to UBO
+        r.load_node( this.terrain.e.node );
+
+        // Draw all the Entities Drawables
+        for( let di of this.terrain.e.draw.items ){
+            if( di.mesh.element_cnt != 0 ){         // There is actual vertices to render
+                r
+                    .load_material( di.material )   // Loads Shader and sends Uniform Data
+                    .draw( di );                    // Draws Actual Mesh
+            }
+        }
+
+        let dt_end = performance.now();
+        
+        console.log( (dt_end - dt_start) * 0.001 );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Clean Up
+        r.end_frame();
+
+        this.debug_context.drawImage( App.gl.canvas, 0, 0, this.cam_width, this.cam_height );
+        this.use_orbit_camera();
+    }
+
+    static render( use_fbo=true ){
+        let ctx = App.gl.ctx;
+        let cam = this.targ_cam;
+        let mesh = this.terrain.mesh;
+
+        let world_mat   = new Mat4();
+        let view_mat    = new Mat4();
+
+        let proj_mat_loc = this.shader.uniforms.get( "proj_mat" ).loc;
+        let view_mat_loc = this.shader.uniforms.get( "view_mat" ).loc;
+
+        // Need to resize the Viewport and canvas to render correctly
+        App.gl.set_size( this.cam_width, this.cam_height );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // PRE LOAD
+        if( use_fbo ) ctx.bindFramebuffer( ctx.FRAMEBUFFER, this.fbo );        // Bind Custom Frame Buffer
+        ctx.useProgram( this.shader.program );                      // Bind Shader
+        ctx.uniformMatrix4fv( proj_mat_loc, false, cam.cam.proj );  // Push Projection to Sahder
+        ctx.bindVertexArray( mesh.vao.id );                         // Bind VAO Mesh
+        ctx.clearColor( 0, 0, 0, 0 );                               // Reset Default Pixel Color
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // MAIN
+        let dir_inv = new Vec3();
+        let origin  = new Vec3();
+        let rot     = new Quat();
+        let cx      = Math.round( this.cam_width / 2 );
+        let cy      = Math.round( this.cam_height / 2 );
+        let hit_pos = new Float32Array( 4 );
+
+        let dt_start = performance.now();
+        for( let i=0; i < 1; i++ ){
+            // Compute Camera Position and Rotation between start and end position
+            dir_inv.from_sub( this.end_pos, this.start_pos ).invert();  // ViewMatrix needs reverse direction for proper render
+            rot.from_look( dir_inv, Vec3.UP );                          // Set Camera Rotation looking at the Target's Direction.
+        
+            // Compute View Matrix - Post to Shader
+            world_mat.from_quat_tran_scale( rot, this.start_pos, cam.node.local.scl );
+            view_mat.from_invert( world_mat );
+            ctx.uniformMatrix4fv( view_mat_loc, false, view_mat );
+
+            // Clear Buffer
+            ctx.clear( ctx.COLOR_BUFFER_BIT | ctx.DEPTH_BUFFER_BIT );
+
+            // Draw Mesh
+            ctx.drawElements( App.mesh.TRI_STRIP, mesh.element_cnt, mesh.element_type, 0 ); 
+
+            // Read Center Pixel
+            ctx.readBuffer( ctx.COLOR_ATTACHMENT0 );
+            ctx.readPixels( cx, cy, 1, 1, ctx.RGBA, ctx.FLOAT, hit_pos );
+        }
+
+        let dt_end  = performance.now();
+        let dt_span = dt_end - dt_start;
+        console.log( "Time Lapse : ", dt_span * 0.001, " secs" ); // convert Milli To Sec
+
+        if( use_fbo ){
+            this.hit_pos.copy( hit_pos ); // Save it when only using custom buffer.
+            App.gl.ctx.bindFramebuffer( App.gl.ctx.FRAMEBUFFER, null ); 
+        }
+    }
+    // #endregion ///////////////////////////////////////////////////////////////
+
+    // #region MAIN
+    static init(){
+        //this.renderer = App.ecs.systems.get( "DrawSys" ).cls.render;
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.prepare_shader();
+        this.prepare_cameras();
+        this.prepare_debug_canvas();
+        this.prepare_fbo();
+        this.create_terrain();
+        //this.use_target_camera();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.render( true ); // Use Custom Buffer and Extract Center Buffer
+
+        this.render( false ); // Run using the System Buffer, So we can visually see the text buffer
+        this.debug_context.drawImage( App.gl.canvas, 0, 0, this.cam_width, this.cam_height );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.debug_data();      // Visually Debug Data with lines and points
+        this.reset_canvas();    // Reset to allow scene to render normally
+    }
+
+    static prepare_shader(){
+        this.shader = App.shader.new( "WorldSpace", vert_src, frag_src, [
+            //{ name:"color", type:"rgba", value:"#ff0000ff" },
+            { name:"proj_mat", type:"mat4", value:null },
+            { name:"view_mat", type:"mat4", value:null },
+            ]
+        );
+    }
+
+    static prepare_cameras(){
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Save Reference to Main Camera
+        this.orbit_cam.cam   = App.cam_com;
+        this.orbit_cam.node  = App.cam_node;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Setup Target Camera
+        let cam_id  = App.ecs.new_entity( "TraceCam" );
+        let node    = App.ecs.add_com( cam_id, "Node" );
+        let cam     = App.ecs.add_com( cam_id, "Camera" );
+        let dir_inv = Vec3.sub( this.end_pos, this.start_pos ).invert(); // ViewMatrix needs reverse direction for proper render
+
+        let origin  = this.start_pos.clone().add( Vec3.scale( dir_inv, 0.05 ) );
+        node
+            .set_pos( origin )                  // Set Camera Position
+            .set_rot_look( dir_inv, Vec3.UP );  // Set Camera Rotation looking at the Target's Direction.
+        
+        cam.set_perspective( 45, 0.01, 1000.0, this.cam_width, this.cam_height );
+
+        // Save Reference to Components
+        this.targ_cam.cam   = cam;
+        this.targ_cam.node  = node;
+    }
+
+    static prepare_debug_canvas(){
+        let c   = document.getElementById( "debug_canvas" );
+        let ctx = c.getContext("2d");
+
+        let w   = this.cam_width;
+        let h   = this.cam_height;
+
+        c.style.width	= w + "px";
+		c.style.height	= h + "px";
+		c.width			= w;
+		c.height		= h;
+		
+        this.debug_context  = ctx;    
+        this.debug_canvas   = c;
+    }
+
+    static prepare_fbo(){
+        let ctx = App.gl.ctx;
+        ctx.getExtension( 'EXT_color_buffer_float' ); // Need it to use Float Frame Buffer
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // CREATE FRAME BUFFER OBJECT
+        let fbo = ctx.createFramebuffer();
+        let w   = this.cam_width;
+        let h   = this.cam_height;
+        ctx.bindFramebuffer( ctx.FRAMEBUFFER, fbo );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Create Texture Buffers, Needs to be a Texture instead of a Frame Buffer
+        // COLOR is set to support 32 bit Float Vec4, Without Extension enabled this will error out.
+        let col_tex = ctx.createTexture();
+        ctx.bindTexture( ctx.TEXTURE_2D, col_tex );
+        ctx.texImage2D( ctx.TEXTURE_2D, 0, ctx.RGBA32F, w, h, 0, ctx.RGBA, ctx.FLOAT, null );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.NEAREST );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE );
+		ctx.framebufferTexture2D( ctx.FRAMEBUFFER, ctx.COLOR_ATTACHMENT0, ctx.TEXTURE_2D, col_tex, 0 );
+
+		let dep_tex = ctx.createTexture();
+		ctx.bindTexture( ctx.TEXTURE_2D, dep_tex );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MAG_FILTER, ctx.NEAREST );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_MIN_FILTER, ctx.NEAREST );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE );
+		ctx.texParameteri( ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE );
+		ctx.texStorage2D( ctx.TEXTURE_2D, 1, ctx.DEPTH_COMPONENT16, w, h );
+		ctx.framebufferTexture2D( ctx.FRAMEBUFFER, ctx.DEPTH_ATTACHMENT, ctx.TEXTURE_2D, dep_tex, 0);
+
+        ctx.drawBuffers( [ctx.COLOR_ATTACHMENT0] ); // Attach Buffers to FBO
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Check if the FBO has been setup Correctly.
+		switch( ctx.checkFramebufferStatus( ctx.FRAMEBUFFER ) ){
+			case ctx.FRAMEBUFFER_COMPLETE: break;
+			case ctx.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:         console.log( "FRAMEBUFFER_INCOMPLETE_ATTACHMENT" ); break;
+			case ctx.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT: console.log( "FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT" ); break;
+			case ctx.FRAMEBUFFER_INCOMPLETE_DIMENSIONS:         console.log( "FRAMEBUFFER_INCOMPLETE_DIMENSIONS" ); break;
+			case ctx.FRAMEBUFFER_UNSUPPORTED:                   console.log( "FRAMEBUFFER_UNSUPPORTED" ); break;
+			case ctx.FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:        console.log( "FRAMEBUFFER_INCOMPLETE_MULTISAMPLE" ); break;
+			case ctx.RENDERBUFFER_SAMPLES:                      console.log( "RENDERBUFFER_SAMPLES" ); break;
+        }
+        
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// Cleanup
+		ctx.bindFramebuffer( ctx.FRAMEBUFFER, null );
+		ctx.bindRenderbuffer( ctx.RENDERBUFFER, null );
+        ctx.bindTexture( ctx.TEXTURE_2D, null );
+
+        this.fbo = fbo;
+    }
+
+    static create_terrain(){
+        const SIZE      = 20;
+        const CELLS     = 80;
+        const FREQ_SCL  = 0.2;
+        const MAX_H     = 2;
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // CREATE FLAT GRID PLANE
+        let n, geo     = Grid.geo( SIZE, SIZE, CELLS, CELLS, true, "strip" );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // APPLY NOISE TO Y POSITION
+        for( let i=0; i < geo.vert.length; i+=3 ){
+            n = Noise.simplex2( geo.vert[ i+0] * FREQ_SCL, geo.vert[ i+2] * FREQ_SCL );
+            geo.vert[ i+1 ] = (n * 0.5 + 0.5 ) * MAX_H;
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // CREATE ENTITY
+        let mesh    = App.mesh.from_data( "Grid", geo.vert, 3, geo.idx );
+        let mat     = App.shader.new_material( "LowPoly", null, { cullFace:false } );
+        let e       = App.mesh_entity( "Grid", mesh, mat, App.mesh.TRI_STRIP );
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // CREATE WIREFRAME MESH AND APPEND TO ENTITIY DRAWABLES
+        //Wireframe.append_tri( e.draw, geo.idx, geo.vert, { line_color:"#ffffff77", face_color:"#00000000" } );
+        Wireframe.append_tri_strip( e.draw, geo.idx, geo.vert, { line_color:"#ffffff77", face_color:"#00000000" } );
+
+        this.terrain = { mesh, mat, e };
+    }
+    
+    static debug_data(){
+        App.Debug.pnt( this.start_pos, "green", 0.2, 1 );
+        App.Debug.pnt( this.end_pos, "red", 0.2, 1 );
+        App.Debug.pnt( this.hit_pos, "yellow", 0.2, 1 );
+        App.Debug.ln( this.start_pos, this.end_pos, "yellow", null, false );
+    }
+    // #endregion ///////////////////////////////////////////////////////////////
+
+}
+
+
+const vert_src = `#version 300 es
+	layout(location=0) in vec3 a_pos;
+
+    uniform mat4 proj_mat;
+    uniform mat4 view_mat;
+	out vec3 w_pos;
+
+	void main(void){        
+        w_pos		= a_pos;
+        gl_Position = proj_mat * view_mat * vec4( a_pos, 1.0 );
+	}`;
+
+const frag_src = `#version 300 es
+	precision mediump float;
+
+	in vec3 w_pos;
+    layout(location=0) out vec4 out_color;
+    //layout(location=1) out vec4 out_world;
+
+    /*
+	const vec3 lightPosition 		= vec3( 0.0, 10.0, 0.0 );
+	const vec3 lightColor 			= vec3( 1.0, 1.0, 1.0 );
+	const float uAmbientStrength	= 0.5;
+	const float uDiffuseStrength	= 0.5;
+	const float uSpecularStrength	= 0.2f;	//0.15
+    const float uSpecularShininess	= 1.0f; //256.0
+
+    const vec3 cam_pos = vec3( -10.0, 10.0, 0.0 );
+    const vec4 color = vec4( 1.0, 0.0, 0.0, 1.0 );
+    */
+    
+
+	void main(void){ 
+        /*
+		vec3 pixelNorm = normalize( cross( dFdx(w_pos), dFdy(w_pos) ) ); //Calc the Normal of the Rasterizing Pixel
+
+		// Ambient Lighting
+		vec3 cAmbient		= lightColor * uAmbientStrength;
+		
+		// Diffuse Lighting
+		vec3 lightVector	= normalize(lightPosition - w_pos);		//light direction based on pixel world position
+		float diffuseAngle	= max( dot(pixelNorm,lightVector) ,0.0);	//Angle between Light Direction and Pixel Direction (1==90d)
+        vec3 cDiffuse		= lightColor * diffuseAngle * uDiffuseStrength;
+        
+        out_color = vec4( color.rgb * (cAmbient + cDiffuse), color.a );
+        */
+
+        out_color = vec4( w_pos, 1.0 );
+        //out_world = vec4( w_pos, 1.0 );
+	}`;
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+//#####################################################
+</script>
+<html><head><style>
+    html,body{ margin:0px; padding:0px; width:100%; height:100%; }
+    #debug_canvas{ position:fixed; top:0px; right:0px; border:2px solid black; box-shadow: 0px 0px 10px 0px #000000; }
+</style>
+</head><body>
+    <canvas id="pg_canvas"></canvas>
+
+    <canvas id="debug_canvas"></canvas>
+</body></html>

@@ -8,6 +8,7 @@ import GizmoMove	from "./GizmoMove.js";
 let eGiz = null;
 let ePnt = null;
 let Gizmo_Move_Handler = null;
+let Gizmo_Drag_State_Handler = null;
 
 // #region EVENT HANDLERS
 function on_ray( ray ){
@@ -48,12 +49,25 @@ export default {
 		ePnt = HitPoints.new_entity( "DragPoints" );
 		eGiz = GizmoMove.new_entity( "GrizmoMove" );
 		eGiz.gizmo.hide();
+
+		eGiz.gizmo.on_drag_state = this.on_drag_state;
 		return this;
 	},
 
 	//pnt					: function( p, data=null, color="red" ){ ePnt.hitpoints.add( p, data, color ); return this; },
 	pnt					: function(){ ePnt.hitpoints.add.apply( ePnt.hitpoints, arguments ); return this; },
 	move				: function( pos, idx=null ){ ePnt.hitpoints.move( pos, idx ); return this; },
+
+	on_drag_state		: function( s ){
+		switch( s ){
+			case 0 : App.cam_ctrl.active = true; break;  //drag stop
+			case 1 : App.cam_ctrl.active = false; break; //drag start
+		}
+
+		if( Gizmo_Drag_State_Handler ) Gizmo_Drag_State_Handler( s );
+	},
+
+	set_drag_state		: function( fn ){ Gizmo_Drag_State_Handler = fn; return this },
 	
 	set_move_handler	: function( fn ){ Gizmo_Move_Handler = fn; return this; },
 	set_state_handler	: function( fn ){ ePnt.hitpoints.on_state_chg = fn; return this; },
